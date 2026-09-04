@@ -1,25 +1,41 @@
-import React from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import React, { useMemo, useState } from 'react';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { AppCard } from '@/components/atoms/AppCard';
 import { AppText } from '@/components/atoms/AppText';
 
+const initialItems = [
+  { id: 1, title: 'Duna: Parte Dois', details: '2024 · Filme · 2h 46min', service: 'Max', genre: 'Ficção', color: '#b47e50', icon: 'movie' as const, watched: false },
+  { id: 2, title: 'Bebê Rena', details: '2024 · Série · 7 episódios', service: 'Netflix', genre: 'Drama', color: '#76515e', icon: 'live-tv' as const, watched: false },
+  { id: 3, title: 'Divertida Mente 2', details: '2024 · Filme · 1h 36min', service: 'Disney+', genre: 'Comédia', color: '#397a91', icon: 'theaters' as const, watched: true },
+  { id: 4, title: 'O Menu', details: '2022 · Filme · 1h 47min', service: 'Max', genre: 'Terror', color: '#806341', icon: 'movie' as const, watched: false },
+];
+
+const filters = ['Todos', 'Netflix', 'Max', 'Disney+'];
+
 export default function TabTwoScreen() {
+  const [items, setItems] = useState(initialItems);
+  const [serviceFilter, setServiceFilter] = useState('Todos');
+  const [search, setSearch] = useState('');
+  const visibleItems = useMemo(() => items.filter((item) => (serviceFilter === 'Todos' || item.service === serviceFilter) && item.title.toLowerCase().includes(search.toLowerCase())), [items, search, serviceFilter]);
+  const toggleWatched = (id: number) => setItems((current) => current.map((item) => item.id === id ? { ...item, watched: !item.watched } : item));
+  const removeItem = (id: number) => setItems((current) => current.filter((item) => item.id !== id));
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppCard titulo="Tab 2" subtitulo="Exemplo de segunda aba">
-        <AppText tipo="texto">
-          Esta tela representa uma rota dentro do grupo de tabs.
-        </AppText>
-      </AppCard>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}><View><AppText tipo="legenda" peso="forte" style={styles.eyebrow}>MINHA LISTA</AppText><AppText tipo="titulo" peso="forte" style={styles.title}>O que assistir depois</AppText></View><Pressable style={styles.addButton} accessibilityLabel="Adicionar título"><MaterialIcons name="add" size={23} color="#182230" /></Pressable></View>
+        <View style={styles.summary}><View><AppText tipo="subtitulo" peso="forte" style={styles.summaryNumber}>{items.length}</AppText><AppText tipo="legenda" style={styles.muted}>títulos salvos</AppText></View><View style={styles.summaryDivider} /><View><AppText tipo="subtitulo" peso="forte" style={styles.summaryNumber}>{items.filter((item) => !item.watched).length}</AppText><AppText tipo="legenda" style={styles.muted}>para assistir</AppText></View><MaterialIcons name="bookmark" size={26} color="#e58c34" style={styles.summaryIcon} /></View>
+        <View style={styles.searchBox}><MaterialIcons name="search" size={21} color="#8b8a84" /><TextInput value={search} onChangeText={setSearch} placeholder="Buscar na sua lista" placeholderTextColor="#9a9993" style={styles.searchInput} /></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>{filters.map((filter) => <Pressable key={filter} onPress={() => setServiceFilter(filter)} style={[styles.filter, serviceFilter === filter && styles.filterSelected]}><AppText tipo="legenda" peso="forte" style={serviceFilter === filter ? styles.filterTextSelected : styles.filterText}>{filter}</AppText></Pressable>)}</ScrollView>
+        <View style={styles.listHeader}><AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus títulos</AppText><AppText tipo="legenda" style={styles.muted}>{visibleItems.length} resultados</AppText></View>
+        {visibleItems.map((item) => <View style={styles.itemCard} key={item.id}><View style={[styles.poster, { backgroundColor: item.color }]}><MaterialIcons name={item.icon} size={30} color="rgba(255,255,255,0.8)" /><AppText tipo="legenda" peso="forte" style={styles.posterText}>{item.genre.toUpperCase()}</AppText></View><View style={styles.itemInfo}><View style={styles.itemTopline}><AppText peso="forte" style={styles.itemTitle}>{item.title}</AppText><Pressable onPress={() => removeItem(item.id)} accessibilityLabel={`Remover ${item.title}`}><MaterialIcons name="delete-outline" size={20} color="#8b8a84" /></Pressable></View><AppText tipo="legenda" style={styles.muted}>{item.details}</AppText><View style={styles.itemBottom}><View style={[styles.serviceDot, { backgroundColor: item.service === 'Netflix' ? '#e50914' : item.service === 'Max' ? '#17132f' : '#113ccf' }]} /><AppText tipo="legenda" peso="forte" style={styles.serviceName}>{item.service}</AppText><Pressable onPress={() => toggleWatched(item.id)} style={[styles.watchedButton, item.watched && styles.watchedButtonActive]}><MaterialIcons name={item.watched ? 'check' : 'visibility'} size={15} color={item.watched ? '#fffdf8' : '#657078'} /><AppText tipo="legenda" peso="forte" style={item.watched ? styles.watchedTextActive : styles.watchedText}>{item.watched ? 'Assistido' : 'Marcar assistido'}</AppText></Pressable></View></View></View>)}
+        {visibleItems.length === 0 && <View style={styles.empty}><MaterialIcons name="search-off" size={32} color="#c2bbae" /><AppText peso="forte" style={styles.emptyTitle}>Nada encontrado</AppText><AppText tipo="legenda" style={styles.muted}>Tente outro título ou serviço.</AppText></View>}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    padding: 20,
-  },
+  safeArea: { flex: 1, backgroundColor: '#f7f5f0' }, container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }, eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 }, title: { color: '#182230', fontSize: 25, lineHeight: 30 }, addButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#f3b43f', alignItems: 'center', justifyContent: 'center' }, summary: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 17, backgroundColor: '#f1e8d7', marginBottom: 19 }, summaryNumber: { color: '#182230', lineHeight: 22 }, summaryDivider: { width: 1, height: 29, backgroundColor: '#d8ccb9', marginHorizontal: 20 }, summaryIcon: { marginLeft: 'auto' }, muted: { color: '#7b7b78' }, searchBox: { height: 48, borderRadius: 14, backgroundColor: '#fffdf8', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, marginBottom: 17 }, searchInput: { flex: 1, color: '#182230', fontSize: 14, marginLeft: 9 }, filters: { gap: 8, paddingBottom: 25 }, filter: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 9, backgroundColor: '#fffdf8' }, filterSelected: { backgroundColor: '#182230', borderColor: '#182230' }, filterText: { color: '#6c6b67' }, filterTextSelected: { color: '#fffdf8' }, listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 }, sectionTitle: { color: '#182230', fontSize: 19, lineHeight: 24 }, itemCard: { flexDirection: 'row', minHeight: 125, padding: 10, borderRadius: 17, backgroundColor: '#fffdf8', marginBottom: 12 }, poster: { width: 82, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 8 }, posterText: { color: 'rgba(255,255,255,0.9)', textAlign: 'center', letterSpacing: 0.5 }, itemInfo: { flex: 1, paddingLeft: 12, paddingVertical: 3 }, itemTopline: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }, itemTitle: { flex: 1, color: '#182230', fontSize: 15, lineHeight: 20, paddingRight: 5 }, itemBottom: { flexDirection: 'row', alignItems: 'center', marginTop: 15 }, serviceDot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 }, serviceName: { color: '#59636a', fontSize: 11 }, watchedButton: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#eef0ee' }, watchedButtonActive: { backgroundColor: '#3e9b76' }, watchedText: { color: '#657078', fontSize: 10 }, watchedTextActive: { color: '#fffdf8', fontSize: 10 }, empty: { alignItems: 'center', paddingVertical: 45 }, emptyTitle: { color: '#59636a', marginTop: 10, marginBottom: 3 },
 });
