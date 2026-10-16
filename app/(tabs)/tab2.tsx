@@ -5,6 +5,8 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { CATALOG, MediaKind, MediaTitle } from '@/constants/catalog';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
@@ -133,17 +135,19 @@ export default function ExploreScreen() {
 }
 
 function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title: MediaTitle; watched: boolean; onOpen: () => void; onToggleWatched: () => void }) {
+  const hasArtwork = getArtworkUri(title.id, 'poster') !== null;
   return (
     <View style={styles.resultCard}>
       <Pressable style={[styles.poster, { backgroundColor: title.color }]} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${title.title}`}>
-        <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />
-        <View style={styles.posterRating}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
+        <TitleArtwork id={title.id} variant="poster" />
+        {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
+        <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
       </Pressable>
       <Pressable style={styles.resultCopy} onPress={onOpen} accessibilityRole="button">
         <AppText peso="forte" style={styles.resultTitle} numberOfLines={1}>{title.title}</AppText>
         <AppText tipo="legenda" style={styles.resultMeta}>{title.year} · {title.kind} · {title.duration}</AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>{title.genres.join(' · ')}</AppText>
-        <View style={styles.serviceLine}><View style={[styles.serviceDot, { backgroundColor: title.color }]} /><AppText tipo="legenda" peso="forte" style={styles.serviceName}>{title.service}</AppText></View>
+        <View style={styles.serviceLine}><ServiceLogo name={title.service} size={14} /><AppText tipo="legenda" peso="forte" style={styles.serviceName}>{title.service}</AppText></View>
       </Pressable>
       <Pressable style={[styles.watchedButton, watched && styles.watchedButtonActive]} onPress={onToggleWatched} accessibilityRole="button" accessibilityLabel={watched ? 'Remover de assistidos' : 'Marcar como assistido'}>
         <MaterialIcons name={watched ? 'check' : 'visibility'} size={18} color={watched ? '#fffdf8' : '#657078'} />
@@ -183,7 +187,8 @@ const styles = StyleSheet.create({
   resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
   resultsSubtitle: { color: '#7b7b78', fontSize: 10, marginTop: 2 },
   resultCard: { minHeight: 105, flexDirection: 'row', alignItems: 'center', padding: 9, borderRadius: 16, backgroundColor: '#fffdf8', marginBottom: 10 },
-  poster: { width: 70, height: 87, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7 },
+  poster: { width: 70, height: 87, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, overflow: 'hidden' },
+  posterRatingCorner: { position: 'absolute', bottom: 5 },
   posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: 'rgba(24,34,48,0.72)' },
   posterRatingText: { color: '#fffdf8', fontSize: 9 },
   resultCopy: { flex: 1, paddingHorizontal: 12, paddingVertical: 4 },
@@ -191,7 +196,6 @@ const styles = StyleSheet.create({
   resultMeta: { color: '#7b7b78', fontSize: 9 },
   resultGenres: { color: '#8d7a61', fontSize: 9, marginTop: 4 },
   serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7 },
-  serviceDot: { width: 7, height: 7, borderRadius: 4 },
   serviceName: { color: '#657078', fontSize: 9 },
   watchedButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1eee7' },
   watchedButtonActive: { backgroundColor: '#3e9b76' },

@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
 import { CATALOG, GENRES, MediaKind, MediaTitle } from '@/constants/catalog';
-import { SUBSCRIPTION_PROVIDERS } from '@/constants/subscriptions';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 type KindFilter = 'Todos' | MediaKind;
@@ -140,18 +141,12 @@ export default function HomeScreen() {
           <MaterialIcons name="subscriptions" size={22} color="#d77c29" />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceList}>
-          {activeSubscriptions.map((subscription) => {
-            const service = SUBSCRIPTION_PROVIDERS.find((provider) => provider.name === subscription.provider) ?? {
-              name: subscription.provider,
-              color: '#526274',
-              symbol: subscription.provider.slice(0, 1).toUpperCase(),
-            };
-            return (
+          {activeSubscriptions.map((subscription) => (
             <View style={styles.serviceCard} key={subscription.id}>
-              <View style={[styles.serviceLogo, { backgroundColor: service.color }]}><AppText peso="forte" style={styles.serviceSymbol}>{service.symbol}</AppText></View>
+              <ServiceLogo name={subscription.provider} size={39} />
               <View style={styles.serviceCopy}><AppText peso="forte" style={styles.serviceName}>{subscription.provider}</AppText><AppText tipo="legenda" style={styles.muted}>{currency.format(subscription.monthlyPrice)}/mês</AppText></View>
             </View>
-          );})}
+          ))}
           {activeSubscriptions.length === 0 && <Pressable style={styles.emptyServiceCard} onPress={() => router.push('/(tabs)/tab3')}><MaterialIcons name="add-circle-outline" size={20} color="#d77c29" /><AppText tipo="legenda" peso="forte" style={styles.link}>Adicionar assinatura</AppText></Pressable>}
         </ScrollView>
 
@@ -160,17 +155,21 @@ export default function HomeScreen() {
           <Pressable onPress={() => router.push('/(tabs)/tab2')}><AppText tipo="legenda" peso="forte" style={styles.link}>Ver todos</AppText></Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
-          {availableTitles.slice(0, 8).map((title) => (
+          {availableTitles.slice(0, 8).map((title) => {
+            const hasArtwork = getArtworkUri(title.id, 'poster') !== null;
+            return (
             <Pressable style={styles.titleCard} key={title.id} onPress={() => openDetails(title)} accessibilityRole="button">
               <View style={[styles.poster, { backgroundColor: title.color }]}>
-                <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />
-                <View style={styles.posterRating}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
-                <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>
+                <TitleArtwork id={title.id} variant="poster" />
+                {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
+                <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
+                {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
               </View>
               <AppText peso="forte" style={styles.titleName} numberOfLines={1}>{title.title}</AppText>
               <AppText tipo="legenda" style={styles.muted}>{title.kind} · {title.year}</AppText>
             </Pressable>
-          ))}
+            );
+          })}
           {availableTitles.length === 0 && <Pressable style={styles.emptyTitlesCard} onPress={() => router.push('/(tabs)/tab3')}><MaterialIcons name="subscriptions" size={22} color="#d77c29" /><AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver títulos</AppText></Pressable>}
         </ScrollView>
       </ScrollView>
@@ -199,7 +198,8 @@ export default function HomeScreen() {
             <AppText tipo="legenda" style={styles.rouletteCaption}>Escolhendo entre {eligibleTitles.length} títulos...</AppText>
             <View style={styles.roulettePreview}>
               <View style={[styles.previewPoster, { backgroundColor: rouletteTitle?.color ?? '#263b50' }]}>
-                {rouletteTitle && <MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
+                {rouletteTitle && <TitleArtwork id={rouletteTitle.id} variant="poster" />}
+                {rouletteTitle && !getArtworkUri(rouletteTitle.id, 'poster') && <MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
               </View>
               <View style={styles.previewCopy}>
                 <AppText tipo="legenda" peso="forte" style={styles.previewType}>{rouletteTitle ? `${rouletteTitle.kind.toUpperCase()} · ${rouletteTitle.year}` : 'SORTEANDO'}</AppText>
@@ -275,8 +275,6 @@ const styles = StyleSheet.create({
   serviceList: { gap: 10, paddingBottom: 27 },
   serviceCard: { width: 174, height: 68, padding: 10, borderRadius: 15, backgroundColor: '#fffdf8', flexDirection: 'row', alignItems: 'center', gap: 9 },
   emptyServiceCard: { minWidth: 190, height: 68, paddingHorizontal: 15, borderRadius: 15, backgroundColor: '#fffdf8', flexDirection: 'row', alignItems: 'center', gap: 8 },
-  serviceLogo: { width: 39, height: 39, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  serviceSymbol: { color: '#fff', fontSize: 19 },
   serviceCopy: { flex: 1 },
   serviceName: { color: '#182230', fontSize: 13 },
   titleList: { gap: 13, paddingBottom: 28 },
@@ -284,6 +282,7 @@ const styles = StyleSheet.create({
   titleCard: { width: 132 },
   poster: { height: 166, borderRadius: 14, justifyContent: 'center', alignItems: 'center', gap: 10, padding: 11, marginBottom: 9, overflow: 'hidden' },
   posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(20,28,38,0.72)', borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
+  posterRatingCorner: { position: 'absolute', top: 8, left: 8 },
   posterRatingText: { color: '#fffdf8', fontSize: 10 },
   posterLabel: { color: 'rgba(255,255,255,0.95)', textAlign: 'center', letterSpacing: 0.8 },
   titleName: { color: '#182230', fontSize: 13, lineHeight: 18 },
@@ -317,7 +316,7 @@ const styles = StyleSheet.create({
   wheelDotLeft: { left: 1, top: 66, borderColor: '#f3b43f' },
   rouletteCaption: { color: '#7b7b78', marginBottom: 19 },
   roulettePreview: { width: '100%', minHeight: 68, flexDirection: 'row', alignItems: 'center', padding: 9, borderRadius: 16, backgroundColor: '#f1eee7' },
-  previewPoster: { width: 48, height: 50, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  previewPoster: { width: 48, height: 50, borderRadius: 11, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   previewCopy: { flex: 1, paddingHorizontal: 11 },
   previewType: { color: '#d77c29', fontSize: 9, letterSpacing: 0.8, marginBottom: 3 },
   previewTitle: { color: '#182230', fontSize: 14 },

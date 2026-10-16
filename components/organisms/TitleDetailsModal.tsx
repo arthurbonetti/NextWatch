@@ -2,6 +2,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
 
 type Props = {
@@ -12,6 +14,7 @@ type Props = {
 
 export function TitleDetailsModal({ title, visible, onClose }: Props) {
   if (!title) return null;
+  const hasArtwork = getArtworkUri(title.id, 'backdrop') !== null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -19,12 +22,13 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar detalhes" />
         <View style={styles.dialog}>
           <View style={[styles.cover, { backgroundColor: title.color }]}>
-            <View style={styles.coverGlow} />
+            <TitleArtwork id={title.id} variant="backdrop" />
+            {!hasArtwork && <View style={styles.coverGlow} />}
             <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Fechar">
               <MaterialIcons name="close" size={22} color="#fff" />
             </Pressable>
-            <MaterialIcons name={title.icon} size={66} color="rgba(255,255,255,0.9)" />
-            <AppText tipo="legenda" peso="forte" style={styles.coverTitle}>{title.title.toUpperCase()}</AppText>
+            {!hasArtwork && <MaterialIcons name={title.icon} size={66} color="rgba(255,255,255,0.9)" />}
+            {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.coverTitle}>{title.title.toUpperCase()}</AppText>}
           </View>
 
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} showsVerticalScrollIndicator={false}>
@@ -42,14 +46,12 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
                 <AppText tipo="legenda" style={styles.ratingCaption}>avaliação da comunidade</AppText>
               </View>
               <View style={styles.providerBadge}>
-                <MaterialIcons name="play-circle-outline" size={17} color="#f3b43f" />
+                <ServiceLogo name={title.service} size={20} />
                 <AppText tipo="legenda" peso="forte" style={styles.provider}>{title.service}</AppText>
               </View>
             </View>
 
-            <View style={styles.genres}>
-              {title.genres.map((genre) => <View style={styles.genreChip} key={genre}><AppText tipo="legenda" peso="forte" style={styles.genreText}>{genre}</AppText></View>)}
-            </View>
+            <AppText peso="medio" style={styles.genres}>{title.genres.join('  ·  ')}</AppText>
 
             <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Sinopse</AppText>
             <AppText tipo="texto" style={styles.synopsis}>{title.synopsis}</AppText>
@@ -83,9 +85,7 @@ const styles = StyleSheet.create({
   ratingCaption: { color: '#8b8a84', fontSize: 10 },
   providerBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 'auto', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#f1e8d7' },
   provider: { color: '#182230' },
-  genres: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 20 },
-  genreChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#f1e8d7' },
-  genreText: { color: '#6b5a43', fontSize: 11 },
+  genres: { color: '#8d7a61', fontSize: 13, lineHeight: 18, letterSpacing: 0.2, marginBottom: 20 },
   sectionTitle: { color: '#182230', fontSize: 17, lineHeight: 22, marginBottom: 6 },
   synopsis: { color: '#687078', lineHeight: 21, marginBottom: 20 },
   doneButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
