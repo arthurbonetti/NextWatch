@@ -12,15 +12,17 @@ export type SubscriptionProvider = {
   name: string;
   color: string;
   symbol: string;
+  // Caminho da logo no TMDB (lista de provedores de streaming do Brasil, /watch/providers).
+  logo?: string;
 };
 
 export const SUBSCRIPTION_PROVIDERS: SubscriptionProvider[] = [
-  { name: 'Netflix', color: '#e50914', symbol: 'N' },
-  { name: 'Disney+', color: '#113ccf', symbol: 'D' },
-  { name: 'Max', color: '#5736c9', symbol: 'M' },
-  { name: 'Prime Video', color: '#1679a9', symbol: 'P' },
-  { name: 'Apple TV+', color: '#30343a', symbol: 'A' },
-  { name: 'Globoplay', color: '#ed1c24', symbol: 'G' },
+  { name: 'Netflix', color: '#e50914', symbol: 'N', logo: '/rK1KljqmbvO9HQa1PBFLILWah72.png' },
+  { name: 'Disney+', color: '#113ccf', symbol: 'D', logo: '/5eZ872CghnHFLB1j8grszbrx0dx.png' },
+  { name: 'Max', color: '#5736c9', symbol: 'M', logo: '/skypuy7SXuugIQeYg0IglmzoKaS.png' },
+  { name: 'Prime Video', color: '#1679a9', symbol: 'P', logo: '/gMZdpavHmxFNnLpMHwVxfqeux2g.png' },
+  { name: 'Apple TV+', color: '#30343a', symbol: 'A', logo: '/9icYBfYFcwgCbky5VdGUIKJ4C5i.png' },
+  { name: 'Globoplay', color: '#ed1c24', symbol: 'G', logo: '/9A6Oxd3F7iXm7mds7CxYOBicojs.png' },
 ];
 
 export const INITIAL_SUBSCRIPTIONS: Subscription[] = [

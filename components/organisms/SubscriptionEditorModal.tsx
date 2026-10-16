@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SUBSCRIPTION_PROVIDERS, Subscription, SubscriptionProvider } from '@/constants/subscriptions';
 
 type Props = {
@@ -61,7 +62,7 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.providers}>
             {SUBSCRIPTION_PROVIDERS.map((item: SubscriptionProvider) => (
               <Pressable key={item.name} onPress={() => setProvider(item.name)} style={[styles.providerChip, provider === item.name && styles.providerChipSelected]}>
-                <View style={[styles.providerIcon, { backgroundColor: item.color }]}><AppText peso="forte" style={styles.providerSymbol}>{item.symbol}</AppText></View>
+                <ServiceLogo name={item.name} size={24} />
                 <AppText tipo="legenda" peso="forte" style={styles.providerName}>{item.name}</AppText>
               </Pressable>
             ))}
@@ -109,8 +110,6 @@ const styles = StyleSheet.create({
   providers: { gap: 8, paddingBottom: 22 },
   providerChip: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, backgroundColor: '#fffdf8', paddingHorizontal: 9, paddingVertical: 8 },
   providerChipSelected: { borderColor: '#e58c34', backgroundColor: '#fff2d8' },
-  providerIcon: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-  providerSymbol: { color: '#fff', fontSize: 12 },
   providerName: { color: '#182230', fontSize: 11 },
   fieldsRow: { flexDirection: 'row', gap: 12, marginBottom: 18 },
   priceField: { flex: 1.15 },

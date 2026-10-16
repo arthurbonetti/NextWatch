@@ -4,8 +4,9 @@ import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
-import { SUBSCRIPTION_PROVIDERS, Subscription } from '@/constants/subscriptions';
+import { Subscription } from '@/constants/subscriptions';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -76,11 +77,10 @@ export default function SubscriptionsScreen() {
             <Pressable style={styles.emptyButton} onPress={addSubscription}><AppText peso="forte" style={styles.emptyButtonText}>Adicionar serviço</AppText></Pressable>
           </View>
         ) : subscriptions.map((subscription) => {
-          const provider = SUBSCRIPTION_PROVIDERS.find((item) => item.name === subscription.provider) ?? SUBSCRIPTION_PROVIDERS[0];
           return (
             <View key={subscription.id} style={[styles.subscriptionCard, !subscription.active && styles.subscriptionInactive]}>
               <Pressable style={styles.serviceIdentity} onPress={() => editSubscription(subscription)} accessibilityRole="button" accessibilityLabel={`Editar ${subscription.provider}`}>
-                <View style={[styles.serviceLogo, { backgroundColor: provider.color }]}><AppText peso="forte" style={styles.serviceSymbol}>{provider.symbol}</AppText></View>
+                <View style={styles.serviceLogo}><ServiceLogo name={subscription.provider} size={40} /></View>
                 <View style={styles.serviceInfo}>
                   <View style={styles.nameLine}><AppText peso="forte" style={styles.serviceName}>{subscription.provider}</AppText>{!subscription.active && <AppText tipo="legenda" style={styles.pausedBadge}>PAUSADA</AppText>}</View>
                   <AppText tipo="legenda" style={styles.billingText}>Cobrança todo dia {subscription.billingDay}</AppText>
@@ -144,8 +144,7 @@ const styles = StyleSheet.create({
   subscriptionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 81, paddingHorizontal: 11, paddingVertical: 10, borderRadius: 16, backgroundColor: '#fffdf8', marginBottom: 9 },
   subscriptionInactive: { opacity: 0.58 },
   serviceIdentity: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 5 },
-  serviceLogo: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  serviceSymbol: { color: '#fff', fontSize: 18 },
+  serviceLogo: { marginRight: 10 },
   serviceInfo: { flex: 1 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   serviceName: { color: '#182230', fontSize: 12 },
