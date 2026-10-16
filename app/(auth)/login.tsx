@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
 
@@ -20,7 +21,7 @@ export default function LoginScreen() {
         <AppInput rotulo="E-mail" placeholder="seu@email.com" autoCapitalize="none" />
         <AppInput rotulo="Senha" placeholder="••••••••" secureTextEntry />
 
-        <AppButton titulo="Entrar" onPress={() => {}} />
+        <AppButton titulo="Entrar" onPress={() => router.replace('/(tabs)')} />
       </View>
     </SafeAreaView>
   );

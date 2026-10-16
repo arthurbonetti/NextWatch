@@ -1,5 +1,5 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Tabs } from 'expo-router';
-import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -24,22 +24,22 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Início',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="tab2"
         options={{
-          title: 'Lista',
+          title: 'Explorar',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bookmark.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="tab3"
         options={{
-          title: 'Descobrir',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles" color={color} />,
+          title: 'Assinaturas',
+          tabBarIcon: ({ color }) => <MaterialIcons size={25} name="subscriptions" color={color} />,
         }}
       />
     </Tabs>
