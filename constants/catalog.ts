@@ -1,5 +1,6 @@
-export type MediaKind = 'Filme' | 'Série';
+export type MediaKind = 'Filme' | 'Série' | 'Anime';
 export type MediaIcon = 'movie' | 'live-tv' | 'theaters';
+export type RatingSource = 'IMDb' | 'TMDB';
 
 export type MediaTitle = {
   id: string;
@@ -13,6 +14,10 @@ export type MediaTitle = {
   synopsis: string;
   color: string;
   icon: MediaIcon;
+  ratingSource?: RatingSource;
+  catalogSource?: 'tmdb';
+  tmdbPosterPath?: string | null;
+  tmdbBackdropPath?: string | null;
 };
 
 export const CATALOG: MediaTitle[] = [

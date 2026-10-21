@@ -6,32 +6,38 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, View } from 'react-nat
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { CATALOG } from '@/constants/catalog';
+import { useCatalog } from '@/contexts/CatalogContext';
 
 export default function TitleDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const title = CATALOG.find((item) => item.id === id);
+  const { status, findTitle } = useCatalog();
+  const title = findTitle(id);
   const [saved, setSaved] = useState(false);
 
   if (!title) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>Título não encontrado</AppText><Pressable onPress={() => router.back()}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
+        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>{status === 'loading' ? 'Carregando título…' : 'Título não encontrado'}</AppText><Pressable onPress={() => router.back()}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
       </SafeAreaView>
     );
   }
+
+  const hasArtwork = getArtworkUri(title.id, 'backdrop', {
+    posterPath: title.tmdbPosterPath,
+    backdropPath: title.tmdbBackdropPath,
+  }) !== null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}><Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityLabel="Voltar"><MaterialIcons name="arrow-back" size={22} color="#182230" /></Pressable><AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText><Pressable onPress={() => setSaved(!saved)} style={styles.iconButton} accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}><MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={22} color="#e58c34" /></Pressable></View>
         <View style={[styles.poster, { backgroundColor: title.color }]}>
-          <TitleArtwork id={title.id} variant="backdrop" />
-          {!getArtworkUri(title.id, 'backdrop') && <><MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" /><AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText></>}
+          <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
+          {!hasArtwork && <><MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" /><AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText></>}
         </View>
         <AppText tipo="titulo" peso="forte" style={styles.title}>{title.title}</AppText>
-        <AppText tipo="texto" style={styles.meta}>{title.year} · {title.kind} · {title.duration}</AppText>
-        <View style={styles.ratingRow}><MaterialIcons name="star" size={25} color="#e7a82e" /><AppText tipo="subtitulo" peso="forte" style={styles.rating}>{title.imdbRating}</AppText><AppText tipo="legenda" peso="forte" style={styles.imdb}>IMDb</AppText><View style={styles.provider}><ServiceLogo name={title.service} size={20} /><AppText tipo="legenda" peso="forte" style={styles.providerText}>{title.service}</AppText></View></View>
+        <AppText tipo="texto" style={styles.meta}>{title.year || 'Ano não informado'} · {title.kind} · {title.duration}</AppText>
+        <View style={styles.ratingRow}><MaterialIcons name="star" size={25} color="#e7a82e" /><AppText tipo="subtitulo" peso="forte" style={styles.rating}>{title.imdbRating}</AppText><AppText tipo="legenda" peso="forte" style={styles.imdb}>{title.ratingSource ?? 'IMDb'}</AppText><View style={styles.provider}><ServiceLogo name={title.service} size={20} /><AppText tipo="legenda" peso="forte" style={styles.providerText}>{title.service}</AppText></View></View>
         <AppText peso="medio" style={styles.genres}>{title.genres.join('  ·  ')}</AppText>
         <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Sinopse</AppText><AppText tipo="texto" style={styles.description}>{title.synopsis}</AppText>
         <Pressable style={styles.primaryButton} onPress={() => setSaved(!saved)}><MaterialIcons name={saved ? 'check' : 'bookmark-add'} size={19} color="#182230" /><AppText peso="forte" style={styles.primaryText}>{saved ? 'Salvo na minha lista' : 'Salvar na minha lista'}</AppText></Pressable>

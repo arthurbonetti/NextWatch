@@ -1,21 +1,21 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { CATALOG, MediaKind, MediaTitle } from '@/constants/catalog';
+import { GENRES, MediaKind, MediaTitle } from '@/constants/catalog';
+import { useCatalog } from '@/contexts/CatalogContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 type TypeFilter = 'Quero ver' | 'Assistidos' | 'Todos';
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 
-const genres = ['Todos', ...Array.from(new Set(CATALOG.flatMap((title) => title.genres)))];
-
 export default function ExploreScreen() {
+  const { titles, status, errorMessage, hasMore, loadingMore, totalResults, loadMoreTitles, refreshCatalog, searchTitles } = useCatalog();
   const { subscriptions } = useSubscriptions();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('Quero ver');
@@ -25,16 +25,18 @@ export default function ExploreScreen() {
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('Qualquer nota');
   const [watchedIds, setWatchedIds] = useState<string[]>([]);
   const [filtersVisible, setFiltersVisible] = useState(false);
+  const [remoteResults, setRemoteResults] = useState<MediaTitle[] | null>(null);
+  const [remoteQuery, setRemoteQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchErrorQuery, setSearchErrorQuery] = useState('');
+  const searchRequestRef = useRef(0);
 
   const activeServices = useMemo(() => new Set(subscriptions.filter((item) => item.active).map((item) => item.provider)), [subscriptions]);
-  const availableTitles = useMemo(() => CATALOG.filter((title) => activeServices.has(title.service)), [activeServices]);
-  const serviceNames = useMemo(() => ['Todos', ...Array.from(new Set(availableTitles.map((title) => title.service)))], [availableTitles]);
-  const activeFilterCount = Number(kindFilter !== 'Todos')
-    + Number(genreFilter !== 'Todos')
-    + Number(serviceFilter !== 'Todos')
-    + Number(ratingFilter !== 'Qualquer nota');
-
-  const results = useMemo(() => {
+  const availableTitles = useMemo(() => titles.filter((title) =>
+    title.catalogSource === 'tmdb' || activeServices.has(title.service)
+  ), [activeServices, titles]);
+  const localResults = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return availableTitles.filter((title) => {
       const matchesQuery = query.length === 0
@@ -52,6 +54,63 @@ export default function ExploreScreen() {
     });
   }, [availableTitles, genreFilter, kindFilter, ratingFilter, search, serviceFilter, typeFilter, watchedIds]);
 
+  useEffect(() => {
+    const query = search.trim();
+    const requestId = ++searchRequestRef.current;
+    if (query.length < 2) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSearchLoading(true);
+      void searchTitles(query)
+        .then((results) => {
+          if (searchRequestRef.current === requestId) {
+            setRemoteResults(results);
+            setRemoteQuery(query.toLocaleLowerCase());
+          }
+        })
+        .catch(() => {
+          if (searchRequestRef.current === requestId) {
+            setRemoteResults([]);
+            setSearchError('Não foi possível pesquisar no catálogo online. Tente novamente.');
+            setSearchErrorQuery(query.toLocaleLowerCase());
+          }
+        })
+        .finally(() => {
+          if (searchRequestRef.current === requestId) setSearchLoading(false);
+        });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [search, searchTitles]);
+  const genres = useMemo(
+    () => ['Todos', ...Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)]))],
+    [titles],
+  );
+  const serviceNames = useMemo(() => ['Todos', ...Array.from(new Set(availableTitles.map((title) => title.service)))], [availableTitles]);
+  const activeFilterCount = Number(kindFilter !== 'Todos')
+    + Number(genreFilter !== 'Todos')
+    + Number(serviceFilter !== 'Todos')
+    + Number(ratingFilter !== 'Qualquer nota');
+
+  const results = useMemo(() => {
+    const normalizedQuery = search.trim().toLocaleLowerCase();
+    const sourceTitles = normalizedQuery.length >= 2 && remoteQuery === normalizedQuery && remoteResults
+      ? remoteResults
+      : localResults;
+    return sourceTitles.filter((title) => {
+      const matchesType = typeFilter === 'Todos'
+        || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
+      const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
+      const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
+      const matchesService = serviceFilter === 'Todos' || title.service === serviceFilter;
+      const rating = Number(title.imdbRating.replace(',', '.'));
+      const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
+      return matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
+    });
+  }, [genreFilter, kindFilter, localResults, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedIds]);
+
   const toggleWatched = (id: string) => setWatchedIds((current) =>
     current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
   );
@@ -68,6 +127,32 @@ export default function ExploreScreen() {
           <Pressable style={styles.filterButton} onPress={() => setFiltersVisible((value) => !value)} accessibilityRole="button" accessibilityLabel="Abrir filtros">
             <MaterialIcons name="tune" size={20} color="#182230" />
             {activeFilterCount > 0 && <View style={styles.filterCount}><AppText style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
+          </Pressable>
+        </View>
+
+        <View style={styles.catalogNotice}>
+          <View style={styles.catalogNoticeCopy}>
+            <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
+              {status === 'loading' ? 'Atualizando catálogo…' : status === 'ready' ? 'Catálogo conectado ao TMDB' : status === 'needs-api-key' ? 'Catálogo de demonstração' : 'Falha ao atualizar catálogo'}
+            </AppText>
+            <AppText tipo="legenda" style={styles.catalogNoticeText}>
+              {status === 'loading'
+                ? 'Buscando filmes, séries e animes nos seus serviços ativos.'
+                : status === 'ready'
+                  ? 'Disponibilidade no Brasil · notas da comunidade TMDB'
+                  : status === 'needs-api-key'
+                    ? 'Configure EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
+                    : errorMessage ?? 'Confira a conexão e tente novamente.'}
+            </AppText>
+          </View>
+          <Pressable
+            style={styles.refreshButton}
+            onPress={() => { void refreshCatalog(); }}
+            disabled={status === 'loading'}
+            accessibilityRole="button"
+            accessibilityLabel="Atualizar catálogo"
+          >
+            <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#b66a24'} />
           </Pressable>
         </View>
 
@@ -92,9 +177,9 @@ export default function ExploreScreen() {
             </Pressable>
           ))}
           <View style={styles.quickDivider} />
-          {(['Todos', 'Filme', 'Série'] as const).map((filter) => (
+          {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
             <Pressable key={filter} onPress={() => setKindFilter(filter)} style={[styles.quickChip, kindFilter === filter && styles.quickChipActive]}>
-              <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Tipo' : filter === 'Filme' ? 'Filmes' : 'Séries'}</AppText>
+              <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Tipo' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
             </Pressable>
           ))}
         </ScrollView>
@@ -111,17 +196,24 @@ export default function ExploreScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
             {serviceNames.map((service) => <Pressable key={service} onPress={() => setServiceFilter(service)} style={[styles.filterChip, serviceFilter === service && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={serviceFilter === service ? styles.filterChipTextActive : styles.filterChipText}>{service}</AppText></Pressable>)}
           </ScrollView>
-          <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA IMDb</AppText>
+          <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA</AppText>
           <View style={styles.filterChips}>{(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => <Pressable key={rating} onPress={() => setRatingFilter(rating)} style={[styles.filterChip, ratingFilter === rating && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>{rating}</AppText></Pressable>)}</View>
         </View>}
 
         <View style={styles.resultsHeader}>
           <View>
             <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : typeFilter === 'Assistidos' ? 'Assistidos' : 'Títulos para assistir'}</AppText>
-            <AppText tipo="legenda" style={styles.resultsSubtitle}>{results.length} {results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos</AppText>
+            <AppText tipo="legenda" style={styles.resultsSubtitle}>
+              {searchLoading
+                ? 'Pesquisando no catálogo online…'
+                : status === 'ready'
+                ? `${results.length} exibidos · ${titles.length} carregados de ${totalResults} disponíveis`
+                : `${results.length} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
+            </AppText>
           </View>
           <MaterialIcons name="sort" size={21} color="#8b8a84" />
         </View>
+        {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
 
         {results.length > 0 ? results.map((title) => <ExploreResultCard key={title.id} title={title} watched={watchedIds.includes(title.id)} onOpen={() => openTitle(title)} onToggleWatched={() => toggleWatched(title.id)} />) : <View style={styles.emptyState}>
           <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#d77c29" /></View>
@@ -129,23 +221,40 @@ export default function ExploreScreen() {
           <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
           {activeServices.size === 0 && <Pressable style={styles.emptyAction} onPress={() => router.push('/(tabs)/tab3')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
         </View>}
+        {hasMore && <Pressable
+          style={[styles.loadMoreButton, loadingMore && styles.loadMoreButtonDisabled]}
+          onPress={() => { void loadMoreTitles(); }}
+          disabled={loadingMore}
+          accessibilityRole="button"
+          accessibilityLabel="Carregar mais títulos"
+        >
+          {loadingMore
+            ? <ActivityIndicator size="small" color="#fffdf8" />
+            : <MaterialIcons name="expand-more" size={19} color="#fffdf8" />}
+          <AppText tipo="legenda" peso="forte" style={styles.loadMoreText}>
+            {loadingMore ? 'Carregando…' : 'Carregar mais títulos'}
+          </AppText>
+        </Pressable>}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title: MediaTitle; watched: boolean; onOpen: () => void; onToggleWatched: () => void }) {
-  const hasArtwork = getArtworkUri(title.id, 'poster') !== null;
+  const hasArtwork = getArtworkUri(title.id, 'poster', {
+    posterPath: title.tmdbPosterPath,
+    backdropPath: title.tmdbBackdropPath,
+  }) !== null;
   return (
     <View style={styles.resultCard}>
       <Pressable style={[styles.poster, { backgroundColor: title.color }]} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${title.title}`}>
-        <TitleArtwork id={title.id} variant="poster" />
+        <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
         {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
         <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
       </Pressable>
       <Pressable style={styles.resultCopy} onPress={onOpen} accessibilityRole="button">
         <AppText peso="forte" style={styles.resultTitle} numberOfLines={1}>{title.title}</AppText>
-        <AppText tipo="legenda" style={styles.resultMeta}>{title.year} · {title.kind} · {title.duration}</AppText>
+        <AppText tipo="legenda" style={styles.resultMeta}>{title.year || 'Ano não informado'} · {title.kind} · {title.duration}</AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>{title.genres.join(' · ')}</AppText>
         <View style={styles.serviceLine}><ServiceLogo name={title.service} size={14} /><AppText tipo="legenda" peso="forte" style={styles.serviceName}>{title.service}</AppText></View>
       </Pressable>
@@ -167,6 +276,11 @@ const styles = StyleSheet.create({
   filterCountText: { color: '#fff', fontSize: 9, fontWeight: '700' },
   searchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, backgroundColor: '#fffdf8', marginBottom: 14 },
   searchInput: { flex: 1, color: '#182230', fontSize: 14, paddingVertical: 10 },
+  catalogNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 13, paddingVertical: 10, borderRadius: 14, backgroundColor: '#f1e8d7', marginBottom: 14 },
+  catalogNoticeCopy: { flex: 1 },
+  catalogNoticeTitle: { color: '#8b5827', marginBottom: 2 },
+  catalogNoticeText: { color: '#706555', fontSize: 10 },
+  refreshButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#fffdf8' },
   quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 17 },
   quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 17, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fffdf8' },
   quickChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
@@ -186,6 +300,7 @@ const styles = StyleSheet.create({
   resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3, marginBottom: 12 },
   resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
   resultsSubtitle: { color: '#7b7b78', fontSize: 10, marginTop: 2 },
+  searchError: { color: '#b34d3d', marginBottom: 8 },
   resultCard: { minHeight: 105, flexDirection: 'row', alignItems: 'center', padding: 9, borderRadius: 16, backgroundColor: '#fffdf8', marginBottom: 10 },
   poster: { width: 70, height: 87, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, overflow: 'hidden' },
   posterRatingCorner: { position: 'absolute', bottom: 5 },
@@ -205,4 +320,7 @@ const styles = StyleSheet.create({
   emptyText: { color: '#7b7b78', fontSize: 10, textAlign: 'center', marginTop: 5, lineHeight: 15 },
   emptyAction: { borderRadius: 11, backgroundColor: '#e58c34', paddingHorizontal: 14, paddingVertical: 9, marginTop: 13 },
   emptyActionText: { color: '#182230', fontSize: 10 },
+  loadMoreButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, backgroundColor: '#b66a24', marginTop: 6, marginBottom: 14 },
+  loadMoreButtonDisabled: { opacity: 0.7 },
+  loadMoreText: { color: '#fffdf8' },
 });

@@ -7,23 +7,25 @@ import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
-import { CATALOG, GENRES, MediaKind, MediaTitle } from '@/constants/catalog';
+import { GENRES, MediaKind, MediaTitle } from '@/constants/catalog';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCatalog } from '@/contexts/CatalogContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { quickSortByRandom } from '@/utils/quickSort';
 
 type KindFilter = 'Todos' | MediaKind;
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-function randomIndex(length: number) {
-  return Math.floor(Math.random() * length);
-}
-
 export default function HomeScreen() {
+  const { user } = useAuth();
+  const { titles, status: catalogStatus, totalResults, hasMore, loadMoreTitles, loadingMore } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
   const [kind, setKind] = useState<KindFilter>('Todos');
   const [genre, setGenre] = useState('Todos os gêneros');
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const [lastDrawnId, setLastDrawnId] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [rouletteTitle, setRouletteTitle] = useState<MediaTitle | null>(null);
@@ -37,7 +39,10 @@ export default function HomeScreen() {
   }, []);
 
   const activeServiceNames = useMemo(() => new Set(subscriptions.filter((subscription) => subscription.active).map((subscription) => subscription.provider)), [subscriptions]);
-  const availableTitles = useMemo(() => CATALOG.filter((title) => activeServiceNames.has(title.service)), [activeServiceNames]);
+  const availableTitles = useMemo(() => titles.filter((title) =>
+    title.catalogSource === 'tmdb' || activeServiceNames.has(title.service)
+  ), [activeServiceNames, titles]);
+  const availableGenres = useMemo(() => Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)])), [titles]);
   const eligibleTitles = useMemo(() => availableTitles.filter((title) => {
     const kindMatches = kind === 'Todos' || title.kind === kind;
     const genreMatches = genre === 'Todos os gêneros' || title.genres.includes(genre);
@@ -51,42 +56,60 @@ export default function HomeScreen() {
   };
 
   const drawTitle = () => {
-    if (drawLock.current || eligibleTitles.length === 0) return;
-
-    const candidates = eligibleTitles.length > 1
-      ? eligibleTitles.filter((title) => title.id !== lastDrawnId)
-      : eligibleTitles;
-    const result = candidates[randomIndex(candidates.length)];
-    if (!result) return;
-
+    if (drawLock.current || (eligibleTitles.length === 0 && !hasMore)) return;
     drawLock.current = true;
+    setDrawError(null);
+
+    const drawCandidates = eligibleTitles;
+    if (drawCandidates.length === 0) {
+      setDrawError(hasMore
+        ? 'Buscando títulos que correspondam aos filtros em segundo plano. Tente novamente em instantes.'
+        : 'Não há títulos disponíveis para os filtros selecionados.');
+      drawLock.current = false;
+      if (hasMore && !loadingMore) {
+        void loadMoreTitles().catch((error: unknown) => {
+          setDrawError(error instanceof Error ? error.message : 'Não foi possível buscar opções para esses filtros.');
+        });
+      }
+      return;
+    }
+
+    const candidates = drawCandidates.length > 1
+      ? drawCandidates.filter((title) => title.id !== lastDrawnId)
+      : drawCandidates;
+    const result = quickSortByRandom(candidates)[0];
+    if (!result) {
+      drawLock.current = false;
+      return;
+    }
+
     setFilterVisible(false);
     setSpinning(true);
-    setRouletteTitle(eligibleTitles[randomIndex(eligibleTitles.length)]);
+    setRouletteTitle(quickSortByRandom(drawCandidates)[0] ?? result);
     rouletteRotation.setValue(0);
     rouletteScale.setValue(1);
     Animated.parallel([
       Animated.timing(rouletteRotation, {
         toValue: 1,
-        duration: 2150,
+        duration: 1050,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.sequence([
-        Animated.timing(rouletteScale, { toValue: 1.08, duration: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(rouletteScale, { toValue: 1, duration: 1850, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(rouletteScale, { toValue: 1.08, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(rouletteScale, { toValue: 1, duration: 850, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]),
     ]).start();
 
     setLastDrawnId(result.id);
     let previewIndex = 0;
-    const previewCount = 7;
+    const previewCount = 5;
     const advanceRoulette = () => {
       previewIndex += 1;
       if (previewIndex < previewCount) {
-        const preview = eligibleTitles[randomIndex(eligibleTitles.length)];
+        const preview = quickSortByRandom(drawCandidates)[0];
         if (preview) setRouletteTitle(preview);
-        rouletteTimer.current = setTimeout(advanceRoulette, 160 + previewIndex * 55);
+        rouletteTimer.current = setTimeout(advanceRoulette, 100 + previewIndex * 40);
         return;
       }
 
@@ -96,10 +119,15 @@ export default function HomeScreen() {
         setFilterVisible(false);
         drawLock.current = false;
         openDetails(result);
-      }, 420);
+      }, 220);
     };
 
-    rouletteTimer.current = setTimeout(advanceRoulette, 160);
+    rouletteTimer.current = setTimeout(advanceRoulette, 100);
+    if (hasMore && !loadingMore) {
+      void loadMoreTitles().catch((error: unknown) => {
+        setDrawError(error instanceof Error ? error.message : 'Não foi possível atualizar as opções do sorteio.');
+      });
+    }
   };
 
   return (
@@ -108,17 +136,17 @@ export default function HomeScreen() {
         <View style={styles.topbar}>
           <View>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.greeting}>Sua próxima história</AppText>
+            <AppText tipo="titulo" peso="forte" style={styles.greeting}>Olá, {user?.name.split(' ')[0] ?? 'amante de filmes'}</AppText>
           </View>
           <Pressable style={styles.avatar} onPress={() => router.push('/profile')} accessibilityLabel="Abrir perfil">
-            <AppText peso="forte" style={styles.avatarText}>M</AppText>
+            <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
           </Pressable>
         </View>
 
         <View style={styles.statsRow}>
           <View><AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{activeSubscriptions.length}</AppText><AppText tipo="legenda" style={styles.muted}>assinaturas ativas</AppText></View>
           <View style={styles.statDivider} />
-          <View><AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{availableTitles.length}</AppText><AppText tipo="legenda" style={styles.muted}>títulos disponíveis</AppText></View>
+          <View><AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{catalogStatus === 'ready' ? totalResults : availableTitles.length}</AppText><AppText tipo="legenda" style={styles.muted}>títulos disponíveis</AppText></View>
           <View style={styles.statIcon}><MaterialIcons name="local-movies" size={22} color="#e58c34" /></View>
         </View>
 
@@ -127,9 +155,9 @@ export default function HomeScreen() {
           <View style={styles.heroCopy}>
             <View style={styles.pill}><MaterialIcons name="auto-awesome" size={14} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.pillText}>SORTEIO INTELIGENTE</AppText></View>
             <AppText tipo="subtitulo" peso="forte" style={styles.heroTitle}>Decida em segundos.</AppText>
-            <AppText tipo="legenda" style={styles.heroDescription}>{availableTitles.length > 0 ? 'Sorteamos somente títulos dos seus serviços ativos.' : 'Adicione ou ative um streaming na aba Assinaturas para começar.'}</AppText>
-            <Pressable style={[styles.drawButton, (!storageReady || eligibleTitles.length === 0) && styles.drawButtonDisabled]} onPress={() => setFilterVisible(true)} disabled={!storageReady || eligibleTitles.length === 0} accessibilityRole="button">
-              <AppText peso="forte" style={styles.drawButtonText}>Sortear agora</AppText>
+            <AppText tipo="legenda" style={styles.heroDescription}>{availableTitles.length > 0 ? 'Sorteio imediato entre os títulos carregados; novas opções chegam em segundo plano.' : 'Adicione ou ative um streaming na aba Assinaturas para começar.'}</AppText>
+            <Pressable style={[styles.drawButton, (!storageReady || catalogStatus === 'loading' || (eligibleTitles.length === 0 && !hasMore)) && styles.drawButtonDisabled]} onPress={() => { setDrawError(null); setFilterVisible(true); }} disabled={!storageReady || catalogStatus === 'loading' || (eligibleTitles.length === 0 && !hasMore)} accessibilityRole="button">
+              <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear agora'}</AppText>
               <MaterialIcons name="casino" size={19} color="#182230" />
             </Pressable>
           </View>
@@ -156,11 +184,14 @@ export default function HomeScreen() {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
           {availableTitles.slice(0, 8).map((title) => {
-            const hasArtwork = getArtworkUri(title.id, 'poster') !== null;
+            const hasArtwork = getArtworkUri(title.id, 'poster', {
+              posterPath: title.tmdbPosterPath,
+              backdropPath: title.tmdbBackdropPath,
+            }) !== null;
             return (
             <Pressable style={styles.titleCard} key={title.id} onPress={() => openDetails(title)} accessibilityRole="button">
               <View style={[styles.poster, { backgroundColor: title.color }]}>
-                <TitleArtwork id={title.id} variant="poster" />
+                <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
                 {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
                 <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
                 {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
@@ -198,8 +229,8 @@ export default function HomeScreen() {
             <AppText tipo="legenda" style={styles.rouletteCaption}>Escolhendo entre {eligibleTitles.length} títulos...</AppText>
             <View style={styles.roulettePreview}>
               <View style={[styles.previewPoster, { backgroundColor: rouletteTitle?.color ?? '#263b50' }]}>
-                {rouletteTitle && <TitleArtwork id={rouletteTitle.id} variant="poster" />}
-                {rouletteTitle && !getArtworkUri(rouletteTitle.id, 'poster') && <MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
+                {rouletteTitle && <TitleArtwork id={rouletteTitle.id} variant="poster" posterPath={rouletteTitle.tmdbPosterPath} backdropPath={rouletteTitle.tmdbBackdropPath} />}
+                {rouletteTitle && !getArtworkUri(rouletteTitle.id, 'poster', { posterPath: rouletteTitle.tmdbPosterPath, backdropPath: rouletteTitle.tmdbBackdropPath }) && <MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
               </View>
               <View style={styles.previewCopy}>
                 <AppText tipo="legenda" peso="forte" style={styles.previewType}>{rouletteTitle ? `${rouletteTitle.kind.toUpperCase()} · ${rouletteTitle.year}` : 'SORTEANDO'}</AppText>
@@ -219,21 +250,32 @@ export default function HomeScreen() {
               <View><AppText tipo="legenda" peso="forte" style={styles.modalEyebrow}>SORTEIO</AppText><AppText tipo="subtitulo" peso="forte" style={styles.modalTitle}>O que combina com você?</AppText></View>
               <Pressable onPress={() => setFilterVisible(false)} style={styles.closeButton} accessibilityLabel="Fechar"><MaterialIcons name="close" size={21} color="#182230" /></Pressable>
             </View>
-            <AppText tipo="legenda" style={styles.modalDescription}>{eligibleTitles.length > 0 ? 'O sorteio considera apenas títulos disponíveis nos seus serviços ativos.' : 'Você ainda não tem títulos nos serviços ativos. Adicione ou ative uma assinatura para sortear.'}</AppText>
+            <AppText tipo="legenda" style={styles.modalDescription}>
+              {eligibleTitles.length > 0 || hasMore
+                ? 'O sorteio começa imediatamente com as opções carregadas e incorpora novos títulos conforme chegam.'
+                : 'Você ainda não tem títulos nos serviços ativos. Adicione ou ative uma assinatura para sortear.'}
+            </AppText>
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>TIPO</AppText>
             <View style={styles.chipRow}>
-              {(['Todos', 'Filme', 'Série'] as KindFilter[]).map((item) => (
-                <Pressable key={item} onPress={() => setKind(item)} style={[styles.chip, kind === item && styles.chipSelected]}><AppText tipo="legenda" peso="forte" style={kind === item ? styles.chipTextSelected : styles.chipText}>{item === 'Todos' ? 'Tanto faz' : item === 'Filme' ? 'Filmes' : 'Séries'}</AppText></Pressable>
+              {(['Todos', 'Filme', 'Série', 'Anime'] as KindFilter[]).map((item) => (
+                <Pressable key={item} onPress={() => setKind(item)} style={[styles.chip, kind === item && styles.chipSelected]}><AppText tipo="legenda" peso="forte" style={kind === item ? styles.chipTextSelected : styles.chipText}>{item === 'Todos' ? 'Tanto faz' : item === 'Filme' ? 'Filmes' : item === 'Série' ? 'Séries' : 'Animes'}</AppText></Pressable>
               ))}
             </View>
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {['Todos os gêneros', ...GENRES].map((item) => (
+              {['Todos os gêneros', ...availableGenres].map((item) => (
                 <Pressable key={item} onPress={() => setGenre(item)} style={[styles.chip, genre === item && styles.chipSelected]}><AppText tipo="legenda" peso="forte" style={genre === item ? styles.chipTextSelected : styles.chipText}>{item === 'Todos os gêneros' ? 'Tanto faz' : item}</AppText></Pressable>
               ))}
             </ScrollView>
-            <AppText tipo="legenda" style={styles.resultCount}>{eligibleTitles.length} {eligibleTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'} dos seus streamings</AppText>
-            <Pressable style={[styles.confirmButton, eligibleTitles.length === 0 && styles.disabledButton]} onPress={drawTitle} disabled={eligibleTitles.length === 0} accessibilityRole="button">
+            <AppText tipo="legenda" style={styles.resultCount}>
+              {loadingMore
+                ? `Sorteio rápido ativo · atualizando opções em segundo plano (${titles.length} de ${totalResults})`
+                : catalogStatus === 'ready' && totalResults > titles.length
+                  ? `${eligibleTitles.length} carregados para sortear agora · ${totalResults} encontrados`
+                  : `${eligibleTitles.length} ${eligibleTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'} dos seus streamings`}
+            </AppText>
+            {drawError && <AppText tipo="legenda" style={styles.drawError}>{drawError}</AppText>}
+            <Pressable style={[styles.confirmButton, eligibleTitles.length === 0 && !hasMore && styles.disabledButton]} onPress={drawTitle} disabled={eligibleTitles.length === 0 && !hasMore} accessibilityRole="button">
               <AppText peso="forte" style={styles.confirmButtonText}>Sortear meu próximo título</AppText><MaterialIcons name="auto-awesome" size={19} color="#182230" />
             </Pressable>
           </View>
@@ -300,6 +342,7 @@ const styles = StyleSheet.create({
   chipText: { color: '#6c6b67' },
   chipTextSelected: { color: '#fffdf8' },
   resultCount: { color: '#7b7b78', textAlign: 'center', marginBottom: 10 },
+  drawError: { color: '#a83b32', textAlign: 'center', marginBottom: 12 },
   confirmButton: { minHeight: 52, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   disabledButton: { opacity: 0.5 },
   confirmButtonText: { color: '#182230' },

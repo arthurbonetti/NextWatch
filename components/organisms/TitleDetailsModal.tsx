@@ -14,7 +14,10 @@ type Props = {
 
 export function TitleDetailsModal({ title, visible, onClose }: Props) {
   if (!title) return null;
-  const hasArtwork = getArtworkUri(title.id, 'backdrop') !== null;
+  const hasArtwork = getArtworkUri(title.id, 'backdrop', {
+    posterPath: title.tmdbPosterPath,
+    backdropPath: title.tmdbBackdropPath,
+  }) !== null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -22,7 +25,7 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar detalhes" />
         <View style={styles.dialog}>
           <View style={[styles.cover, { backgroundColor: title.color }]}>
-            <TitleArtwork id={title.id} variant="backdrop" />
+            <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
             {!hasArtwork && <View style={styles.coverGlow} />}
             <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Fechar">
               <MaterialIcons name="close" size={22} color="#fff" />
@@ -42,7 +45,7 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
                 <AppText tipo="subtitulo" peso="forte" style={styles.rating}>{title.imdbRating}</AppText>
               </View>
               <View>
-                <AppText tipo="legenda" peso="forte" style={styles.ratingLabel}>IMDb</AppText>
+                <AppText tipo="legenda" peso="forte" style={styles.ratingLabel}>{title.ratingSource ?? 'IMDb'}</AppText>
                 <AppText tipo="legenda" style={styles.ratingCaption}>avaliação da comunidade</AppText>
               </View>
               <View style={styles.providerBadge}>
