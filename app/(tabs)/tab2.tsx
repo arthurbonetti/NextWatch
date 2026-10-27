@@ -1,21 +1,22 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { GENRES, MediaKind, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating, GENRES, getMetacriticScore, getTitleAverageRating, getTitleServices, MediaKind, MediaTitle } from '@/constants/catalog';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
 type TypeFilter = 'Quero ver' | 'Assistidos' | 'Todos';
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 
 export default function ExploreScreen() {
-  const { titles, status, errorMessage, hasMore, loadingMore, totalResults, loadMoreTitles, refreshCatalog, searchTitles } = useCatalog();
+  const { titles, status, errorMessage, refreshCatalog, searchTitles } = useCatalog();
   const { subscriptions } = useSubscriptions();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('Quero ver');
@@ -34,21 +35,22 @@ export default function ExploreScreen() {
 
   const activeServices = useMemo(() => new Set(subscriptions.filter((item) => item.active).map((item) => item.provider)), [subscriptions]);
   const availableTitles = useMemo(() => titles.filter((title) =>
-    title.catalogSource === 'tmdb' || activeServices.has(title.service)
+    getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
   const localResults = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return availableTitles.filter((title) => {
+      const titleServices = getTitleServices(title);
       const matchesQuery = query.length === 0
         || title.title.toLocaleLowerCase().includes(query)
         || title.genres.some((genre) => genre.toLocaleLowerCase().includes(query))
-        || title.service.toLocaleLowerCase().includes(query);
+        || titleServices.some((service) => service.toLocaleLowerCase().includes(query));
       const matchesType = typeFilter === 'Todos'
         || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
       const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
-      const matchesService = serviceFilter === 'Todos' || title.service === serviceFilter;
-      const rating = Number(title.imdbRating.replace(',', '.'));
+      const matchesService = serviceFilter === 'Todos' || titleServices.includes(serviceFilter);
+      const rating = getTitleAverageRating(title);
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
       return matchesQuery && matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
     });
@@ -84,11 +86,15 @@ export default function ExploreScreen() {
 
     return () => clearTimeout(timer);
   }, [search, searchTitles]);
+
   const genres = useMemo(
     () => ['Todos', ...Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)]))],
     [titles],
   );
-  const serviceNames = useMemo(() => ['Todos', ...Array.from(new Set(availableTitles.map((title) => title.service)))], [availableTitles]);
+  const serviceNames = useMemo(
+    () => ['Todos', ...Array.from(new Set(availableTitles.flatMap((title) => getTitleServices(title))))],
+    [availableTitles],
+  );
   const activeFilterCount = Number(kindFilter !== 'Todos')
     + Number(genreFilter !== 'Todos')
     + Number(serviceFilter !== 'Todos')
@@ -104,8 +110,8 @@ export default function ExploreScreen() {
         || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
       const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
-      const matchesService = serviceFilter === 'Todos' || title.service === serviceFilter;
-      const rating = Number(title.imdbRating.replace(',', '.'));
+      const matchesService = serviceFilter === 'Todos' || getTitleServices(title).includes(serviceFilter);
+      const rating = getTitleAverageRating(title);
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
       return matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
     });
@@ -118,145 +124,173 @@ export default function ExploreScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View>
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
-          </View>
-          <Pressable style={styles.filterButton} onPress={() => setFiltersVisible((value) => !value)} accessibilityRole="button" accessibilityLabel="Abrir filtros">
-            <MaterialIcons name="tune" size={20} color="#182230" />
-            {activeFilterCount > 0 && <View style={styles.filterCount}><AppText style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
-          </Pressable>
-        </View>
-
-        <View style={styles.catalogNotice}>
-          <View style={styles.catalogNoticeCopy}>
-            <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
-              {status === 'loading' ? 'Atualizando catálogo…' : status === 'ready' ? 'Catálogo conectado ao TMDB' : status === 'needs-api-key' ? 'Catálogo de demonstração' : 'Falha ao atualizar catálogo'}
-            </AppText>
-            <AppText tipo="legenda" style={styles.catalogNoticeText}>
-              {status === 'loading'
-                ? 'Buscando filmes, séries e animes nos seus serviços ativos.'
-                : status === 'ready'
-                  ? 'Disponibilidade no Brasil · notas da comunidade TMDB'
-                  : status === 'needs-api-key'
-                    ? 'Configure EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
-                    : errorMessage ?? 'Confira a conexão e tente novamente.'}
-            </AppText>
-          </View>
-          <Pressable
-            style={styles.refreshButton}
-            onPress={() => { void refreshCatalog(); }}
-            disabled={status === 'loading'}
-            accessibilityRole="button"
-            accessibilityLabel="Atualizar catálogo"
-          >
-            <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#b66a24'} />
-          </Pressable>
-        </View>
-
-        <View style={styles.searchBox}>
-          <MaterialIcons name="search" size={21} color="#8b8a84" />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Buscar filme, série ou gênero"
-            placeholderTextColor="#9a9993"
-            style={styles.searchInput}
-            returnKeyType="search"
-            accessibilityLabel="Pesquisar títulos"
+      <FlatList
+        data={results}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ExploreResultCard
+            title={item}
+            watched={watchedIds.includes(item.id)}
+            onOpen={() => openTitle(item)}
+            onToggleWatched={() => toggleWatched(item.id)}
           />
-          {search.length > 0 && <Pressable onPress={() => setSearch('')} accessibilityLabel="Limpar busca"><MaterialIcons name="close" size={18} color="#8b8a84" /></Pressable>}
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
-          {(['Quero ver', 'Assistidos', 'Todos'] as TypeFilter[]).map((filter) => (
-            <Pressable key={filter} onPress={() => setTypeFilter(filter)} style={[styles.quickChip, typeFilter === filter && styles.quickChipActive]}>
-              <AppText tipo="legenda" peso="forte" style={typeFilter === filter ? styles.quickTextActive : styles.quickText}>{filter}</AppText>
-            </Pressable>
-          ))}
-          <View style={styles.quickDivider} />
-          {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
-            <Pressable key={filter} onPress={() => setKindFilter(filter)} style={[styles.quickChip, kindFilter === filter && styles.quickChipActive]}>
-              <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Tipo' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {filtersVisible && <View style={styles.filterPanel}>
-          <View style={styles.filterPanelHeader}>
-            <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
-            {activeFilterCount > 0 && <Pressable onPress={() => { setKindFilter('Todos'); setGenreFilter('Todos'); setServiceFilter('Todos'); setRatingFilter('Qualquer nota'); }}><AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar filtros</AppText></Pressable>}
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-            {genres.map((genre) => <Pressable key={genre} onPress={() => setGenreFilter(genre)} style={[styles.filterChip, genreFilter === genre && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={genreFilter === genre ? styles.filterChipTextActive : styles.filterChipText}>{genre}</AppText></Pressable>)}
-          </ScrollView>
-          <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-            {serviceNames.map((service) => <Pressable key={service} onPress={() => setServiceFilter(service)} style={[styles.filterChip, serviceFilter === service && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={serviceFilter === service ? styles.filterChipTextActive : styles.filterChipText}>{service}</AppText></Pressable>)}
-          </ScrollView>
-          <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA</AppText>
-          <View style={styles.filterChips}>{(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => <Pressable key={rating} onPress={() => setRatingFilter(rating)} style={[styles.filterChip, ratingFilter === rating && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>{rating}</AppText></Pressable>)}</View>
-        </View>}
-
-        <View style={styles.resultsHeader}>
+        )}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        ListHeaderComponent={
           <View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : typeFilter === 'Assistidos' ? 'Assistidos' : 'Títulos para assistir'}</AppText>
-            <AppText tipo="legenda" style={styles.resultsSubtitle}>
-              {searchLoading
-                ? 'Pesquisando no catálogo online…'
-                : status === 'ready'
-                ? `${results.length} exibidos · ${titles.length} carregados de ${totalResults} disponíveis`
-                : `${results.length} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
-            </AppText>
-          </View>
-          <MaterialIcons name="sort" size={21} color="#8b8a84" />
-        </View>
-        {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+            <View style={styles.header}>
+              <View>
+                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
+                <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
+              </View>
+              <Pressable style={styles.filterButton} onPress={() => setFiltersVisible((value) => !value)} accessibilityRole="button" accessibilityLabel="Abrir filtros">
+                <MaterialIcons name="tune" size={20} color="#182230" />
+                {activeFilterCount > 0 && <View style={styles.filterCount}><AppText style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
+              </Pressable>
+            </View>
 
-        {results.length > 0 ? results.map((title) => <ExploreResultCard key={title.id} title={title} watched={watchedIds.includes(title.id)} onOpen={() => openTitle(title)} onToggleWatched={() => toggleWatched(title.id)} />) : <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#d77c29" /></View>
-          <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
-          <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
-          {activeServices.size === 0 && <Pressable style={styles.emptyAction} onPress={() => router.push('/(tabs)/tab3')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
-        </View>}
-        {hasMore && <Pressable
-          style={[styles.loadMoreButton, loadingMore && styles.loadMoreButtonDisabled]}
-          onPress={() => { void loadMoreTitles(); }}
-          disabled={loadingMore}
-          accessibilityRole="button"
-          accessibilityLabel="Carregar mais títulos"
-        >
-          {loadingMore
-            ? <ActivityIndicator size="small" color="#fffdf8" />
-            : <MaterialIcons name="expand-more" size={19} color="#fffdf8" />}
-          <AppText tipo="legenda" peso="forte" style={styles.loadMoreText}>
-            {loadingMore ? 'Carregando…' : 'Carregar mais títulos'}
-          </AppText>
-        </Pressable>}
-      </ScrollView>
+            <View style={styles.catalogNotice}>
+              <View style={styles.catalogNoticeCopy}>
+                <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
+                  {status === 'loading' ? 'Carregando catálogo completo…' : status === 'ready' ? 'Catálogo conectado ao TMDB' : status === 'needs-api-key' ? 'Catálogo de demonstração' : 'Falha ao atualizar catálogo'}
+                </AppText>
+                <AppText tipo="legenda" style={styles.catalogNoticeText}>
+                  {status === 'loading'
+                    ? 'Buscando todos os filmes, séries e animes nos seus serviços ativos.'
+                    : status === 'ready'
+                      ? 'Disponibilidade no Brasil · notas da comunidade TMDB'
+                      : status === 'needs-api-key'
+                        ? 'Configure EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
+                        : errorMessage ?? 'Confira a conexão e tente novamente.'}
+                </AppText>
+              </View>
+              <Pressable
+                style={styles.refreshButton}
+                onPress={() => { void refreshCatalog(); }}
+                disabled={status === 'loading'}
+                accessibilityRole="button"
+                accessibilityLabel="Atualizar catálogo"
+              >
+                <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#b66a24'} />
+              </Pressable>
+            </View>
+
+            <View style={styles.searchBox}>
+              <MaterialIcons name="search" size={21} color="#8b8a84" />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Buscar filme, série ou gênero"
+                placeholderTextColor="#9a9993"
+                style={styles.searchInput}
+                returnKeyType="search"
+                accessibilityLabel="Pesquisar títulos"
+              />
+              {search.length > 0 && <Pressable onPress={() => setSearch('')} accessibilityLabel="Limpar busca"><MaterialIcons name="close" size={18} color="#8b8a84" /></Pressable>}
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
+              {(['Quero ver', 'Assistidos', 'Todos'] as TypeFilter[]).map((filter) => (
+                <Pressable key={filter} onPress={() => setTypeFilter(filter)} style={[styles.quickChip, typeFilter === filter && styles.quickChipActive]}>
+                  <AppText tipo="legenda" peso="forte" style={typeFilter === filter ? styles.quickTextActive : styles.quickText}>{filter}</AppText>
+                </Pressable>
+              ))}
+              <View style={styles.quickDivider} />
+              {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
+                <Pressable key={filter} onPress={() => setKindFilter(filter)} style={[styles.quickChip, kindFilter === filter && styles.quickChipActive]}>
+                  <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Tipo' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            {filtersVisible && <View style={styles.filterPanel}>
+              <View style={styles.filterPanelHeader}>
+                <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
+                {activeFilterCount > 0 && <Pressable onPress={() => { setKindFilter('Todos'); setGenreFilter('Todos'); setServiceFilter('Todos'); setRatingFilter('Qualquer nota'); }}><AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar filtros</AppText></Pressable>}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
+                {genres.map((genre) => <Pressable key={genre} onPress={() => setGenreFilter(genre)} style={[styles.filterChip, genreFilter === genre && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={genreFilter === genre ? styles.filterChipTextActive : styles.filterChipText}>{genre}</AppText></Pressable>)}
+              </ScrollView>
+              <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
+                {serviceNames.map((service) => <Pressable key={service} onPress={() => setServiceFilter(service)} style={[styles.filterChip, serviceFilter === service && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={serviceFilter === service ? styles.filterChipTextActive : styles.filterChipText}>{service}</AppText></Pressable>)}
+              </ScrollView>
+              <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA</AppText>
+              <View style={styles.filterChips}>{(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => <Pressable key={rating} onPress={() => setRatingFilter(rating)} style={[styles.filterChip, ratingFilter === rating && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>{rating}</AppText></Pressable>)}</View>
+            </View>}
+
+            <View style={styles.resultsHeader}>
+              <View>
+                <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : typeFilter === 'Assistidos' ? 'Assistidos' : 'Títulos para assistir'}</AppText>
+                <AppText tipo="legenda" style={styles.resultsSubtitle}>
+                  {searchLoading
+                    ? 'Pesquisando no catálogo online…'
+                    : status === 'ready'
+                    ? `${results.length} de ${availableTitles.length} títulos disponíveis`
+                    : `${results.length} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
+                </AppText>
+              </View>
+              <MaterialIcons name="sort" size={21} color="#8b8a84" />
+            </View>
+            {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#d77c29" /></View>
+            <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
+            <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
+            {activeServices.size === 0 && <Pressable style={styles.emptyAction} onPress={() => router.push('/(tabs)/tab3')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
 
 function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title: MediaTitle; watched: boolean; onOpen: () => void; onToggleWatched: () => void }) {
+  const [duration, setDuration] = useState(() => getCachedTitleDuration(title));
+
+  useEffect(() => {
+    let active = true;
+    setDuration(getCachedTitleDuration(title));
+    void fetchTitleDuration(title).then((resolved) => {
+      if (active) setDuration(resolved);
+    });
+    return () => {
+      active = false;
+    };
+  }, [title]);
+
   const hasArtwork = getArtworkUri(title.id, 'poster', {
     posterPath: title.tmdbPosterPath,
     backdropPath: title.tmdbBackdropPath,
   }) !== null;
+  const metacritic = getMetacriticScore(title);
   return (
     <View style={styles.resultCard}>
       <Pressable style={[styles.poster, { backgroundColor: title.color }]} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${title.title}`}>
         <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
         {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
-        <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
+        <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{formatAverageRating(title)}</AppText></View>
       </Pressable>
       <Pressable style={styles.resultCopy} onPress={onOpen} accessibilityRole="button">
         <AppText peso="forte" style={styles.resultTitle} numberOfLines={1}>{title.title}</AppText>
-        <AppText tipo="legenda" style={styles.resultMeta}>{title.year || 'Ano não informado'} · {title.kind} · {title.duration}</AppText>
+        <AppText tipo="legenda" style={styles.resultMeta}>{title.year || 'Ano não informado'} · {title.kind} · {duration}</AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>{title.genres.join(' · ')}</AppText>
-        <View style={styles.serviceLine}><ServiceLogo name={title.service} size={14} /><AppText tipo="legenda" peso="forte" style={styles.serviceName}>{title.service}</AppText></View>
+        <View style={styles.serviceLine}>
+          {getTitleServices(title).map((serviceName) => (
+            <ServiceLogo key={serviceName} name={serviceName} size={20} />
+          ))}
+          <AppText tipo="legenda" peso="forte" style={styles.scoreMeta}>
+            TMDB {title.imdbRating}{metacritic !== null ? ` · MC ${metacritic}` : ''}
+          </AppText>
+        </View>
       </Pressable>
       <Pressable style={[styles.watchedButton, watched && styles.watchedButtonActive]} onPress={onToggleWatched} accessibilityRole="button" accessibilityLabel={watched ? 'Remover de assistidos' : 'Marcar como assistido'}>
         <MaterialIcons name={watched ? 'check' : 'visibility'} size={18} color={watched ? '#fffdf8' : '#657078'} />
@@ -267,10 +301,10 @@ function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title:
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 34 },
+  container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  eyebrow: { color: '#e58c34', fontSize: 10, letterSpacing: 1.5, marginBottom: 4 },
-  title: { color: '#182230', fontSize: 26, lineHeight: 32 },
+  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
+  title: { color: '#182230', fontSize: 25, lineHeight: 30 },
   filterButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   filterCount: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e58c34' },
   filterCountText: { color: '#fff', fontSize: 9, fontWeight: '700' },
@@ -310,8 +344,8 @@ const styles = StyleSheet.create({
   resultTitle: { color: '#182230', fontSize: 13, marginBottom: 3 },
   resultMeta: { color: '#7b7b78', fontSize: 9 },
   resultGenres: { color: '#8d7a61', fontSize: 9, marginTop: 4 },
-  serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7 },
-  serviceName: { color: '#657078', fontSize: 9 },
+  serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 7 },
+  scoreMeta: { color: '#657078', fontSize: 9, marginLeft: 4 },
   watchedButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1eee7' },
   watchedButtonActive: { backgroundColor: '#3e9b76' },
   emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 34, borderRadius: 17, backgroundColor: '#fffdf8', marginTop: 10 },
@@ -320,7 +354,4 @@ const styles = StyleSheet.create({
   emptyText: { color: '#7b7b78', fontSize: 10, textAlign: 'center', marginTop: 5, lineHeight: 15 },
   emptyAction: { borderRadius: 11, backgroundColor: '#e58c34', paddingHorizontal: 14, paddingVertical: 9, marginTop: 13 },
   emptyActionText: { color: '#182230', fontSize: 10 },
-  loadMoreButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, backgroundColor: '#b66a24', marginTop: 6, marginBottom: 14 },
-  loadMoreButtonDisabled: { opacity: 0.7 },
-  loadMoreText: { color: '#fffdf8' },
 });

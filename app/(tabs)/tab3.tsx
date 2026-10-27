@@ -116,10 +116,10 @@ export default function SubscriptionsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 110 },
+  container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 110 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 4 },
-  title: { color: '#182230', fontSize: 27, lineHeight: 33 },
+  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
+  title: { color: '#182230', fontSize: 25, lineHeight: 30 },
   headerIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   totalCard: { overflow: 'hidden', borderRadius: 19, paddingHorizontal: 18, paddingTop: 17, paddingBottom: 15, backgroundColor: '#182230', marginBottom: 26 },
   totalGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 95, top: -120, right: -40, backgroundColor: 'rgba(243,180,63,0.12)' },

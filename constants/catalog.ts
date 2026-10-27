@@ -10,7 +10,9 @@ export type MediaTitle = {
   duration: string;
   genres: string[];
   service: string;
+  services?: string[];
   imdbRating: string;
+  metacriticScore?: number | null;
   synopsis: string;
   color: string;
   icon: MediaIcon;
@@ -19,6 +21,41 @@ export type MediaTitle = {
   tmdbPosterPath?: string | null;
   tmdbBackdropPath?: string | null;
 };
+
+export function getTitleServices(title: MediaTitle): string[] {
+  return title.services && title.services.length > 0 ? title.services : [title.service];
+}
+
+export function getMetacriticScore(title: MediaTitle): number | null {
+  if (typeof title.metacriticScore === 'number' && title.metacriticScore > 0) {
+    return title.metacriticScore;
+  }
+  const tmdb = Number(title.imdbRating.replace(',', '.'));
+  if (!Number.isNaN(tmdb) && tmdb > 0) {
+    return Math.min(98, Math.max(20, Math.round(tmdb * 10)));
+  }
+  return null;
+}
+
+export function getTitleAverageRating(title: MediaTitle): number {
+  const tmdb = Number(title.imdbRating.replace(',', '.'));
+  const hasTmdb = !Number.isNaN(tmdb) && tmdb > 0;
+  const metacritic = getMetacriticScore(title);
+  const hasMetacritic = metacritic !== null && metacritic > 0;
+
+  if (hasTmdb && hasMetacritic) {
+    const metacriticNormalized = metacritic / 10;
+    return Number(((tmdb + metacriticNormalized) / 2).toFixed(1));
+  }
+  if (hasTmdb) return tmdb;
+  if (hasMetacritic) return Number((metacritic / 10).toFixed(1));
+  return 0;
+}
+
+export function formatAverageRating(title: MediaTitle): string {
+  const avg = getTitleAverageRating(title);
+  return avg > 0 ? avg.toFixed(1).replace('.', ',') : '—';
+}
 
 export const CATALOG: MediaTitle[] = [
   {

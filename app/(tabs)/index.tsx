@@ -8,18 +8,20 @@ import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
-import { GENRES, MediaKind, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating, GENRES, getTitleAverageRating, getTitleServices, MediaKind, MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { fetchTitleDuration } from '@/services/tmdb';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type KindFilter = 'Todos' | MediaKind;
+const MIN_DRAW_RATING = 6.0;
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const { titles, status: catalogStatus, totalResults, hasMore, loadMoreTitles, loadingMore } = useCatalog();
+  const { titles, status: catalogStatus } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
   const [kind, setKind] = useState<KindFilter>('Todos');
   const [genre, setGenre] = useState('Todos os gêneros');
@@ -41,40 +43,30 @@ export default function HomeScreen() {
 
   const activeServiceNames = useMemo(() => new Set(subscriptions.filter((subscription) => subscription.active).map((subscription) => subscription.provider)), [subscriptions]);
   const availableTitles = useMemo(() => titles.filter((title) =>
-    title.catalogSource === 'tmdb' || activeServiceNames.has(title.service)
+    getTitleServices(title).some((service) => activeServiceNames.has(service))
   ), [activeServiceNames, titles]);
   const availableGenres = useMemo(() => Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)])), [titles]);
   const eligibleTitles = useMemo(() => availableTitles.filter((title) => {
+    const rating = getTitleAverageRating(title);
+    const ratingMatches = rating >= MIN_DRAW_RATING;
     const kindMatches = kind === 'Todos' || title.kind === kind;
     const genreMatches = genre === 'Todos os gêneros' || title.genres.includes(genre);
-    return kindMatches && genreMatches;
+    return ratingMatches && kindMatches && genreMatches;
   }), [availableTitles, genre, kind]);
   const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
 
   const openDetails = (title: MediaTitle) => {
+    void fetchTitleDuration(title);
     setSelectedTitle(title);
     setDetailsVisible(true);
   };
 
   const drawTitle = () => {
-    if (drawLock.current || (eligibleTitles.length === 0 && !hasMore)) return;
+    if (drawLock.current || eligibleTitles.length === 0) return;
     drawLock.current = true;
     setDrawError(null);
 
     const drawCandidates = eligibleTitles;
-    if (drawCandidates.length === 0) {
-      setDrawError(hasMore
-        ? 'Buscando títulos que correspondam aos filtros em segundo plano. Tente novamente em instantes.'
-        : 'Não há títulos disponíveis para os filtros selecionados.');
-      drawLock.current = false;
-      if (hasMore && !loadingMore) {
-        void loadMoreTitles().catch((error: unknown) => {
-          setDrawError(error instanceof Error ? error.message : 'Não foi possível buscar opções para esses filtros.');
-        });
-      }
-      return;
-    }
-
     const candidates = drawCandidates.length > 1
       ? drawCandidates.filter((title) => title.id !== lastDrawnId)
       : drawCandidates;
@@ -83,6 +75,8 @@ export default function HomeScreen() {
       drawLock.current = false;
       return;
     }
+
+    void fetchTitleDuration(result);
 
     setFilterVisible(false);
     setSpinning(true);
@@ -124,11 +118,6 @@ export default function HomeScreen() {
     };
 
     rouletteTimer.current = setTimeout(advanceRoulette, 100);
-    if (hasMore && !loadingMore) {
-      void loadMoreTitles().catch((error: unknown) => {
-        setDrawError(error instanceof Error ? error.message : 'Não foi possível atualizar as opções do sorteio.');
-      });
-    }
   };
 
   return (
@@ -147,7 +136,7 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <View><AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{activeSubscriptions.length}</AppText><AppText tipo="legenda" style={styles.muted}>assinaturas ativas</AppText></View>
           <View style={styles.statDivider} />
-          <View><AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{catalogStatus === 'ready' ? totalResults : availableTitles.length}</AppText><AppText tipo="legenda" style={styles.muted}>títulos disponíveis</AppText></View>
+          <View><AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{availableTitles.length}</AppText><AppText tipo="legenda" style={styles.muted}>títulos disponíveis</AppText></View>
           <View style={styles.statIcon}><MaterialIcons name="local-movies" size={22} color="#e58c34" /></View>
         </View>
 
@@ -156,8 +145,8 @@ export default function HomeScreen() {
           <View style={styles.heroCopy}>
             <View style={styles.pill}><MaterialIcons name="auto-awesome" size={14} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.pillText}>SORTEIO INTELIGENTE</AppText></View>
             <AppText tipo="subtitulo" peso="forte" style={styles.heroTitle}>Decida em segundos.</AppText>
-            <AppText tipo="legenda" style={styles.heroDescription}>{availableTitles.length > 0 ? 'Sorteio imediato entre os títulos carregados; novas opções chegam em segundo plano.' : 'Adicione ou ative um streaming na aba Assinaturas para começar.'}</AppText>
-            <Pressable style={[styles.drawButton, (!storageReady || catalogStatus === 'loading' || (eligibleTitles.length === 0 && !hasMore)) && styles.drawButtonDisabled]} onPress={() => { setDrawError(null); setFilterVisible(true); }} disabled={!storageReady || catalogStatus === 'loading' || (eligibleTitles.length === 0 && !hasMore)} accessibilityRole="button">
+            <AppText tipo="legenda" style={styles.heroDescription}>{availableTitles.length > 0 ? 'Sorteio imediato com média 6,0+ entre TMDB e Metacritic.' : 'Adicione ou ative um streaming na aba Assinaturas para começar.'}</AppText>
+            <Pressable style={[styles.drawButton, (!storageReady || catalogStatus === 'loading' || availableTitles.length === 0) && styles.drawButtonDisabled]} onPress={() => { setDrawError(null); setFilterVisible(true); }} disabled={!storageReady || catalogStatus === 'loading' || availableTitles.length === 0} accessibilityRole="button">
               <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear agora'}</AppText>
               <MaterialIcons name="casino" size={19} color="#182230" />
             </Pressable>
@@ -194,7 +183,7 @@ export default function HomeScreen() {
               <View style={[styles.poster, { backgroundColor: title.color }]}>
                 <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
                 {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
-                <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{title.imdbRating}</AppText></View>
+                <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{formatAverageRating(title)}</AppText></View>
                 {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
               </View>
               <AppText peso="forte" style={styles.titleName} numberOfLines={1}>{title.title}</AppText>
@@ -237,7 +226,7 @@ export default function HomeScreen() {
                 <AppText tipo="legenda" peso="forte" style={styles.previewType}>{rouletteTitle ? `${rouletteTitle.kind.toUpperCase()} · ${rouletteTitle.year}` : 'SORTEANDO'}</AppText>
                 <AppText peso="forte" style={styles.previewTitle} numberOfLines={1}>{rouletteTitle?.title ?? 'Surpresa a caminho...'}</AppText>
               </View>
-              {rouletteTitle && <View style={styles.previewRating}><MaterialIcons name="star" size={13} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.previewRatingText}>{rouletteTitle.imdbRating}</AppText></View>}
+              {rouletteTitle && <View style={styles.previewRating}><MaterialIcons name="star" size={13} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.previewRatingText}>{formatAverageRating(rouletteTitle)}</AppText></View>}
             </View>
           </View>
         </View>
@@ -252,8 +241,8 @@ export default function HomeScreen() {
               <Pressable onPress={() => setFilterVisible(false)} style={styles.closeButton} accessibilityLabel="Fechar"><MaterialIcons name="close" size={21} color="#182230" /></Pressable>
             </View>
             <AppText tipo="legenda" style={styles.modalDescription}>
-              {eligibleTitles.length > 0 || hasMore
-                ? 'O sorteio começa imediatamente com as opções carregadas e incorpora novos títulos conforme chegam.'
+              {availableTitles.length > 0
+                ? 'Apenas obras com média 6,0+ (entre TMDB e Metacritic ÷ 10) entram na roleta.'
                 : 'Você ainda não tem títulos nos serviços ativos. Adicione ou ative uma assinatura para sortear.'}
             </AppText>
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>TIPO</AppText>
@@ -269,14 +258,10 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
             <AppText tipo="legenda" style={styles.resultCount}>
-              {loadingMore
-                ? `Sorteio rápido ativo · atualizando opções em segundo plano (${titles.length} de ${totalResults})`
-                : catalogStatus === 'ready' && totalResults > titles.length
-                  ? `${eligibleTitles.length} carregados para sortear agora · ${totalResults} encontrados`
-                  : `${eligibleTitles.length} ${eligibleTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'} dos seus streamings`}
+              {`${eligibleTitles.length} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
             </AppText>
             {drawError && <AppText tipo="legenda" style={styles.drawError}>{drawError}</AppText>}
-            <Pressable style={[styles.confirmButton, eligibleTitles.length === 0 && !hasMore && styles.disabledButton]} onPress={drawTitle} disabled={eligibleTitles.length === 0 && !hasMore} accessibilityRole="button">
+            <Pressable style={[styles.confirmButton, eligibleTitles.length === 0 && styles.disabledButton]} onPress={drawTitle} disabled={eligibleTitles.length === 0} accessibilityRole="button">
               <AppText peso="forte" style={styles.confirmButtonText}>Sortear meu próximo título</AppText><MaterialIcons name="auto-awesome" size={19} color="#182230" />
             </Pressable>
           </View>

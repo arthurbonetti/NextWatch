@@ -30,11 +30,10 @@ Com o NextWatch, o usuário cadastra suas assinaturas ativas e tem acesso a um c
 - 🎲 **Roleta de Sorteio Inteligente**:
   - Sorteio aleatório com algoritmo de embaralhamento rápido (`QuickSort`).
   - Filtro por tipo de mídia (*Filmes*, *Séries*, *Animes*) e por gênero.
-  - Sorteia apenas obras disponíveis nos serviços ativos da conta.
-  - Carregamento assíncrono em segundo plano para novos títulos após cada rodada.
+  - Sorteia entre todos os títulos disponíveis nos serviços ativos da conta.
 
 - 🔍 **Exploração e Busca no Catálogo**:
-  - Consulta e paginação sob demanda sincronizadas com a API do TMDB (região Brasil).
+  - Carregamento completo de todo o catálogo disponível na API do TMDB (região Brasil) de uma só vez, com listagem virtualizada (`FlatList`).
   - Pesquisa em tempo real por títulos e termos com *debounce* e cache local de consultas.
   - Filtros avançados por nota de avaliação (`7+`, `8+`), status (*Quero ver* / *Assistidos*), gênero e serviço.
   - Modal e página de detalhes completos com sinopse, ano, duração, pôsteres e banners de alta resolução.
@@ -56,7 +55,7 @@ Com o NextWatch, o usuário cadastra suas assinaturas ativas e tem acesso a um c
 - **Linguagem**: [TypeScript](https://www.typescriptlang.org/)
 - **Roteamento**: [Expo Router](https://docs.expo.dev/router/introduction/) (File-based Routing com Tabs, Stacks e Modais)
 - **Estilização e Animações**: React Native StyleSheet, React Native Animated e [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/)
-- **Ícones e Mídia**: `@expo/vector-icons`, [Expo Image](https://docs.expo.dev/versions/latest/sdk/image/) e `expo-symbols`
+- **Ícones e Mídia**: `@expo/vector-icons` (`MaterialIcons`) e [Expo Image](https://docs.expo.dev/versions/latest/sdk/image/)
 - **Armazenamento Local**: `@react-native-async-storage/async-storage`
 - **Dados Externos**: [The Movie Database (TMDB) API](https://www.themoviedb.org/documentation/api)
 
@@ -148,12 +147,13 @@ NextWatch/
 │   ├── (auth)/           # Telas de login e cadastro
 │   ├── (tabs)/           # Abas de navegação (Início, Explorar, Assinaturas)
 │   ├── title/[id].tsx    # Detalhes dinâmicos da obra
+│   ├── profile.tsx       # Tela de perfil do usuário
 │   └── _layout.tsx       # Layout raiz e provedores globais
-├── assets/               # Ícones, splash screens e imagens
-├── components/           # Componentes modulares
-│   ├── atoms/            # Botões, inputs, badges, textos e logos
+├── assets/               # Ícones e splash screens do aplicativo
+├── components/           # Componentes modulares (Atomic Design)
+│   ├── atoms/            # Botões, inputs, textos, capas e logos
 │   └── organisms/        # Modais de detalhes e de edição de assinatura
-├── constants/            # Catálogo estático, assinaturas e paleta de cores
+├── constants/            # Catálogo estático, assinaturas e mapeamento de capas TMDB
 ├── contexts/             # Context API (AuthContext, CatalogContext, SubscriptionsContext)
 ├── services/             # Clientes de API (tmdb.ts)
 ├── utils/                # Funções utilitárias (algoritmo QuickSort, etc.)
