@@ -59,6 +59,8 @@ ehthumbs.db
 # Agent / AI local directories (scratch e dados locais da IDE)
 .gemini/
 .antigravity/
+.antigravityrules
+GEMINI.md
 
 # Temporary / examples
 app-example/

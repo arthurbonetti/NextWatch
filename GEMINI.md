@@ -1,2 +1,0 @@
-@[Antigravity Rules](.antigravityrules)
-
