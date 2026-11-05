@@ -4,6 +4,7 @@ import { quickSortByRandom } from '@/utils/quickSort';
 type TmdbProvider = {
   provider_id: number;
   provider_name: string;
+  logo_path?: string | null;
 };
 
 type TmdbProviderResponse = {
@@ -63,6 +64,7 @@ const MAX_PAGES_PER_ENDPOINT = 500;
 const REQUEST_CONCURRENCY = 10;
 
 let cachedProvidersPromise: Promise<TmdbProvider[]> | null = null;
+const dynamicProviderLogos = new Map<string, string>();
 
 const PROVIDER_ALIASES: Record<string, string[]> = {
   'Netflix': ['netflix', 'netflix standard with ads', 'netflix basic with ads'],
@@ -71,6 +73,7 @@ const PROVIDER_ALIASES: Record<string, string[]> = {
   'Prime Video': ['amazon prime video', 'prime video', 'amazon prime video with ads'],
   'Apple TV+': ['apple tv plus', 'apple tv'],
   'Globoplay': ['globoplay'],
+  'Crunchyroll': ['crunchyroll', 'crunchyroll amazon channel'],
 };
 
 const GENRE_NAMES: Record<MediaEndpoint, Record<number, string>> = {
@@ -121,13 +124,27 @@ export function hasTmdbApiKey() {
   return Boolean(API_TOKEN);
 }
 
+export function getDynamicProviderLogo(providerName: string): string | undefined {
+  return dynamicProviderLogos.get(providerName);
+}
+
 async function getWatchProviders(): Promise<TmdbProvider[]> {
   if (!cachedProvidersPromise) {
     cachedProvidersPromise = Promise.all([
       request<TmdbProviderResponse>('/watch/providers/movie', { watch_region: 'BR', language: 'pt-BR' }),
       request<TmdbProviderResponse>('/watch/providers/tv', { watch_region: 'BR', language: 'pt-BR' }),
     ])
-      .then(([movieProviders, tvProviders]) => [...movieProviders.results, ...tvProviders.results])
+      .then(([movieProviders, tvProviders]) => {
+        const list = [...movieProviders.results, ...tvProviders.results];
+        for (const provider of list) {
+          if (!provider.logo_path) continue;
+          const canonical = matchCanonicalProviderName(provider.provider_name);
+          if (canonical && !dynamicProviderLogos.has(canonical)) {
+            dynamicProviderLogos.set(canonical, provider.logo_path);
+          }
+        }
+        return list;
+      })
       .catch((error) => {
         cachedProvidersPromise = null;
         throw error;
@@ -495,7 +512,7 @@ function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: stri
     .map((genreId) => GENRE_NAMES[endpoint][genreId])
     .filter((genre): genre is string => Boolean(genre));
   const isAnime = genres.includes('Animação')
-    && (item.original_language === 'ja' || item.origin_country?.includes('JP') === true);
+    && (item.original_language === 'ja' || item.origin_country?.includes('JP') === true || services.includes('Crunchyroll'));
   const title = item.title ?? item.name ?? 'Título sem nome';
   const releaseDate = item.release_date ?? item.first_air_date ?? '';
   const icon: MediaIcon = endpoint === 'movie' ? 'movie' : 'live-tv';

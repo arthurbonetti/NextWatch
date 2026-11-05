@@ -328,6 +328,36 @@ export const CATALOG: MediaTitle[] = [
     genres: ['Drama', 'Romance'], service: 'Globoplay', imdbRating: '7,7', color: '#865a68', icon: 'live-tv',
     synopsis: 'Uma jovem enfrenta segredos familiares e manipulações enquanto tenta construir uma vida independente.',
   },
+  {
+    id: 'jujutsu-kaisen', title: 'Jujutsu Kaisen', kind: 'Anime', year: 2020, duration: '2 temporadas',
+    genres: ['Animação', 'Ação', 'Aventura'], service: 'Crunchyroll', imdbRating: '8,6', color: '#6b3fa0', icon: 'live-tv',
+    synopsis: 'Yuji Itadori engole um talismã amaldiçoado para salvar seus amigos e passa a dividir o corpo com Sukuna, o Rei das Maldições.',
+  },
+  {
+    id: 'demon-slayer', title: 'Demon Slayer: Kimetsu no Yaiba', kind: 'Anime', year: 2019, duration: '4 temporadas',
+    genres: ['Animação', 'Ação', 'Aventura'], service: 'Crunchyroll', imdbRating: '8,7', color: '#3b6e5c', icon: 'live-tv',
+    synopsis: 'Após sua família ser atacada e sua irmã Nezuko se transformar em um demônio, Tanjiro Kamado parte em busca de uma cura.',
+  },
+  {
+    id: 'attack-on-titan', title: 'Attack on Titan', kind: 'Anime', year: 2013, duration: '4 temporadas',
+    genres: ['Animação', 'Ação', 'Drama'], service: 'Crunchyroll', imdbRating: '9,1', color: '#7a4b3a', icon: 'live-tv',
+    synopsis: 'A humanidade vive cercada por enormes muralhas para se proteger dos Titãs, até que um ataque colossal muda o destino de Eren Yeager.',
+  },
+  {
+    id: 'frieren', title: 'Frieren e a Jornada para o Além', kind: 'Anime', year: 2023, duration: '1 temporada',
+    genres: ['Animação', 'Aventura', 'Drama'], service: 'Crunchyroll', imdbRating: '8,9', color: '#4a7c8c', icon: 'live-tv',
+    synopsis: 'Após derrotar o Rei Demônio ao lado de seu grupo de heróis, a maga elfa Frieren embarca em uma nova jornada para compreender os humanos e a passagem do tempo.',
+  },
+  {
+    id: 'solo-leveling', title: 'Solo Leveling', kind: 'Anime', year: 2024, duration: '2 temporadas',
+    genres: ['Animação', 'Ação', 'Aventura'], service: 'Crunchyroll', imdbRating: '8,6', color: '#354b6e', icon: 'live-tv',
+    synopsis: 'Conhecido como o caçador mais fraco da humanidade, Sung Jinwoo sobrevive a uma masmorra mortal e desperta a habilidade única de subir de nível.',
+  },
+  {
+    id: 'chainsaw-man', title: 'Chainsaw Man', kind: 'Anime', year: 2022, duration: '1 temporada',
+    genres: ['Animação', 'Ação', 'Terror'], service: 'Crunchyroll', imdbRating: '8,4', color: '#9e4738', icon: 'live-tv',
+    synopsis: 'Denji se funde ao seu demônio de estimação Pochita para sobreviver e passa a caçar demônios para a Segurança Pública como o Homem-Motosserra.',
+  },
 ];
 
 export const GENRES = ['Ficção científica', 'Drama', 'Aventura', 'Comédia', 'Suspense', 'Terror', 'Animação', 'História', 'Romance', 'Ação', 'Música'];

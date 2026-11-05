@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
-import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { getMetacriticScore, getTitleServices, MediaTitle } from '@/constants/catalog';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
@@ -19,9 +19,11 @@ const SYNOPSIS_PREVIEW_LIMIT = 280;
 export function TitleDetailsModal({ title, visible, onClose }: Props) {
   const [duration, setDuration] = useState(() => (title ? getCachedTitleDuration(title) : ''));
   const [expanded, setExpanded] = useState(false);
+  const [showAllProviders, setShowAllProviders] = useState(false);
 
   useEffect(() => {
     setExpanded(false);
+    setShowAllProviders(false);
     if (!title) return;
     let active = true;
     setDuration(getCachedTitleDuration(title));
@@ -40,6 +42,7 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
   }) !== null;
   const metacritic = getMetacriticScore(title);
   const isLongSynopsis = title.synopsis.length > SYNOPSIS_PREVIEW_LIMIT;
+  const services = getTitleServices(title);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -78,11 +81,26 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
                 </View>
               )}
               <View style={styles.providerBadge}>
-                {getTitleServices(title).map((serviceName) => (
-                  <ServiceLogo key={serviceName} name={serviceName} size={38} />
-                ))}
+                <ServiceLogoList
+                  services={services}
+                  size={36}
+                  maxVisible={3}
+                  overflowSize={31}
+                  onPressOverflow={() => setShowAllProviders((prev) => !prev)}
+                />
               </View>
             </View>
+
+            {showAllProviders && services.length > 3 && (
+              <View style={styles.allProvidersRow}>
+                {services.map((serviceName) => (
+                  <View key={serviceName} style={styles.providerPill}>
+                    <ServiceLogo name={serviceName} size={18} />
+                    <AppText tipo="legenda" peso="forte" style={styles.providerPillText}>{serviceName}</AppText>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <AppText peso="medio" style={styles.genres}>{title.genres.join('  ·  ')}</AppText>
 
@@ -131,17 +149,20 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#d77c29', letterSpacing: 1.3, marginBottom: 4 },
   title: { color: '#182230', fontSize: 24, lineHeight: 28, marginBottom: 4 },
   meta: { color: '#7b7b78' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 12 },
-  ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 11, backgroundColor: '#182230' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 12 },
+  ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 11, backgroundColor: '#182230' },
   rating: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
   ratingTag: { color: '#f3b43f', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  metacriticBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 11 },
+  metacriticBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 8, borderRadius: 11 },
   mcGreen: { backgroundColor: '#2e8b57' },
   mcYellow: { backgroundColor: '#d49b27' },
   mcRed: { backgroundColor: '#c0392b' },
   metacriticScore: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
   metacriticLabel: { color: 'rgba(255,253,248,0.9)', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  providerBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
+  providerBadge: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
+  allProvidersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  providerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, backgroundColor: '#f1eee7' },
+  providerPillText: { color: '#182230', fontSize: 11 },
   genres: { color: '#8d7a61', fontSize: 13, lineHeight: 18, letterSpacing: 0.2, marginBottom: 14 },
   sectionTitle: { color: '#182230', fontSize: 17, lineHeight: 22, marginBottom: 5 },
   synopsis: { color: '#687078', lineHeight: 21, marginBottom: 18 },

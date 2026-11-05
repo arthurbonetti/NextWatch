@@ -18,9 +18,9 @@ type TmdbResult = {
 
 type Match = { result: TmdbResult; score: number; type: 'movie' | 'tv' };
 
-const KEY = process.env.TMDB_API_KEY?.trim();
+const KEY = (process.env.TMDB_API_KEY ?? process.env.EXPO_PUBLIC_TMDB_API_KEY)?.trim();
 if (!KEY) {
-  console.error('TMDB_API_KEY não encontrada. Crie .env.local com TMDB_API_KEY=<sua chave> e rode de novo.');
+  console.error('TMDB_API_KEY ou EXPO_PUBLIC_TMDB_API_KEY não encontrada. Crie .env.local e rode de novo.');
   process.exit(1);
 }
 

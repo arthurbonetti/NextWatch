@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
-import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { getMetacriticScore, getTitleServices } from '@/constants/catalog';
 import { useCatalog } from '@/contexts/CatalogContext';
@@ -19,10 +19,12 @@ export default function TitleDetailsScreen() {
   const title = findTitle(id);
   const [saved, setSaved] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [showAllProviders, setShowAllProviders] = useState(false);
   const [duration, setDuration] = useState(() => (title ? getCachedTitleDuration(title) : ''));
 
   useEffect(() => {
     setExpanded(false);
+    setShowAllProviders(false);
     if (!title) return;
     let active = true;
     setDuration(getCachedTitleDuration(title));
@@ -48,6 +50,7 @@ export default function TitleDetailsScreen() {
   }) !== null;
   const metacritic = getMetacriticScore(title);
   const isLongSynopsis = title.synopsis.length > SYNOPSIS_PREVIEW_LIMIT;
+  const services = getTitleServices(title);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -74,8 +77,26 @@ export default function TitleDetailsScreen() {
               <AppText peso="forte" style={styles.metacriticLabel}>MC</AppText>
             </View>
           )}
-          <View style={styles.provider}>{getTitleServices(title).map((serviceName) => <ServiceLogo key={serviceName} name={serviceName} size={38} />)}</View>
+          <View style={styles.provider}>
+            <ServiceLogoList
+              services={services}
+              size={36}
+              maxVisible={3}
+              overflowSize={31}
+              onPressOverflow={() => setShowAllProviders((prev) => !prev)}
+            />
+          </View>
         </View>
+        {showAllProviders && services.length > 3 && (
+          <View style={styles.allProvidersRow}>
+            {services.map((serviceName) => (
+              <View key={serviceName} style={styles.providerPill}>
+                <ServiceLogo name={serviceName} size={18} />
+                <AppText tipo="legenda" peso="forte" style={styles.providerPillText}>{serviceName}</AppText>
+              </View>
+            ))}
+          </View>
+        )}
         <AppText peso="medio" style={styles.genres}>{title.genres.join('  ·  ')}</AppText>
         <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Sinopse</AppText>
         <AppText
@@ -116,17 +137,20 @@ const styles = StyleSheet.create({
   posterLabel: { color: '#fffdf8', letterSpacing: 1.2, textAlign: 'center' },
   title: { color: '#182230', fontSize: 26, lineHeight: 32, marginBottom: 4 },
   meta: { color: '#7b7b78' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 11, backgroundColor: '#182230' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 11, backgroundColor: '#182230' },
   rating: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
   imdb: { color: '#f3b43f', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  metacriticBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 11 },
+  metacriticBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 8, borderRadius: 11 },
   mcGreen: { backgroundColor: '#2e8b57' },
   mcYellow: { backgroundColor: '#d49b27' },
   mcRed: { backgroundColor: '#c0392b' },
   metacriticText: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
   metacriticLabel: { color: 'rgba(255,253,248,0.9)', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  provider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
+  provider: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
+  allProvidersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  providerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, backgroundColor: '#fffdf8' },
+  providerPillText: { color: '#182230', fontSize: 11 },
   genres: { color: '#8d7a61', fontSize: 13, lineHeight: 18, letterSpacing: 0.2, marginTop: 10, marginBottom: 14 },
   sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 22, marginBottom: 5 },
   description: { color: '#687078', lineHeight: 21, marginBottom: 20 },

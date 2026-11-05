@@ -23,6 +23,7 @@ export const SUBSCRIPTION_PROVIDERS: SubscriptionProvider[] = [
   { name: 'Prime Video', color: '#1679a9', symbol: 'P', logo: '/gMZdpavHmxFNnLpMHwVxfqeux2g.png' },
   { name: 'Apple TV+', color: '#30343a', symbol: 'A', logo: '/9icYBfYFcwgCbky5VdGUIKJ4C5i.png' },
   { name: 'Globoplay', color: '#ed1c24', symbol: 'G', logo: '/9A6Oxd3F7iXm7mds7CxYOBicojs.png' },
+  { name: 'Crunchyroll', color: '#f47521', symbol: 'C', logo: '/fzN5Jok5Ig1eJ7gyNGoMhnLSCfh.jpg' },
 ];
 
 export const INITIAL_SUBSCRIPTIONS: Subscription[] = [

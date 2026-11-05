@@ -5,7 +5,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
-import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, GENRES, getMetacriticScore, getTitleAverageRating, getTitleServices, MediaKind, MediaTitle } from '@/constants/catalog';
 import { useCatalog } from '@/contexts/CatalogContext';
@@ -284,9 +284,7 @@ function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title:
         <AppText tipo="legenda" style={styles.resultMeta}>{title.year || 'Ano não informado'} · {title.kind} · {duration}</AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>{title.genres.join(' · ')}</AppText>
         <View style={styles.serviceLine}>
-          {getTitleServices(title).map((serviceName) => (
-            <ServiceLogo key={serviceName} name={serviceName} size={20} />
-          ))}
+          <ServiceLogoList services={getTitleServices(title)} size={20} maxVisible={3} gap={5} overflowGap={4} />
           <AppText tipo="legenda" peso="forte" style={styles.scoreMeta}>
             TMDB {title.imdbRating}{metacritic !== null ? ` · MC ${metacritic}` : ''}
           </AppText>

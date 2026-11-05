@@ -40,7 +40,7 @@ Com o NextWatch, o usuário cadastra suas assinaturas ativas e tem acesso a um c
 
 - 💳 **Painel de Gestão de Assinaturas**:
   - Visualização resumida de gastos mensais e projeção de custo anual em Reais (BRL).
-  - Ativação, pausa, edição e remoção de provedores (*Netflix*, *Disney+*, *Max*, *Prime Video*, *Globoplay*, *Apple TV+*, etc.).
+  - Ativação, pausa, edição e remoção de provedores (*Netflix*, *Disney+*, *Max*, *Prime Video*, *Globoplay*, *Apple TV+*, *Crunchyroll*, etc.).
   - Configuração de dia de cobrança e lembretes de renovação (1, 3 ou 7 dias antes).
   - Persistência local segura dos dados com `AsyncStorage`.
 
