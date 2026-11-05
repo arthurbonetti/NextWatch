@@ -122,7 +122,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={true}>
         <View style={styles.topbar}>
           <View>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>

@@ -63,7 +63,7 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
             style={styles.detailsScroll}
             contentContainerStyle={styles.detailsContent}
             scrollEnabled={isLongSynopsis && expanded}
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={true}>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SORTEADO PARA VOCÊ</AppText>
             <AppText tipo="titulo" peso="forte" style={styles.title}>{title.title}</AppText>
             <AppText tipo="legenda" style={styles.meta}>{title.year}  ·  {title.kind}  ·  {duration}</AppText>

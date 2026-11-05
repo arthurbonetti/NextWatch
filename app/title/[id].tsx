@@ -57,7 +57,7 @@ export default function TitleDetailsScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         scrollEnabled={isLongSynopsis && expanded}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={true}>
         <View style={styles.topbar}><Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityLabel="Voltar"><MaterialIcons name="arrow-back" size={22} color="#182230" /></Pressable><AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText><Pressable onPress={() => setSaved(!saved)} style={styles.iconButton} accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}><MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={22} color="#e58c34" /></Pressable></View>
         <View style={[styles.poster, { backgroundColor: title.color }]}>
           <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />

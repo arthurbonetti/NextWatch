@@ -1,15 +1,15 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# Dependencies
 node_modules/
 
-# Expo
+# Expo & Web builds
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native builds & keys
 .kotlin/
 *.orig.*
 *.jks
@@ -17,29 +17,49 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-app-example
-
-# generated native folders
 /ios
 /android
 
+# Metro & Bundler
+.metro-health-check*
+
+# Logs & Debugging
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+pnpm-debug.log*
+
+# Environment files (mantém apenas .env.example)
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# TypeScript & Cache
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# OS specific files
+.DS_Store
+*.pem
+Thumbs.db
+ehthumbs.db
+
+# IDE & Editor caches (regras/configurações do projeto continuam versionadas)
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.cursor/
+
+# Agent / AI local directories (scratch e dados locais da IDE)
+.gemini/
+.antigravity/
+
+# Temporary / examples
+app-example/
 *.pdf

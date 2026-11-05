@@ -137,7 +137,7 @@ export default function ExploreScreen() {
         )}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={5}

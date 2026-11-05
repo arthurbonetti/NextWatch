@@ -37,7 +37,7 @@ export default function SubscriptionsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={true}>
         <View style={styles.header}>
           <View>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
