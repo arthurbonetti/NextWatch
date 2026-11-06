@@ -1,4 +1,4 @@
-import type { MediaIcon, MediaKind, MediaTitle } from '@/constants/catalog';
+import { getSearchRelevanceScore, rankTitlesBySearchRelevance, type MediaIcon, type MediaKind, type MediaTitle } from '@/constants/catalog';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type TmdbProvider = {
@@ -25,6 +25,8 @@ type TmdbMediaResult = {
   id: number;
   title?: string;
   name?: string;
+  original_title?: string;
+  original_name?: string;
   overview?: string;
   release_date?: string;
   first_air_date?: string;
@@ -32,6 +34,8 @@ type TmdbMediaResult = {
   backdrop_path?: string | null;
   genre_ids?: number[];
   vote_average?: number;
+  vote_count?: number;
+  popularity?: number;
   original_language?: string;
   origin_country?: string[];
 };
@@ -331,14 +335,22 @@ export async function searchCatalogTitles(query: string, fallbackProviders: stri
     }),
   ]);
 
-  const rawItems: Array<{ item: TmdbMediaResult; endpoint: MediaEndpoint }> = [
-    ...movies.results.map((item) => ({ item, endpoint: 'movie' as const })),
-    ...shows.results.map((item) => ({ item, endpoint: 'tv' as const })),
-  ];
+  const rawItems: Array<{ item: TmdbMediaResult; endpoint: MediaEndpoint; preliminaryScore: number }> = [
+    ...movies.results.map((item) => ({
+      item,
+      endpoint: 'movie' as const,
+      preliminaryScore: getSearchRelevanceScore(mapMedia(item, 'movie', fallbackProviders), encodedQuery),
+    })),
+    ...shows.results.map((item) => ({
+      item,
+      endpoint: 'tv' as const,
+      preliminaryScore: getSearchRelevanceScore(mapMedia(item, 'tv', fallbackProviders), encodedQuery),
+    })),
+  ].sort((a, b) => b.preliminaryScore - a.preliminaryScore);
 
   const mappedTitles = await Promise.all(
     rawItems.map(async ({ item, endpoint }, index) => {
-      const providers = index < 12 ? await fetchTitleProvidersInBrazil(endpoint, item.id) : [];
+      const providers = index < 16 ? await fetchTitleProvidersInBrazil(endpoint, item.id) : [];
       const services = providers.length > 0 ? providers : fallbackProviders;
       return mapMedia(item, endpoint, services);
     }),
@@ -349,7 +361,7 @@ export async function searchCatalogTitles(query: string, fallbackProviders: stri
   for (const title of mappedTitles) {
     mergeTitleIntoCatalog(deduplicated, idByNameKey, title);
   }
-  return Array.from(deduplicated.values());
+  return rankTitlesBySearchRelevance(Array.from(deduplicated.values()), encodedQuery);
 }
 
 async function fetchTitleProvidersInBrazil(endpoint: MediaEndpoint, tmdbId: number): Promise<string[]> {
@@ -539,6 +551,9 @@ function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: stri
     catalogSource: 'tmdb',
     tmdbPosterPath: item.poster_path,
     tmdbBackdropPath: item.backdrop_path,
+    originalTitle: item.original_title ?? item.original_name,
+    popularity: item.popularity ?? 0,
+    voteCount: item.vote_count ?? 0,
   };
 }
 

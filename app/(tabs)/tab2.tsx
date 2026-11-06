@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { formatAverageRating, GENRES, getMetacriticScore, getTitleAverageRating, getTitleServices, MediaKind, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating, GENRES, getMetacriticScore, getTitleAverageRating, getTitleServices, matchesSearchQuery, MediaKind, MediaTitle, rankTitlesBySearchRelevance } from '@/constants/catalog';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
@@ -38,13 +38,10 @@ export default function ExploreScreen() {
     getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
   const localResults = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    return availableTitles.filter((title) => {
+    const query = search.trim();
+    const filtered = availableTitles.filter((title) => {
       const titleServices = getTitleServices(title);
-      const matchesQuery = query.length === 0
-        || title.title.toLocaleLowerCase().includes(query)
-        || title.genres.some((genre) => genre.toLocaleLowerCase().includes(query))
-        || titleServices.some((service) => service.toLocaleLowerCase().includes(query));
+      const matchesQuery = query.length === 0 || matchesSearchQuery(title, query);
       const matchesType = typeFilter === 'Todos'
         || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
@@ -54,6 +51,7 @@ export default function ExploreScreen() {
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
       return matchesQuery && matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
     });
+    return query.length > 0 ? rankTitlesBySearchRelevance(filtered, query) : filtered;
   }, [availableTitles, genreFilter, kindFilter, ratingFilter, search, serviceFilter, typeFilter, watchedIds]);
 
   useEffect(() => {
@@ -102,10 +100,20 @@ export default function ExploreScreen() {
 
   const results = useMemo(() => {
     const normalizedQuery = search.trim().toLocaleLowerCase();
-    const sourceTitles = normalizedQuery.length >= 2 && remoteQuery === normalizedQuery && remoteResults
-      ? remoteResults
-      : localResults;
-    return sourceTitles.filter((title) => {
+    let sourceTitles: MediaTitle[] = localResults;
+    if (normalizedQuery.length >= 2 && remoteQuery === normalizedQuery && remoteResults) {
+      const mergedById = new Map<string, MediaTitle>();
+      for (const item of localResults) {
+        mergedById.set(item.id, item);
+      }
+      for (const item of remoteResults) {
+        if (!mergedById.has(item.id)) {
+          mergedById.set(item.id, item);
+        }
+      }
+      sourceTitles = Array.from(mergedById.values());
+    }
+    const filtered = sourceTitles.filter((title) => {
       const matchesType = typeFilter === 'Todos'
         || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
@@ -115,6 +123,7 @@ export default function ExploreScreen() {
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
       return matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
     });
+    return normalizedQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, search) : filtered;
   }, [genreFilter, kindFilter, localResults, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedIds]);
 
   const toggleWatched = (id: string) => setWatchedIds((current) =>
