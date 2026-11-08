@@ -1,40 +1,20 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
-import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { getMetacriticScore, getTitleServices } from '@/constants/catalog';
+import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { useCatalog } from '@/contexts/CatalogContext';
-import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
-
-const SYNOPSIS_PREVIEW_LIMIT = 280;
 
 export default function TitleDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { status, findTitle } = useCatalog();
   const title = findTitle(id);
   const [saved, setSaved] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [showAllProviders, setShowAllProviders] = useState(false);
-  const [duration, setDuration] = useState(() => (title ? getCachedTitleDuration(title) : ''));
-
-  useEffect(() => {
-    setExpanded(false);
-    setShowAllProviders(false);
-    if (!title) return;
-    let active = true;
-    setDuration(getCachedTitleDuration(title));
-    void fetchTitleDuration(title).then((resolved) => {
-      if (active) setDuration(resolved);
-    });
-    return () => {
-      active = false;
-    };
-  }, [title]);
+  const [scrollEnabled, setScrollEnabled] = useState(false);
 
   if (!title) {
     return (
@@ -48,78 +28,19 @@ export default function TitleDetailsScreen() {
     posterPath: title.tmdbPosterPath,
     backdropPath: title.tmdbBackdropPath,
   }) !== null;
-  const metacritic = getMetacriticScore(title);
-  const isLongSynopsis = title.synopsis.length > SYNOPSIS_PREVIEW_LIMIT;
-  const services = getTitleServices(title);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.container}
-        scrollEnabled={isLongSynopsis && expanded}
+        scrollEnabled={scrollEnabled}
         showsVerticalScrollIndicator={true}>
         <View style={styles.topbar}><Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityLabel="Voltar"><MaterialIcons name="arrow-back" size={22} color="#182230" /></Pressable><AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText><Pressable onPress={() => setSaved(!saved)} style={styles.iconButton} accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}><MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={22} color="#e58c34" /></Pressable></View>
         <View style={[styles.poster, { backgroundColor: title.color }]}>
           <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
           {!hasArtwork && <><MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" /><AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText></>}
         </View>
-        <AppText tipo="titulo" peso="forte" style={styles.title}>{title.title}</AppText>
-        <AppText tipo="texto" style={styles.meta}>{title.year || 'Ano não informado'} · {title.kind} · {duration}</AppText>
-        <View style={styles.ratingRow}>
-          <View style={styles.ratingBadge}>
-            <MaterialIcons name="star" size={16} color="#f3b43f" />
-            <AppText peso="forte" style={styles.rating}>{title.imdbRating}</AppText>
-            <AppText peso="forte" style={styles.imdb}>{title.ratingSource ?? 'IMDb'}</AppText>
-          </View>
-          {metacritic !== null && (
-            <View style={[styles.metacriticBadge, metacritic >= 61 ? styles.mcGreen : metacritic >= 40 ? styles.mcYellow : styles.mcRed]}>
-              <AppText peso="forte" style={styles.metacriticText}>{metacritic}</AppText>
-              <AppText peso="forte" style={styles.metacriticLabel}>MC</AppText>
-            </View>
-          )}
-          <View style={styles.provider}>
-            <ServiceLogoList
-              services={services}
-              size={36}
-              maxVisible={3}
-              overflowSize={31}
-              onPressOverflow={() => setShowAllProviders((prev) => !prev)}
-            />
-          </View>
-        </View>
-        {showAllProviders && services.length > 3 && (
-          <View style={styles.allProvidersRow}>
-            {services.map((serviceName) => (
-              <View key={serviceName} style={styles.providerPill}>
-                <ServiceLogo name={serviceName} size={18} />
-                <AppText tipo="legenda" peso="forte" style={styles.providerPillText}>{serviceName}</AppText>
-              </View>
-            ))}
-          </View>
-        )}
-        <AppText peso="medio" style={styles.genres}>{title.genres.join('  ·  ')}</AppText>
-        <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Sinopse</AppText>
-        <AppText
-          tipo="texto"
-          style={[styles.description, isLongSynopsis && styles.descriptionWithToggle]}
-          numberOfLines={isLongSynopsis && !expanded ? 4 : undefined}>
-          {title.synopsis}
-        </AppText>
-        {isLongSynopsis && (
-          <Pressable
-            style={styles.expandButton}
-            onPress={() => setExpanded((prev) => !prev)}
-            accessibilityRole="button">
-            <AppText tipo="legenda" peso="forte" style={styles.expandButtonText}>
-              {expanded ? 'Mostrar menos' : 'Mostrar mais'}
-            </AppText>
-            <MaterialIcons
-              name={expanded ? 'expand-less' : 'expand-more'}
-              size={18}
-              color="#d77c29"
-            />
-          </Pressable>
-        )}
+        <TitleDetailsBody title={title} pillBackgroundColor="#fffdf8" onScrollEnabledChange={setScrollEnabled} />
         <Pressable style={styles.primaryButton} onPress={() => setSaved(!saved)}><MaterialIcons name={saved ? 'check' : 'bookmark-add'} size={19} color="#182230" /><AppText peso="forte" style={styles.primaryText}>{saved ? 'Salvo na minha lista' : 'Salvar na minha lista'}</AppText></Pressable>
         <Pressable style={styles.secondaryButton} onPress={() => router.back()}><AppText peso="forte" style={styles.secondaryText}>Voltar</AppText></Pressable>
       </ScrollView>
@@ -136,27 +57,6 @@ const styles = StyleSheet.create({
   poster: { height: 195, borderRadius: 20, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 20, marginBottom: 14, overflow: 'hidden' },
   posterLabel: { color: '#fffdf8', letterSpacing: 1.2, textAlign: 'center' },
   title: { color: '#182230', fontSize: 26, lineHeight: 32, marginBottom: 4 },
-  meta: { color: '#7b7b78' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 11, backgroundColor: '#182230' },
-  rating: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
-  imdb: { color: '#f3b43f', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  metacriticBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 8, borderRadius: 11 },
-  mcGreen: { backgroundColor: '#2e8b57' },
-  mcYellow: { backgroundColor: '#d49b27' },
-  mcRed: { backgroundColor: '#c0392b' },
-  metacriticText: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
-  metacriticLabel: { color: 'rgba(255,253,248,0.9)', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  provider: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
-  allProvidersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  providerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, backgroundColor: '#fffdf8' },
-  providerPillText: { color: '#182230', fontSize: 11 },
-  genres: { color: '#8d7a61', fontSize: 13, lineHeight: 18, letterSpacing: 0.2, marginTop: 10, marginBottom: 14 },
-  sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 22, marginBottom: 5 },
-  description: { color: '#687078', lineHeight: 21, marginBottom: 20 },
-  descriptionWithToggle: { marginBottom: 4 },
-  expandButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 3, marginBottom: 14 },
-  expandButtonText: { color: '#d77c29', fontSize: 13 },
   primaryButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 },
   primaryText: { color: '#182230' },
   secondaryButton: { minHeight: 38, alignItems: 'center', justifyContent: 'center' },

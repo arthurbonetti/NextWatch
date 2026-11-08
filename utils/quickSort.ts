@@ -1,18 +1,14 @@
-type RandomizedValue<T> = {
-  value: T;
-  key: number;
-};
-
-function quickSort<T>(values: RandomizedValue<T>[]): RandomizedValue<T>[] {
-  if (values.length <= 1) return values;
-
-  const [pivot, ...rest] = values;
-  const lower = rest.filter((item) => item.key < pivot.key);
-  const higher = rest.filter((item) => item.key >= pivot.key);
-
-  return [...quickSort(lower), pivot, ...quickSort(higher)];
-}
-
+/**
+ * Embaralha uma coleção em tempo O(n) utilizando o algoritmo Fisher-Yates,
+ * sem alocações recursivas ou objetos intermediários na memória.
+ */
 export function quickSortByRandom<T>(values: readonly T[]): T[] {
-  return quickSort(values.map((value) => ({ value, key: Math.random() }))).map((item) => item.value);
+  const result = values.slice();
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = result[i]!;
+    result[i] = result[j]!;
+    result[j] = temp;
+  }
+  return result;
 }

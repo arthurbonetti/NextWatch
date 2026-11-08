@@ -100,6 +100,13 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     return [];
   }, [providerKey, remoteProviderKey, remoteTitles, sessionCatalog, status]);
 
+  const findTitle = useCallback(
+    (id: string) =>
+      activeTitles.find((title) => title.id === id) ??
+      searchedTitles.find((title) => title.id === id),
+    [activeTitles, searchedTitles],
+  );
+
   const value = useMemo<CatalogContextValue>(() => ({
     titles: activeTitles,
     status,
@@ -107,8 +114,8 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     totalResults: remoteProviderKey === providerKey ? totalResults : 0,
     refreshCatalog,
     searchTitles,
-    findTitle: (id) => [...activeTitles, ...searchedTitles].find((title) => title.id === id),
-  }), [activeTitles, errorMessage, providerKey, refreshCatalog, remoteProviderKey, searchedTitles, searchTitles, status, totalResults]);
+    findTitle,
+  }), [activeTitles, errorMessage, findTitle, providerKey, refreshCatalog, remoteProviderKey, searchTitles, status, totalResults]);
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 }
