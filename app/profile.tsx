@@ -9,14 +9,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, token, isConnected, signOut } = useAuth();
   const { subscriptions } = useSubscriptions();
   const activeSubscriptions = subscriptions.filter((subscription) => subscription.active);
   const monthlyTotal = activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0);
   const initials = user?.name.trim().charAt(0).toLocaleUpperCase() ?? '?';
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOut();
     router.replace('/(auth)/login');
   };
 
@@ -36,8 +36,11 @@ export default function ProfileScreen() {
           <AppText tipo="subtitulo" peso="forte" style={styles.name}>{user?.name ?? 'Usuário'}</AppText>
           <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
           <View style={styles.demoBadge}>
-            <MaterialIcons name="science" size={15} color="#9a5b20" />
-            <AppText tipo="legenda" peso="forte" style={styles.demoBadgeText}>Conta de demonstração</AppText>
+            <MaterialIcons name="verified-user" size={15} color="#2e8b57" />
+            <AppText tipo="legenda" peso="forte" style={styles.demoBadgeText}>
+              {token ? 'Sessão autenticada · SecureStore' : 'Sessão ativa'}
+              {isConnected === false ? ' · Offline' : ' · Online'}
+            </AppText>
           </View>
         </View>
 
@@ -65,13 +68,15 @@ export default function ProfileScreen() {
           <AppText peso="forte" style={styles.rowText}>Gerenciar serviços</AppText>
           <MaterialIcons name="chevron-right" size={22} color="#aaa59b" />
         </Pressable>
-        <Pressable style={[styles.row, styles.logoutRow]} onPress={handleSignOut} accessibilityRole="button">
+        <Pressable style={[styles.row, styles.logoutRow]} onPress={() => { void handleSignOut(); }} accessibilityRole="button">
           <MaterialIcons name="logout" size={22} color="#b5473c" />
           <AppText peso="forte" style={styles.logoutText}>Sair da conta</AppText>
           <MaterialIcons name="chevron-right" size={22} color="#aaa59b" />
         </Pressable>
 
-        <AppText tipo="legenda" style={styles.demoMessage}>O cadastro e a sessão são temporários e existem somente nesta demonstração. A conexão com banco de dados será adicionada depois.</AppText>
+        <AppText tipo="legenda" style={styles.demoMessage}>
+          Token de acesso armazenado de forma isolada via SecureStore e dados de perfil persistidos em AsyncStorage.
+        </AppText>
         <AppText tipo="legenda" style={styles.credits}>Pôsteres e banners: The Movie Database (TMDB). Este produto usa a API do TMDB, mas não é endossado ou certificado pelo TMDB.</AppText>
       </ScrollView>
     </SafeAreaView>

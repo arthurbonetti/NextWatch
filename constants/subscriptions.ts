@@ -26,8 +26,4 @@ export const SUBSCRIPTION_PROVIDERS: SubscriptionProvider[] = [
   { name: 'Crunchyroll', color: '#f47521', symbol: 'C', logo: '/fzN5Jok5Ig1eJ7gyNGoMhnLSCfh.jpg' },
 ];
 
-export const INITIAL_SUBSCRIPTIONS: Subscription[] = [
-  { id: 'netflix', provider: 'Netflix', monthlyPrice: 39.9, billingDay: 18, active: true, renewalAlert: true, alertDays: 3 },
-  { id: 'disney-plus', provider: 'Disney+', monthlyPrice: 27.9, billingDay: 24, active: true, renewalAlert: true, alertDays: 3 },
-  { id: 'max', provider: 'Max', monthlyPrice: 21.9, billingDay: 28, active: true, renewalAlert: false, alertDays: 1 },
-];
+export const INITIAL_SUBSCRIPTIONS: Subscription[] = [];
