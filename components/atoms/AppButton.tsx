@@ -11,17 +11,21 @@ import { AppText } from './AppText';
 
 type BotaoProps = PressableProps & {
   titulo: string;
-  variacao?: 'principal' | 'secundario' | 'ghost';
+  variacao?: 'principal' | 'secundario' | 'destaque' | 'ghost' | 'outline';
   estilo?: StyleProp<ViewStyle>;
+  textoEstilo?: StyleProp<TextStyle>;
 };
 
 export function AppButton({
   titulo,
   variacao = 'principal',
   estilo,
+  textoEstilo,
   disabled,
   ...props
 }: BotaoProps) {
+  const isDark = variacao === 'principal';
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -38,7 +42,11 @@ export function AppButton({
       <AppText
         tipo="texto"
         peso="forte"
-        style={variacao === 'ghost' ? styles.textoGhost : styles.textoConteudo}
+        style={[
+          styles.textoBase,
+          isDark ? styles.textoClaro : styles.textoEscuro,
+          textoEstilo,
+        ]}
       >
         {titulo}
       </AppText>
@@ -48,40 +56,55 @@ export function AppButton({
 
 const estilosVariacao = StyleSheet.create({
   principal: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#182230',
+    borderWidth: 1,
+    borderColor: '#182230',
+  },
+  destaque: {
+    backgroundColor: '#f3b43f',
+    borderWidth: 1,
+    borderColor: '#f3b43f',
   },
   secundario: {
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#f3b43f',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#f3b43f',
   },
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#ded8cd',
+  },
+  outline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#182230',
   },
 });
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 16,
-    minHeight: 48,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    borderRadius: 14,
+    minHeight: 50,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pressionado: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
   },
   desabilitado: {
     opacity: 0.5,
   },
-  textoConteudo: {
-    color: '#ffffff',
+  textoBase: {
+    fontSize: 15,
   },
-  textoGhost: {
-    color: '#1f2937',
+  textoClaro: {
+    color: '#fffdf8',
+  },
+  textoEscuro: {
+    color: '#182230',
   },
 });

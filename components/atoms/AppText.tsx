@@ -30,20 +30,22 @@ export function AppText({
 
 const estiloTipo = StyleSheet.create({
   titulo: {
-    fontSize: 30,
-    lineHeight: 38,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.3,
   },
   subtitulo: {
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 19,
+    lineHeight: 25,
+    letterSpacing: -0.15,
   },
   texto: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 23,
   },
   legenda: {
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
   },
 });
 
@@ -61,7 +63,6 @@ const estiloPeso = StyleSheet.create({
 
 const styles = StyleSheet.create({
   base: {
-    color: '#0f172a',
-    letterSpacing: 0.1,
+    color: '#182230',
   },
 });

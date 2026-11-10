@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     StyleProp,
     StyleSheet,
@@ -20,24 +20,42 @@ export function AppInput({
   rotulo,
   erro,
   estilo,
+  onFocus,
+  onBlur,
   ...props
 }: CampoProps) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.wrapper}>
       {rotulo ? (
-        <AppText tipo="legenda" peso="medio" style={styles.rotulo}>
+        <AppText tipo="legenda" peso="forte" style={styles.rotulo}>
           {rotulo}
         </AppText>
       ) : null}
 
       <TextInput
-        placeholderTextColor="#94a3b8"
-        style={[styles.input, !!erro && styles.inputErro, estilo]}
+        placeholderTextColor="#9a978f"
+        selectionColor="#d77c29"
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
+        style={[
+          styles.input,
+          focused && styles.inputFocado,
+          !!erro && styles.inputErro,
+          estilo,
+        ]}
         {...props}
       />
 
       {erro ? (
-        <AppText tipo="legenda" style={styles.textoErro}>
+        <AppText tipo="legenda" peso="medio" style={styles.textoErro}>
           {erro}
         </AppText>
       ) : null}
@@ -50,24 +68,30 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rotulo: {
-    color: '#334155',
-    marginBottom: 8,
+    color: '#182230',
+    marginBottom: 7,
   },
   input: {
+    minHeight: 50,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#ffffff',
+    borderColor: '#ded8cd',
+    backgroundColor: '#f7f5f0',
     borderRadius: 14,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#0f172a',
+    fontSize: 15,
+    color: '#182230',
+  },
+  inputFocado: {
+    borderColor: '#182230',
+    backgroundColor: '#fffdf8',
   },
   inputErro: {
-    borderColor: '#ef4444',
+    borderColor: '#c0392b',
+    backgroundColor: '#fdecea',
   },
   textoErro: {
-    color: '#dc2626',
+    color: '#c0392b',
     marginTop: 6,
   },
 });

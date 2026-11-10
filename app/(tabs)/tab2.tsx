@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -37,22 +37,6 @@ export default function ExploreScreen() {
   const availableTitles = useMemo(() => titles.filter((title) =>
     getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
-  const localResults = useMemo(() => {
-    const query = search.trim();
-    const filtered = availableTitles.filter((title) => {
-      const titleServices = getTitleServices(title);
-      const matchesQuery = query.length === 0 || matchesSearchQuery(title, query);
-      const matchesType = typeFilter === 'Todos'
-        || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
-      const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
-      const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
-      const matchesService = serviceFilter === 'Todos' || titleServices.includes(serviceFilter);
-      const rating = getTitleAverageRating(title);
-      const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
-      return matchesQuery && matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
-    });
-    return query.length > 0 ? rankTitlesBySearchRelevance(filtered, query) : filtered;
-  }, [availableTitles, genreFilter, kindFilter, ratingFilter, search, serviceFilter, typeFilter, watchedIds]);
 
   useEffect(() => {
     const query = search.trim();
@@ -99,11 +83,16 @@ export default function ExploreScreen() {
     + Number(ratingFilter !== 'Qualquer nota');
 
   const results = useMemo(() => {
-    const normalizedQuery = search.trim().toLocaleLowerCase();
-    let sourceTitles: MediaTitle[] = localResults;
+    const rawQuery = search.trim();
+    const normalizedQuery = rawQuery.toLocaleLowerCase();
+    const localMatched = rawQuery.length > 0
+      ? availableTitles.filter((title) => matchesSearchQuery(title, rawQuery))
+      : availableTitles;
+
+    let sourceTitles: MediaTitle[] = localMatched;
     if (normalizedQuery.length >= 2 && remoteQuery === normalizedQuery && remoteResults) {
       const mergedById = new Map<string, MediaTitle>();
-      for (const item of localResults) {
+      for (const item of localMatched) {
         mergedById.set(item.id, item);
       }
       for (const item of remoteResults) {
@@ -113,6 +102,7 @@ export default function ExploreScreen() {
       }
       sourceTitles = Array.from(mergedById.values());
     }
+
     const filtered = sourceTitles.filter((title) => {
       const matchesType = typeFilter === 'Todos'
         || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
@@ -123,13 +113,14 @@ export default function ExploreScreen() {
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
       return matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
     });
-    return normalizedQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, search) : filtered;
-  }, [genreFilter, kindFilter, localResults, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedIds]);
 
-  const toggleWatched = (id: string) => setWatchedIds((current) =>
+    return rawQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, rawQuery) : filtered;
+  }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedIds]);
+
+  const toggleWatched = useCallback((id: string) => setWatchedIds((current) =>
     current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-  );
-  const openTitle = (title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } });
+  ), []);
+  const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -244,7 +235,12 @@ export default function ExploreScreen() {
                     : `${results.length} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
                 </AppText>
               </View>
-              <MaterialIcons name="sort" size={21} color="#8b8a84" />
+              <View style={styles.sortBadge}>
+                <MaterialIcons name="auto-awesome" size={13} color="#d77c29" />
+                <AppText tipo="legenda" peso="forte" style={styles.sortBadgeText}>
+                  {search.trim() ? 'Relevância' : 'Catálogo BR'}
+                </AppText>
+              </View>
             </View>
             {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
           </View>
@@ -254,7 +250,7 @@ export default function ExploreScreen() {
             <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#d77c29" /></View>
             <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
             <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
-            {activeServices.size === 0 && <Pressable style={styles.emptyAction} onPress={() => router.push('/(tabs)/tab3')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
+            {activeServices.size === 0 && <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={() => router.push('/(tabs)/tab3')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
           </View>
         }
       />
@@ -262,7 +258,7 @@ export default function ExploreScreen() {
   );
 }
 
-function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title: MediaTitle; watched: boolean; onOpen: () => void; onToggleWatched: () => void }) {
+const ExploreResultCard = memo(function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title: MediaTitle; watched: boolean; onOpen: () => void; onToggleWatched: () => void }) {
   const [duration, setDuration] = useState(() => getCachedTitleDuration(title));
 
   useEffect(() => {
@@ -283,12 +279,19 @@ function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title:
   const metacritic = getMetacriticScore(title);
   return (
     <View style={styles.resultCard}>
-      <Pressable style={[styles.poster, { backgroundColor: title.color }]} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${title.title}`}>
+      <Pressable
+        style={({ pressed }) => [styles.poster, { backgroundColor: title.color }, pressed && styles.pressed]}
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`Abrir ${title.title}`}>
         <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
         {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
         <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{formatAverageRating(title)}</AppText></View>
       </Pressable>
-      <Pressable style={styles.resultCopy} onPress={onOpen} accessibilityRole="button">
+      <Pressable
+        style={({ pressed }) => [styles.resultCopy, pressed && styles.pressed]}
+        onPress={onOpen}
+        accessibilityRole="button">
         <AppText peso="forte" style={styles.resultTitle} numberOfLines={1}>{title.title}</AppText>
         <AppText tipo="legenda" style={styles.resultMeta}>{title.year || 'Ano não informado'} · {title.kind} · {duration}</AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>{title.genres.join(' · ')}</AppText>
@@ -299,66 +302,73 @@ function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title:
           </AppText>
         </View>
       </Pressable>
-      <Pressable style={[styles.watchedButton, watched && styles.watchedButtonActive]} onPress={onToggleWatched} accessibilityRole="button" accessibilityLabel={watched ? 'Remover de assistidos' : 'Marcar como assistido'}>
+      <Pressable
+        style={({ pressed }) => [styles.watchedButton, watched && styles.watchedButtonActive, pressed && styles.pressed]}
+        onPress={onToggleWatched}
+        accessibilityRole="button"
+        accessibilityLabel={watched ? 'Remover de assistidos' : 'Marcar como assistido'}>
         <MaterialIcons name={watched ? 'check' : 'visibility'} size={18} color={watched ? '#fffdf8' : '#657078'} />
       </Pressable>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
   container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34 },
+  pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
   title: { color: '#182230', fontSize: 25, lineHeight: 30 },
-  filterButton: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
-  filterCount: { position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e58c34' },
-  filterCountText: { color: '#fff', fontSize: 9, fontWeight: '700' },
-  searchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, backgroundColor: '#fffdf8', marginBottom: 14 },
-  searchInput: { flex: 1, color: '#182230', fontSize: 14, paddingVertical: 10 },
-  catalogNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 13, paddingVertical: 10, borderRadius: 14, backgroundColor: '#f1e8d7', marginBottom: 14 },
+  filterButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
+  filterCount: { position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e58c34' },
+  filterCountText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  searchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginBottom: 14 },
+  searchInput: { flex: 1, color: '#182230', fontSize: 15, paddingVertical: 10 },
+  catalogNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 14 },
   catalogNoticeCopy: { flex: 1 },
   catalogNoticeTitle: { color: '#8b5827', marginBottom: 2 },
-  catalogNoticeText: { color: '#706555', fontSize: 10 },
-  refreshButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#fffdf8' },
+  catalogNoticeText: { color: '#706555', fontSize: 11 },
+  refreshButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#fffdf8' },
   quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 17 },
-  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 17, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fffdf8' },
+  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
   quickChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  quickText: { color: '#6c6b67', fontSize: 10 },
-  quickTextActive: { color: '#fffdf8', fontSize: 10 },
+  quickText: { color: '#6c6b67', fontSize: 12 },
+  quickTextActive: { color: '#fffdf8', fontSize: 12 },
   quickDivider: { width: 1, height: 24, backgroundColor: '#ded8cd', marginHorizontal: 2 },
-  filterPanel: { padding: 13, borderRadius: 15, backgroundColor: '#f1e8d7', marginBottom: 16 },
+  filterPanel: { padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 16 },
   filterPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  filterLabel: { color: '#7b7b78', fontSize: 9, letterSpacing: 0.9, marginBottom: 7 },
-  clearFilters: { color: '#d77c29', fontSize: 9, marginBottom: 7 },
-  secondFilterLabel: { marginTop: 10 },
-  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fffdf8' },
+  filterLabel: { color: '#7b7b78', fontSize: 10, letterSpacing: 0.9, marginBottom: 8 },
+  clearFilters: { color: '#d77c29', fontSize: 11, marginBottom: 8 },
+  secondFilterLabel: { marginTop: 12 },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fffdf8' },
   filterChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  filterChipText: { color: '#6c6b67', fontSize: 9 },
-  filterChipTextActive: { color: '#fffdf8', fontSize: 9 },
+  filterChipText: { color: '#6c6b67', fontSize: 11 },
+  filterChipTextActive: { color: '#fffdf8', fontSize: 11 },
   resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3, marginBottom: 12 },
   resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  resultsSubtitle: { color: '#7b7b78', fontSize: 10, marginTop: 2 },
-  searchError: { color: '#b34d3d', marginBottom: 8 },
-  resultCard: { minHeight: 105, flexDirection: 'row', alignItems: 'center', padding: 9, borderRadius: 16, backgroundColor: '#fffdf8', marginBottom: 10 },
-  poster: { width: 70, height: 87, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, overflow: 'hidden' },
+  resultsSubtitle: { color: '#7b7b78', fontSize: 11, marginTop: 2 },
+  sortBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#f1e8d7' },
+  sortBadgeText: { color: '#8b5827', fontSize: 11 },
+  searchError: { color: '#c0392b', marginBottom: 8 },
+  resultCard: { minHeight: 110, flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 16, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginBottom: 10 },
+  poster: { width: 72, height: 92, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, overflow: 'hidden' },
   posterRatingCorner: { position: 'absolute', bottom: 5 },
-  posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: 'rgba(24,34,48,0.72)' },
-  posterRatingText: { color: '#fffdf8', fontSize: 9 },
+  posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: 'rgba(24,34,48,0.78)' },
+  posterRatingText: { color: '#fffdf8', fontSize: 10 },
   resultCopy: { flex: 1, paddingHorizontal: 12, paddingVertical: 4 },
-  resultTitle: { color: '#182230', fontSize: 13, marginBottom: 3 },
-  resultMeta: { color: '#7b7b78', fontSize: 9 },
-  resultGenres: { color: '#8d7a61', fontSize: 9, marginTop: 4 },
-  serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 7 },
-  scoreMeta: { color: '#657078', fontSize: 9, marginLeft: 4 },
-  watchedButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1eee7' },
-  watchedButtonActive: { backgroundColor: '#3e9b76' },
-  emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 34, borderRadius: 17, backgroundColor: '#fffdf8', marginTop: 10 },
+  resultTitle: { color: '#182230', fontSize: 15, marginBottom: 3 },
+  resultMeta: { color: '#7b7b78', fontSize: 11 },
+  resultGenres: { color: '#8d7a61', fontSize: 11, marginTop: 3 },
+  serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  scoreMeta: { color: '#657078', fontSize: 11, marginLeft: 4 },
+  watchedButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1eee7' },
+  watchedButtonActive: { backgroundColor: '#2e8b57' },
+  emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginTop: 10 },
   emptyIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1e8d7', marginBottom: 11 },
-  emptyTitle: { color: '#182230', fontSize: 14 },
-  emptyText: { color: '#7b7b78', fontSize: 10, textAlign: 'center', marginTop: 5, lineHeight: 15 },
-  emptyAction: { borderRadius: 11, backgroundColor: '#e58c34', paddingHorizontal: 14, paddingVertical: 9, marginTop: 13 },
-  emptyActionText: { color: '#182230', fontSize: 10 },
+  emptyTitle: { color: '#182230', fontSize: 16 },
+  emptyText: { color: '#7b7b78', fontSize: 12, textAlign: 'center', marginTop: 5, lineHeight: 18 },
+  emptyAction: { borderRadius: 12, backgroundColor: '#f3b43f', paddingHorizontal: 16, paddingVertical: 10, marginTop: 14 },
+  emptyActionText: { color: '#182230', fontSize: 12 },
 });
