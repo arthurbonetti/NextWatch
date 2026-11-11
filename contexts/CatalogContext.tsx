@@ -17,6 +17,8 @@ type CatalogContextValue = {
   findTitle: (id: string) => MediaTitle | undefined;
 };
 
+const MAX_SEARCH_CACHE_ENTRIES = 50;
+
 const CatalogContext = createContext<CatalogContextValue | null>(null);
 
 export function CatalogProvider({ children }: PropsWithChildren) {
@@ -81,6 +83,12 @@ export function CatalogProvider({ children }: PropsWithChildren) {
 
     const activeProviders = currentProviderKeyRef.current ? currentProviderKeyRef.current.split('|') : [];
     const results = await searchCatalogTitles(normalizedQuery, activeProviders);
+    if (searchCacheRef.current.size >= MAX_SEARCH_CACHE_ENTRIES) {
+      const oldestKey = searchCacheRef.current.keys().next().value;
+      if (oldestKey !== undefined) {
+        searchCacheRef.current.delete(oldestKey);
+      }
+    }
     searchCacheRef.current.set(normalizedQuery, results);
     setSearchedTitles((current) => mergeTitles(current, results));
     return results;
@@ -100,11 +108,16 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     return [];
   }, [providerKey, remoteProviderKey, remoteTitles, sessionCatalog, status]);
 
+  const titlesById = useMemo(() => {
+    const map = new Map<string, MediaTitle>();
+    for (const title of searchedTitles) map.set(title.id, title);
+    for (const title of activeTitles) map.set(title.id, title);
+    return map;
+  }, [activeTitles, searchedTitles]);
+
   const findTitle = useCallback(
-    (id: string) =>
-      activeTitles.find((title) => title.id === id) ??
-      searchedTitles.find((title) => title.id === id),
-    [activeTitles, searchedTitles],
+    (id: string) => titlesById.get(id),
+    [titlesById],
   );
 
   const value = useMemo<CatalogContextValue>(() => ({

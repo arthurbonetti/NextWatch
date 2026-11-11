@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,9 +8,10 @@ import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { useAuth } from '@/contexts/AuthContext';
+import { isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/services/authApi';
 
 export default function RegisterScreen() {
-  const { signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();
+  const { user, authReady, signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,19 +22,23 @@ export default function RegisterScreen() {
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const isLoading = status === 'loading';
 
+  if (authReady && user) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   const handleRegister = async () => {
     if (isLoading) return;
     clearAuthError();
-    const normalizedName = name.trim();
+    const normalizedName = name.trim().slice(0, MAX_NAME_LENGTH);
     const normalizedEmail = email.trim();
     const validName = normalizedName.length >= 2;
-    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
-    const validPassword = password.length >= 6;
+    const validEmail = isValidEmail(normalizedEmail);
+    const validPassword = password.length >= MIN_PASSWORD_LENGTH;
     const passwordsMatch = password === confirmPassword;
 
     setNameError(validName ? '' : 'Informe seu nome (pelo menos 2 caracteres).');
     setEmailError(validEmail ? '' : 'Informe um e-mail válido.');
-    setPasswordError(validPassword ? '' : 'A senha deve ter pelo menos 6 caracteres.');
+    setPasswordError(validPassword ? '' : `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`);
     setConfirmPasswordError(passwordsMatch ? '' : 'As senhas não coincidem.');
     if (!validName || !validEmail || !validPassword || !passwordsMatch) return;
 

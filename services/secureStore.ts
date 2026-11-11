@@ -9,6 +9,14 @@ type NativeSecureStoreModule = {
 };
 
 const SECURE_PREFIX = '@nextwatch/secure:';
+const SAFE_KEY_PATTERN = /^[a-zA-Z0-9._-]+$/;
+const MAX_SECRET_LENGTH = 8192;
+
+function assertValidKey(key: string): void {
+  if (!key || !SAFE_KEY_PATTERN.test(key)) {
+    throw new Error('Chave de armazenamento seguro inválida.');
+  }
+}
 
 function getNativeSecureStore(): NativeSecureStoreModule | null {
   if (Platform.OS === 'web') return null;
@@ -30,14 +38,15 @@ function encodeToken(value: string): string {
   return value;
 }
 
-function decodeToken(stored: string): string {
+function decodeToken(stored: string): string | null {
+  if (stored.length > MAX_SECRET_LENGTH) return null;
   if (!stored.startsWith('nw_enc_')) return stored;
   try {
     if (typeof atob === 'function') {
       return decodeURIComponent(atob(stored.slice('nw_enc_'.length)));
     }
   } catch {
-    // Fallback caso o valor antigo não esteja codificado
+    return null;
   }
   return stored;
 }
@@ -45,10 +54,14 @@ function decodeToken(stored: string): string {
 /**
  * Armazenamento seguro para tokens de autenticação (seguindo o padrão do SecureStore do Expo).
  * Em dispositivos nativos com ExpoSecureStore disponível, utiliza o Keychain (iOS) / Keystore (Android).
- * Na Web ou no Expo Go sem o módulo nativo, aplica armazenamento isolado e codificado para manter compatibilidade.
+ * Na Web ou no Expo Go sem o módulo nativo, aplica armazenamento isolado em sessionStorage/AsyncStorage.
  */
 export const SecureStore = {
   async setItemAsync(key: string, value: string): Promise<void> {
+    assertValidKey(key);
+    if (!value || value.length > MAX_SECRET_LENGTH) {
+      throw new Error('Valor inválido para armazenamento seguro.');
+    }
     const nativeModule = getNativeSecureStore();
     if (nativeModule?.setValueWithKeyAsync) {
       await nativeModule.setValueWithKeyAsync(value, key, {});
@@ -62,6 +75,7 @@ export const SecureStore = {
   },
 
   async getItemAsync(key: string): Promise<string | null> {
+    assertValidKey(key);
     const nativeModule = getNativeSecureStore();
     if (nativeModule?.getValueWithKeyAsync) {
       return nativeModule.getValueWithKeyAsync(key, {});
@@ -75,6 +89,7 @@ export const SecureStore = {
   },
 
   async deleteItemAsync(key: string): Promise<void> {
+    assertValidKey(key);
     const nativeModule = getNativeSecureStore();
     if (nativeModule?.deleteValueWithKeyAsync) {
       await nativeModule.deleteValueWithKeyAsync(key, {});

@@ -23,7 +23,7 @@ export function getArtworkUri(
   const artwork = TMDB_ARTWORK[id];
   if (!artwork) return null;
   const path = variant === 'poster' ? artwork.poster ?? artwork.backdrop : artwork.backdrop ?? artwork.poster;
-  return path ? `https://image.tmdb.org/t/p/${SIZES[variant]}${path}` : null;
+  return tmdbImageUri(path, SIZES[variant]);
 }
 
 type TitleArtworkProps = {

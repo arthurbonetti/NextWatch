@@ -1,14 +1,18 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function TabLayout() {
   const { user, authReady } = useAuth();
+  const insets = useSafeAreaInsets();
 
   if (!authReady) return null;
   if (!user) return <Redirect href="/(auth)/login" />;
+
+  const bottomPadding = insets.bottom > 0 ? insets.bottom + 6 : 8;
 
   return (
     <Tabs
@@ -39,8 +43,8 @@ export default function TabLayout() {
           backgroundColor: '#182230',
           borderTopColor: '#263442',
           borderTopWidth: 1,
-          height: 72,
-          paddingBottom: 8,
+          height: 64 + bottomPadding,
+          paddingBottom: bottomPadding,
           paddingTop: 6,
         },
       }}>

@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from './AppText';
 import { SUBSCRIPTION_PROVIDERS } from '@/constants/subscriptions';
-import { getDynamicProviderLogo } from '@/services/tmdb';
+import { getDynamicProviderLogo, tmdbImageUri } from '@/services/tmdb';
 
 type ServiceLogoProps = {
   name: string;
@@ -27,10 +27,12 @@ export function ServiceLogo({ name, size }: ServiceLogoProps) {
   const provider = SUBSCRIPTION_PROVIDERS.find((item) => item.name === name);
   const box = { width: size, height: size, borderRadius: Math.round(size * 0.29) };
   const logoPath = getDynamicProviderLogo(name) ?? provider?.logo;
+  // w92 cobre os ícones pequenos; acima de 30px pede a versão maior para não borrar em tela retina.
+  const uri = logoPath && failedLogoPath !== logoPath
+    ? tmdbImageUri(logoPath, size > 30 ? 'w154' : 'w92')
+    : null;
 
-  if (logoPath && failedLogoPath !== logoPath) {
-    // w92 cobre os ícones pequenos; acima de 30px pede a versão maior para não borrar em tela retina.
-    const uri = `https://image.tmdb.org/t/p/${size > 30 ? 'w154' : 'w92'}${logoPath}`;
+  if (uri && logoPath) {
     return (
       <Image
         source={{ uri }}

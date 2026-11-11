@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
@@ -12,7 +13,20 @@ type Props = {
   onSave: (subscription: Subscription) => void;
 };
 
+const MAX_SUBSCRIPTION_PRICE = 9999.99;
+const ALLOWED_PROVIDER_NAMES = new Set(SUBSCRIPTION_PROVIDERS.map((p) => p.name));
+
+function generateSubscriptionId(providerName: string): string {
+  const slug = providerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return `${slug}-${globalThis.crypto.randomUUID().slice(0, 8)}`;
+  }
+  const randomSuffix = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+  return `${slug}-${randomSuffix}`;
+}
+
 export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }: Props) {
+  const insets = useSafeAreaInsets();
   const [provider, setProvider] = useState(initialSubscription?.provider ?? SUBSCRIPTION_PROVIDERS[0].name);
   const [monthlyPrice, setMonthlyPrice] = useState(initialSubscription?.monthlyPrice.toFixed(2).replace('.', ',') ?? '');
   const [billingDay, setBillingDay] = useState(initialSubscription?.billingDay.toString() ?? '');
@@ -24,8 +38,12 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
   const save = () => {
     const parsedPrice = Number(monthlyPrice.replace(',', '.'));
     const parsedDay = Number(billingDay);
-    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      setError('Informe um valor mensal válido.');
+    if (!ALLOWED_PROVIDER_NAMES.has(provider)) {
+      setError('Selecione um serviço de streaming válido.');
+      return;
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0 || parsedPrice > MAX_SUBSCRIPTION_PRICE) {
+      setError('Informe um valor mensal válido (entre R$ 0,01 e R$ 9.999,99).');
       return;
     }
     if (!Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) {
@@ -34,9 +52,9 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
     }
 
     onSave({
-      id: initialSubscription?.id ?? `${provider.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+      id: initialSubscription?.id ?? generateSubscriptionId(provider),
       provider,
-      monthlyPrice: parsedPrice,
+      monthlyPrice: Number(parsedPrice.toFixed(2)),
       billingDay: parsedDay,
       active: initialSubscription?.active ?? true,
       renewalAlert,
@@ -50,7 +68,7 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
         style={styles.backdrop}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar formulário" />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(32, insets.bottom + 18) }]}>
           <View style={styles.sheetHandle} />
           <View style={styles.header}>
             <View>

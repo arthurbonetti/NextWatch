@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,25 +9,31 @@ import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { useAuth } from '@/contexts/AuthContext';
+import { isValidEmail, MIN_PASSWORD_LENGTH } from '@/services/authApi';
 
 const SHOWCASE_SERVICES = ['Netflix', 'Max', 'Disney+', 'Prime Video', 'Crunchyroll'];
 
 export default function LoginScreen() {
-  const { signIn, status, errorMessage, isConnected, clearAuthError } = useAuth();
+  const { user, authReady, signIn, status, errorMessage, isConnected, clearAuthError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const isLoading = status === 'loading';
 
+  if (authReady && user) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   const handleLogin = async () => {
     if (isLoading) return;
     clearAuthError();
     const normalizedEmail = email.trim();
-    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    const validEmail = isValidEmail(normalizedEmail);
+    const validPassword = password.length >= MIN_PASSWORD_LENGTH;
     setEmailError(validEmail ? '' : 'Informe um e-mail válido.');
-    setPasswordError(password.length >= 6 ? '' : 'A senha deve ter pelo menos 6 caracteres.');
-    if (!validEmail || password.length < 6) return;
+    setPasswordError(validPassword ? '' : `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+    if (!validEmail || !validPassword) return;
 
     const ok = await signIn(normalizedEmail, password);
     if (ok) {

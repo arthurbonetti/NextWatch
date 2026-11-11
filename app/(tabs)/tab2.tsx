@@ -35,6 +35,7 @@ export default function ExploreScreen() {
   const searchRequestRef = useRef(0);
 
   const activeServices = useMemo(() => new Set(subscriptions.filter((item) => item.active).map((item) => item.provider)), [subscriptions]);
+  const watchedSet = useMemo(() => new Set(watchedIds), [watchedIds]);
   const availableTitles = useMemo(() => titles.filter((title) =>
     getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
@@ -106,7 +107,7 @@ export default function ExploreScreen() {
 
     const filtered = sourceTitles.filter((title) => {
       const matchesType = typeFilter === 'Todos'
-        || (typeFilter === 'Assistidos' ? watchedIds.includes(title.id) : !watchedIds.includes(title.id));
+        || (typeFilter === 'Assistidos' ? watchedSet.has(title.id) : !watchedSet.has(title.id));
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
       const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
       const matchesService = serviceFilter === 'Todos' || getTitleServices(title).includes(serviceFilter);
@@ -116,7 +117,7 @@ export default function ExploreScreen() {
     });
 
     return rawQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, rawQuery) : filtered;
-  }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedIds]);
+  }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedSet]);
 
   const toggleWatched = useCallback((id: string) => setWatchedIds((current) =>
     current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
@@ -131,7 +132,7 @@ export default function ExploreScreen() {
         renderItem={({ item }) => (
           <ExploreResultCard
             title={item}
-            watched={watchedIds.includes(item.id)}
+            watched={watchedSet.has(item.id)}
             onOpen={() => openTitle(item)}
             onToggleWatched={() => toggleWatched(item.id)}
           />
@@ -139,7 +140,6 @@ export default function ExploreScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={5}

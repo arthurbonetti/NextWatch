@@ -4,6 +4,7 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   type AuthStatus,
   type AuthUser,
+  clearAllStoredAccounts,
   clearAuthSession,
   loginWithCredentials,
   registerAccount,
@@ -22,6 +23,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (name: string, email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
+  clearAllAccounts: () => Promise<void>;
   clearAuthError: () => void;
 };
 

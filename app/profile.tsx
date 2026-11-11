@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,8 +9,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 export default function ProfileScreen() {
-  const { user, token, isConnected, signOut } = useAuth();
+  const { user, token, authReady, isConnected, signOut } = useAuth();
   const { subscriptions } = useSubscriptions();
+
+  if (!authReady) return null;
+  if (!user) return <Redirect href="/(auth)/login" />;
+
   const activeSubscriptions = subscriptions.filter((subscription) => subscription.active);
   const monthlyTotal = activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0);
   const initials = user?.name.trim().charAt(0).toLocaleUpperCase() ?? '?';

@@ -1,4 +1,10 @@
-import { getSearchRelevanceScore, rankTitlesBySearchRelevance, type MediaIcon, type MediaKind, type MediaTitle } from '@/constants/catalog';
+import {
+  getSearchRelevanceScore,
+  normalizeSearchText,
+  rankTitlesBySearchRelevance,
+  type MediaIcon,
+  type MediaTitle,
+} from '@/constants/catalog';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type TmdbProvider = {
@@ -64,8 +70,13 @@ export type TmdbCatalogBatchCallback = (titles: MediaTitle[], totalResults: numb
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 const API_TOKEN = process.env.EXPO_PUBLIC_TMDB_API_KEY?.trim();
-const MAX_PAGES_PER_ENDPOINT = 500;
-const REQUEST_CONCURRENCY = 10;
+const MAX_PAGES_PER_ENDPOINT = 50;
+const REQUEST_CONCURRENCY = 8;
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_SEARCH_QUERY_LENGTH = 100;
+const SAFE_TMDB_PATH_REGEX = /^\/[a-zA-Z0-9._-]+$/;
+
+export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
 
 let cachedProvidersPromise: Promise<TmdbProvider[]> | null = null;
 const dynamicProviderLogos = new Map<string, string>();
@@ -316,9 +327,9 @@ export async function fetchAllCatalogForProviders(
 }
 
 export async function searchCatalogTitles(query: string, fallbackProviders: string[] = []): Promise<MediaTitle[]> {
-  if (!API_TOKEN || query.trim().length < 2) return [];
+  const encodedQuery = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
+  if (!API_TOKEN || encodedQuery.length < 2) return [];
 
-  const encodedQuery = query.trim();
   const [movies, shows] = await Promise.all([
     request<TmdbMediaResponse>('/search/movie', {
       language: 'pt-BR',
@@ -394,8 +405,9 @@ function matchCanonicalProviderName(rawProviderName: string): string | null {
   return null;
 }
 
-export function tmdbImageUri(path: string | null | undefined, size: 'w342' | 'w780') {
-  return path ? `${IMAGE_BASE_URL}/${size}${path}` : null;
+export function tmdbImageUri(path: string | null | undefined, size: TmdbImageSize): string | null {
+  if (!path || !SAFE_TMDB_PATH_REGEX.test(path)) return null;
+  return `${IMAGE_BASE_URL}/${size}${path}`;
 }
 
 async function request<T>(endpoint: string, params: Record<string, string>, retries = 3): Promise<T> {
@@ -407,12 +419,28 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
     url.searchParams.set('api_key', API_TOKEN);
   }
 
-  const response = await fetch(url, {
-    headers: {
-      ...(isBearer ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
-      Accept: 'application/json',
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        ...(isBearer ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
+        Accept: 'application/json',
+      },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timer);
+    if (retries > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
+      return request<T>(endpoint, params, retries - 1);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if ((response.status === 429 || response.status >= 500) && retries > 0) {
     await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
@@ -557,6 +585,4 @@ function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: stri
   };
 }
 
-function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
+const normalize = normalizeSearchText;

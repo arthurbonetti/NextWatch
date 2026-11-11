@@ -4,6 +4,7 @@ import {
   PressableProps,
   StyleProp,
   StyleSheet,
+  TextStyle,
   ViewStyle,
 } from 'react-native';
 

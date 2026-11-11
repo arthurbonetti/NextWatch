@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,14 +7,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 
 export default function TitleDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { user, authReady } = useAuth();
+  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const { status, findTitle } = useCatalog();
-  const title = findTitle(id);
+  const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
+  const title = normalizedId ? findTitle(normalizedId) : undefined;
   const [saved, setSaved] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(false);
+
+  if (!authReady) return null;
+  if (!user) return <Redirect href="/(auth)/login" />;
 
   if (!title) {
     return (

@@ -2,7 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
@@ -21,6 +21,7 @@ const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: '
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const { titles, status: catalogStatus } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
   const [kind, setKind] = useState<KindFilter>('Todos');
@@ -142,7 +143,7 @@ export default function HomeScreen() {
   const featuredSample = eligibleTitles[0] ?? availableTitles[0] ?? titles[0] ?? null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
           <View>
@@ -368,7 +369,7 @@ export default function HomeScreen() {
       <Modal visible={filterVisible} transparent animationType="slide" onRequestClose={() => setFilterVisible(false)} statusBarTranslucent>
         <View style={styles.filterBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterVisible(false)} accessibilityLabel="Fechar filtros" />
-          <View style={styles.filterCard}>
+          <View style={[styles.filterCard, { paddingBottom: Math.max(32, insets.bottom + 18) }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.filterHeader}>
               <View><AppText tipo="legenda" peso="forte" style={styles.modalEyebrow}>SORTEIO</AppText><AppText tipo="subtitulo" peso="forte" style={styles.modalTitle}>O que combina com você?</AppText></View>
