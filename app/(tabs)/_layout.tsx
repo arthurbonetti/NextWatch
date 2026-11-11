@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, Tabs } from 'expo-router';
 
+import { AppText } from '@/components/atoms/AppText';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function TabLayout() {
@@ -16,19 +17,31 @@ export default function TabLayout() {
         tabBarInactiveTintColor: '#a9b1b8',
         tabBarHideOnKeyboard: true,
         headerShown: false,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '700',
-          letterSpacing: 0.3,
-          marginTop: 2,
+        tabBarLabel: ({ color, children }) => (
+          <AppText
+            tipo="legenda"
+            peso="forte"
+            style={{
+              color,
+              fontSize: 11,
+              lineHeight: 16,
+              letterSpacing: 0.2,
+              textAlign: 'center',
+            }}>
+            {children}
+          </AppText>
+        ),
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
         },
         tabBarStyle: {
           backgroundColor: '#182230',
           borderTopColor: '#263442',
           borderTopWidth: 1,
           height: 72,
-          paddingBottom: 10,
-          paddingTop: 10,
+          paddingBottom: 8,
+          paddingTop: 6,
         },
       }}>
       <Tabs.Screen

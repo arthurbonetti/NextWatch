@@ -62,8 +62,12 @@ export default function LoginScreen() {
               </AppText>
 
               <View style={styles.servicesStrip}>
-                <ServiceLogoList services={SHOWCASE_SERVICES} size={26} maxVisible={5} gap={7} />
-                <AppText tipo="legenda" style={styles.servicesStripText}>Catálogo integrado no Brasil</AppText>
+                <AppText tipo="legenda" peso="forte" style={styles.servicesStripEyebrow}>
+                  CATÁLOGO INTEGRADO NO BRASIL
+                </AppText>
+                <View style={styles.servicesLogosRow}>
+                  <ServiceLogoList services={SHOWCASE_SERVICES} size={28} maxVisible={5} gap={10} />
+                </View>
               </View>
 
               {isConnected === false && (
@@ -193,18 +197,27 @@ const styles = StyleSheet.create({
   title: { color: '#182230', fontSize: 25, lineHeight: 30, marginBottom: 6 },
   subtitle: { color: '#687078', marginBottom: 16 },
   servicesStrip: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#f7f5f0',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e8e2d5',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     marginBottom: 18,
+    gap: 8,
   },
-  servicesStripText: { color: '#7b7b78', fontSize: 11 },
+  servicesStripEyebrow: {
+    color: '#8b5827',
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textAlign: 'center',
+  },
+  servicesLogosRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   offlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',
