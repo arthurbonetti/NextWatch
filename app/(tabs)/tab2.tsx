@@ -26,6 +26,7 @@ export default function ExploreScreen() {
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('Qualquer nota');
   const [watchedIds, setWatchedIds] = useState<string[]>([]);
   const [filtersVisible, setFiltersVisible] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<MediaTitle[] | null>(null);
   const [remoteQuery, setRemoteQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -137,7 +138,8 @@ export default function ExploreScreen() {
         )}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={true}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={5}
@@ -148,7 +150,15 @@ export default function ExploreScreen() {
                 <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
                 <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
               </View>
-              <Pressable style={styles.filterButton} onPress={() => setFiltersVisible((value) => !value)} accessibilityRole="button" accessibilityLabel="Abrir filtros">
+              <Pressable
+                style={({ pressed }) => [
+                  styles.filterButton,
+                  filtersVisible && styles.filterButtonActive,
+                  pressed && styles.pressed,
+                ]}
+                onPress={() => setFiltersVisible((value) => !value)}
+                accessibilityRole="button"
+                accessibilityLabel="Abrir filtros">
                 <MaterialIcons name="tune" size={20} color="#182230" />
                 {activeFilterCount > 0 && <View style={styles.filterCount}><AppText style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
               </Pressable>
@@ -170,9 +180,10 @@ export default function ExploreScreen() {
                 </AppText>
               </View>
               <Pressable
-                style={styles.refreshButton}
+                style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}
                 onPress={() => { void refreshCatalog(); }}
                 disabled={status === 'loading'}
+                hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Atualizar catálogo"
               >
@@ -180,29 +191,50 @@ export default function ExploreScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.searchBox}>
-              <MaterialIcons name="search" size={21} color="#8b8a84" />
+            <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
+              <MaterialIcons name="search" size={21} color={searchFocused ? '#d77c29' : '#8b8a84'} />
               <TextInput
                 value={search}
                 onChangeText={setSearch}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
                 placeholder="Buscar filme, série ou gênero"
                 placeholderTextColor="#9a9993"
+                selectionColor="#d77c29"
                 style={styles.searchInput}
                 returnKeyType="search"
                 accessibilityLabel="Pesquisar títulos"
               />
-              {search.length > 0 && <Pressable onPress={() => setSearch('')} accessibilityLabel="Limpar busca"><MaterialIcons name="close" size={18} color="#8b8a84" /></Pressable>}
+              {search.length > 0 && (
+                <Pressable onPress={() => setSearch('')} hitSlop={10} accessibilityLabel="Limpar busca">
+                  <MaterialIcons name="close" size={18} color="#8b8a84" />
+                </Pressable>
+              )}
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
               {(['Quero ver', 'Assistidos', 'Todos'] as TypeFilter[]).map((filter) => (
-                <Pressable key={filter} onPress={() => setTypeFilter(filter)} style={[styles.quickChip, typeFilter === filter && styles.quickChipActive]}>
+                <Pressable
+                  key={filter}
+                  onPress={() => setTypeFilter(filter)}
+                  style={({ pressed }) => [
+                    styles.quickChip,
+                    typeFilter === filter && styles.quickChipActive,
+                    pressed && styles.pressed,
+                  ]}>
                   <AppText tipo="legenda" peso="forte" style={typeFilter === filter ? styles.quickTextActive : styles.quickText}>{filter}</AppText>
                 </Pressable>
               ))}
               <View style={styles.quickDivider} />
               {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
-                <Pressable key={filter} onPress={() => setKindFilter(filter)} style={[styles.quickChip, kindFilter === filter && styles.quickChipActive]}>
+                <Pressable
+                  key={filter}
+                  onPress={() => setKindFilter(filter)}
+                  style={({ pressed }) => [
+                    styles.quickChip,
+                    kindFilter === filter && styles.quickChipActive,
+                    pressed && styles.pressed,
+                  ]}>
                   <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Tipo' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
                 </Pressable>
               ))}
@@ -211,17 +243,58 @@ export default function ExploreScreen() {
             {filtersVisible && <View style={styles.filterPanel}>
               <View style={styles.filterPanelHeader}>
                 <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
-                {activeFilterCount > 0 && <Pressable onPress={() => { setKindFilter('Todos'); setGenreFilter('Todos'); setServiceFilter('Todos'); setRatingFilter('Qualquer nota'); }}><AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar filtros</AppText></Pressable>}
+                {activeFilterCount > 0 && (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => { setKindFilter('Todos'); setGenreFilter('Todos'); setServiceFilter('Todos'); setRatingFilter('Qualquer nota'); }}>
+                    <AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar filtros</AppText>
+                  </Pressable>
+                )}
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-                {genres.map((genre) => <Pressable key={genre} onPress={() => setGenreFilter(genre)} style={[styles.filterChip, genreFilter === genre && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={genreFilter === genre ? styles.filterChipTextActive : styles.filterChipText}>{genre}</AppText></Pressable>)}
+                {genres.map((genre) => (
+                  <Pressable
+                    key={genre}
+                    onPress={() => setGenreFilter(genre)}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      genreFilter === genre && styles.filterChipActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <AppText tipo="legenda" peso="forte" style={genreFilter === genre ? styles.filterChipTextActive : styles.filterChipText}>{genre}</AppText>
+                  </Pressable>
+                ))}
               </ScrollView>
               <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-                {serviceNames.map((service) => <Pressable key={service} onPress={() => setServiceFilter(service)} style={[styles.filterChip, serviceFilter === service && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={serviceFilter === service ? styles.filterChipTextActive : styles.filterChipText}>{service}</AppText></Pressable>)}
+                {serviceNames.map((service) => (
+                  <Pressable
+                    key={service}
+                    onPress={() => setServiceFilter(service)}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      serviceFilter === service && styles.filterChipActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <AppText tipo="legenda" peso="forte" style={serviceFilter === service ? styles.filterChipTextActive : styles.filterChipText}>{service}</AppText>
+                  </Pressable>
+                ))}
               </ScrollView>
               <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA</AppText>
-              <View style={styles.filterChips}>{(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => <Pressable key={rating} onPress={() => setRatingFilter(rating)} style={[styles.filterChip, ratingFilter === rating && styles.filterChipActive]}><AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>{rating}</AppText></Pressable>)}</View>
+              <View style={styles.filterChips}>
+                {(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => (
+                  <Pressable
+                    key={rating}
+                    onPress={() => setRatingFilter(rating)}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      ratingFilter === rating && styles.filterChipActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>{rating}</AppText>
+                  </Pressable>
+                ))}
+              </View>
             </View>}
 
             <View style={styles.resultsHeader}>
@@ -305,6 +378,7 @@ const ExploreResultCard = memo(function ExploreResultCard({ title, watched, onOp
       <Pressable
         style={({ pressed }) => [styles.watchedButton, watched && styles.watchedButtonActive, pressed && styles.pressed]}
         onPress={onToggleWatched}
+        hitSlop={6}
         accessibilityRole="button"
         accessibilityLabel={watched ? 'Remover de assistidos' : 'Marcar como assistido'}>
         <MaterialIcons name={watched ? 'check' : 'visibility'} size={18} color={watched ? '#fffdf8' : '#657078'} />
@@ -321,9 +395,11 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
   title: { color: '#182230', fontSize: 25, lineHeight: 30 },
   filterButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
+  filterButtonActive: { borderColor: '#182230', backgroundColor: '#f1e8d7' },
   filterCount: { position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e58c34' },
   filterCountText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   searchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginBottom: 14 },
+  searchBoxFocused: { borderColor: '#182230' },
   searchInput: { flex: 1, color: '#182230', fontSize: 15, paddingVertical: 10 },
   catalogNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 14 },
   catalogNoticeCopy: { flex: 1 },

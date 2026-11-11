@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/atoms/AppButton';
@@ -37,104 +37,116 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.container}>
-          <View style={styles.brandHeader}>
-            <View style={styles.brandMark}>
-              <MaterialIcons name="local-movies" size={24} color="#f3b43f" />
-            </View>
-            <View style={styles.brandCopy}>
-              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
-              <AppText tipo="legenda" style={styles.brandTagline}>Curadoria e controle dos seus streamings</AppText>
-            </View>
-          </View>
-
-          <View style={styles.card}>
-            <AppText tipo="titulo" peso="forte" style={styles.title}>Entre na sua conta</AppText>
-            <AppText tipo="texto" style={styles.subtitle}>
-              Sincronize seus serviços ativos e sorteie o que assistir com nota 6,0+.
-            </AppText>
-
-            <View style={styles.servicesStrip}>
-              <ServiceLogoList services={SHOWCASE_SERVICES} size={26} maxVisible={5} gap={7} />
-              <AppText tipo="legenda" style={styles.servicesStripText}>Catálogo integrado no Brasil</AppText>
-            </View>
-
-            {isConnected === false && (
-              <View style={styles.offlineBanner}>
-                <MaterialIcons name="wifi-off" size={18} color="#9a5b20" />
-                <AppText tipo="legenda" style={styles.offlineText}>
-                  Sem conexão com a internet. Você ainda pode acessar sua sessão salva neste aparelho.
-                </AppText>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.container}>
+            <View style={styles.brandHeader}>
+              <View style={styles.brandMark}>
+                <MaterialIcons name="local-movies" size={24} color="#f3b43f" />
               </View>
-            )}
+              <View style={styles.brandCopy}>
+                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
+                <AppText tipo="legenda" style={styles.brandTagline}>Curadoria e controle dos seus streamings</AppText>
+              </View>
+            </View>
 
-            {status === 'error' && errorMessage && (
-              <View style={styles.errorBanner}>
-                <MaterialIcons name="error-outline" size={18} color="#c0392b" />
-                <View style={styles.errorCopy}>
-                  <AppText tipo="legenda" peso="forte" style={styles.errorTitle}>Não foi possível entrar</AppText>
-                  <AppText tipo="legenda" style={styles.errorText}>{errorMessage}</AppText>
+            <View style={styles.card}>
+              <AppText tipo="titulo" peso="forte" style={styles.title}>Entre na sua conta</AppText>
+              <AppText tipo="texto" style={styles.subtitle}>
+                Sincronize seus serviços ativos e sorteie o que assistir com nota 6,0+.
+              </AppText>
+
+              <View style={styles.servicesStrip}>
+                <ServiceLogoList services={SHOWCASE_SERVICES} size={26} maxVisible={5} gap={7} />
+                <AppText tipo="legenda" style={styles.servicesStripText}>Catálogo integrado no Brasil</AppText>
+              </View>
+
+              {isConnected === false && (
+                <View style={styles.offlineBanner}>
+                  <MaterialIcons name="wifi-off" size={18} color="#9a5b20" />
+                  <AppText tipo="legenda" style={styles.offlineText}>
+                    Sem conexão com a internet. Você ainda pode acessar sua sessão salva neste aparelho.
+                  </AppText>
                 </View>
-                <Pressable onPress={() => { void handleLogin(); }} style={styles.retryChip} accessibilityRole="button">
-                  <AppText tipo="legenda" peso="forte" style={styles.retryText}>Repetir</AppText>
-                </Pressable>
-              </View>
-            )}
+              )}
 
-            <AppInput
-              rotulo="E-mail"
-              placeholder="seu@email.com"
-              value={email}
-              onChangeText={(value) => { setEmail(value); setEmailError(''); clearAuthError(); }}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              textContentType="emailAddress"
-              returnKeyType="next"
-              editable={!isLoading}
-              erro={emailError}
-            />
-            <AppInput
-              rotulo="Senha"
-              placeholder="Mínimo de 6 caracteres"
-              value={password}
-              onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
-              secureTextEntry
-              autoComplete="current-password"
-              textContentType="password"
-              returnKeyType="done"
-              editable={!isLoading}
-              onSubmitEditing={() => { void handleLogin(); }}
-              erro={passwordError}
-            />
+              {status === 'error' && errorMessage && (
+                <View style={styles.errorBanner}>
+                  <MaterialIcons name="error-outline" size={18} color="#c0392b" />
+                  <View style={styles.errorCopy}>
+                    <AppText tipo="legenda" peso="forte" style={styles.errorTitle}>Não foi possível entrar</AppText>
+                    <AppText tipo="legenda" style={styles.errorText}>{errorMessage}</AppText>
+                  </View>
+                  <Pressable
+                    onPress={() => { void handleLogin(); }}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.retryChip, pressed && styles.pressed]}
+                    accessibilityRole="button">
+                    <AppText tipo="legenda" peso="forte" style={styles.retryText}>Repetir</AppText>
+                  </Pressable>
+                </View>
+              )}
 
-            <AppButton
-              titulo={isLoading ? 'Entrando...' : 'Entrar na conta'}
-              onPress={() => { void handleLogin(); }}
-              disabled={isLoading}
-              estilo={styles.submitButton}
-            />
-            {isLoading && (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color="#d77c29" />
-                <AppText tipo="legenda" style={styles.loadingText}>Sincronizando sua sessão e assinaturas…</AppText>
-              </View>
-            )}
+              <AppInput
+                rotulo="E-mail"
+                placeholder="seu@email.com"
+                value={email}
+                onChangeText={(value) => { setEmail(value); setEmailError(''); clearAuthError(); }}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                editable={!isLoading}
+                erro={emailError}
+              />
+              <AppInput
+                rotulo="Senha"
+                placeholder="Mínimo de 6 caracteres"
+                value={password}
+                onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
+                secureTextEntry
+                autoComplete="current-password"
+                textContentType="password"
+                returnKeyType="done"
+                editable={!isLoading}
+                onSubmitEditing={() => { void handleLogin(); }}
+                erro={passwordError}
+              />
+
+              <AppButton
+                titulo={isLoading ? 'Entrando...' : 'Entrar na conta'}
+                onPress={() => { void handleLogin(); }}
+                disabled={isLoading}
+                estilo={styles.submitButton}
+              />
+              {isLoading && (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color="#d77c29" />
+                  <AppText tipo="legenda" style={styles.loadingText}>Sincronizando sua sessão e assinaturas…</AppText>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.accountPrompt}>
+              <AppText tipo="legenda" style={styles.accountText}>Ainda não tem uma conta?</AppText>
+              <Pressable
+                onPress={() => { clearAuthError(); router.push('/(auth)/register'); }}
+                disabled={isLoading}
+                hitSlop={8}
+                style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                accessibilityRole="button">
+                <AppText tipo="legenda" peso="forte" style={styles.link}>Criar conta gratuita</AppText>
+              </Pressable>
+            </View>
           </View>
-
-          <View style={styles.accountPrompt}>
-            <AppText tipo="legenda" style={styles.accountText}>Ainda não tem uma conta?</AppText>
-            <Pressable
-              onPress={() => { clearAuthError(); router.push('/(auth)/register'); }}
-              disabled={isLoading}
-              style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
-              accessibilityRole="button">
-              <AppText tipo="legenda" peso="forte" style={styles.link}>Criar conta gratuita</AppText>
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -144,6 +156,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f7f5f0',
   },
+  keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: 'center' },
   container: {
     width: '100%',

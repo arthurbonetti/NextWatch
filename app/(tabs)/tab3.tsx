@@ -38,7 +38,7 @@ export default function SubscriptionsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={true}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
@@ -160,6 +160,7 @@ export default function SubscriptionsScreen() {
                   <Pressable
                     style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
                     onPress={() => editSubscription(subscription)}
+                    hitSlop={6}
                     accessibilityRole="button"
                     accessibilityLabel={`Editar ${subscription.provider}`}>
                     <MaterialIcons name="edit" size={17} color="#687078" />
@@ -167,12 +168,14 @@ export default function SubscriptionsScreen() {
                   <Pressable
                     style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
                     onPress={() => removeSubscription(subscription.id)}
+                    hitSlop={6}
                     accessibilityRole="button"
                     accessibilityLabel={`Remover ${subscription.provider}`}>
-                    <MaterialIcons name="delete-outline" size={18} color="#7b7b78" />
+                    <MaterialIcons name="delete-outline" size={18} color="#c0392b" />
                   </Pressable>
                   <Pressable
                     onPress={() => toggleSubscription(subscription.id)}
+                    hitSlop={6}
                     accessibilityRole="switch"
                     accessibilityState={{ checked: subscription.active }}
                     accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}

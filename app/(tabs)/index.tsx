@@ -143,7 +143,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={true}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
           <View>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
@@ -152,6 +152,7 @@ export default function HomeScreen() {
           <Pressable
             style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
             onPress={() => router.push('/profile')}
+            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Abrir perfil">
             <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
@@ -159,12 +160,18 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <Pressable style={styles.statBlock} onPress={() => router.push('/(tabs)/tab3')} accessibilityRole="button">
+          <Pressable
+            style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
+            onPress={() => router.push('/(tabs)/tab3')}
+            accessibilityRole="button">
             <AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{activeSubscriptions.length}</AppText>
             <AppText tipo="legenda" style={styles.muted}>streamings ativos</AppText>
           </Pressable>
           <View style={styles.statDivider} />
-          <Pressable style={styles.statBlock} onPress={() => router.push('/(tabs)/tab2')} accessibilityRole="button">
+          <Pressable
+            style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
+            onPress={() => router.push('/(tabs)/tab2')}
+            accessibilityRole="button">
             <AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{availableTitles.length}</AppText>
             <AppText tipo="legenda" style={styles.muted}>títulos no catálogo</AppText>
           </Pressable>
@@ -362,9 +369,17 @@ export default function HomeScreen() {
         <View style={styles.filterBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterVisible(false)} accessibilityLabel="Fechar filtros" />
           <View style={styles.filterCard}>
+            <View style={styles.sheetHandle} />
             <View style={styles.filterHeader}>
               <View><AppText tipo="legenda" peso="forte" style={styles.modalEyebrow}>SORTEIO</AppText><AppText tipo="subtitulo" peso="forte" style={styles.modalTitle}>O que combina com você?</AppText></View>
-              <Pressable onPress={() => setFilterVisible(false)} style={styles.closeButton} accessibilityLabel="Fechar"><MaterialIcons name="close" size={21} color="#182230" /></Pressable>
+              <Pressable
+                onPress={() => setFilterVisible(false)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Fechar">
+                <MaterialIcons name="close" size={21} color="#182230" />
+              </Pressable>
             </View>
             <AppText tipo="legenda" style={styles.modalDescription}>
               {availableTitles.length > 0
@@ -374,21 +389,44 @@ export default function HomeScreen() {
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>TIPO</AppText>
             <View style={styles.chipRow}>
               {(['Todos', 'Filme', 'Série', 'Anime'] as KindFilter[]).map((item) => (
-                <Pressable key={item} onPress={() => setKind(item)} style={[styles.chip, kind === item && styles.chipSelected]}><AppText tipo="legenda" peso="forte" style={kind === item ? styles.chipTextSelected : styles.chipText}>{item === 'Todos' ? 'Tanto faz' : item === 'Filme' ? 'Filmes' : item === 'Série' ? 'Séries' : 'Animes'}</AppText></Pressable>
+                <Pressable
+                  key={item}
+                  onPress={() => setKind(item)}
+                  style={({ pressed }) => [styles.chip, kind === item && styles.chipSelected, pressed && styles.pressed]}>
+                  <AppText tipo="legenda" peso="forte" style={kind === item ? styles.chipTextSelected : styles.chipText}>
+                    {item === 'Todos' ? 'Tanto faz' : item === 'Filme' ? 'Filmes' : item === 'Série' ? 'Séries' : 'Animes'}
+                  </AppText>
+                </Pressable>
               ))}
             </View>
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {['Todos os gêneros', ...availableGenres].map((item) => (
-                <Pressable key={item} onPress={() => setGenre(item)} style={[styles.chip, genre === item && styles.chipSelected]}><AppText tipo="legenda" peso="forte" style={genre === item ? styles.chipTextSelected : styles.chipText}>{item === 'Todos os gêneros' ? 'Tanto faz' : item}</AppText></Pressable>
+                <Pressable
+                  key={item}
+                  onPress={() => setGenre(item)}
+                  style={({ pressed }) => [styles.chip, genre === item && styles.chipSelected, pressed && styles.pressed]}>
+                  <AppText tipo="legenda" peso="forte" style={genre === item ? styles.chipTextSelected : styles.chipText}>
+                    {item === 'Todos os gêneros' ? 'Tanto faz' : item}
+                  </AppText>
+                </Pressable>
               ))}
             </ScrollView>
             <AppText tipo="legenda" style={styles.resultCount}>
               {`${eligibleTitles.length} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
             </AppText>
             {drawError && <AppText tipo="legenda" style={styles.drawError}>{drawError}</AppText>}
-            <Pressable style={[styles.confirmButton, eligibleTitles.length === 0 && styles.disabledButton]} onPress={drawTitle} disabled={eligibleTitles.length === 0} accessibilityRole="button">
-              <AppText peso="forte" style={styles.confirmButtonText}>Sortear meu próximo título</AppText><MaterialIcons name="auto-awesome" size={19} color="#182230" />
+            <Pressable
+              style={({ pressed }) => [
+                styles.confirmButton,
+                eligibleTitles.length === 0 && styles.disabledButton,
+                pressed && eligibleTitles.length > 0 && styles.pressed,
+              ]}
+              onPress={drawTitle}
+              disabled={eligibleTitles.length === 0}
+              accessibilityRole="button">
+              <AppText peso="forte" style={styles.confirmButtonText}>Sortear meu próximo título</AppText>
+              <MaterialIcons name="auto-awesome" size={19} color="#182230" />
             </Pressable>
           </View>
         </View>
@@ -447,7 +485,8 @@ const styles = StyleSheet.create({
   posterLabel: { color: 'rgba(255,255,255,0.95)', textAlign: 'center', letterSpacing: 0.8 },
   titleName: { color: '#182230', fontSize: 13, lineHeight: 18 },
   filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,34,48,0.58)' },
-  filterCard: { backgroundColor: '#fffdf8', borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 23, paddingBottom: 32 },
+  filterCard: { backgroundColor: '#fffdf8', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 23, paddingTop: 12, paddingBottom: 32 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#d8d3c9', alignSelf: 'center', marginBottom: 14 },
   filterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   modalEyebrow: { color: '#e58c34', letterSpacing: 1.2, marginBottom: 6 },
   modalTitle: { color: '#182230', fontSize: 21, lineHeight: 26, maxWidth: 280 },

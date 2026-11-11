@@ -1,11 +1,13 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import React, { useState } from 'react';
 import {
-    StyleProp,
-    StyleSheet,
-    TextInput,
-    TextInputProps,
-    TextStyle,
-    View,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  TextInput,
+  TextInputProps,
+  TextStyle,
+  View,
 } from 'react-native';
 
 import { AppText } from './AppText';
@@ -20,11 +22,15 @@ export function AppInput({
   rotulo,
   erro,
   estilo,
+  secureTextEntry,
   onFocus,
   onBlur,
   ...props
 }: CampoProps) {
   const [focused, setFocused] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+
+  const isSecure = Boolean(secureTextEntry);
 
   return (
     <View style={styles.wrapper}>
@@ -34,25 +40,44 @@ export function AppInput({
         </AppText>
       ) : null}
 
-      <TextInput
-        placeholderTextColor="#9a978f"
-        selectionColor="#d77c29"
-        onFocus={(e) => {
-          setFocused(true);
-          onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          onBlur?.(e);
-        }}
+      <View
         style={[
-          styles.input,
+          styles.inputContainer,
           focused && styles.inputFocado,
           !!erro && styles.inputErro,
-          estilo,
         ]}
-        {...props}
-      />
+      >
+        <TextInput
+          placeholderTextColor="#9a978f"
+          selectionColor="#d77c29"
+          secureTextEntry={isSecure && !passwordVisible}
+          onFocus={(e) => {
+            setFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            onBlur?.(e);
+          }}
+          style={[styles.input, estilo]}
+          {...props}
+        />
+        {isSecure && (
+          <Pressable
+            onPress={() => setPasswordVisible((prev) => !prev)}
+            hitSlop={10}
+            style={styles.eyeButton}
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? 'Ocultar senha' : 'Mostrar senha'}
+          >
+            <MaterialIcons
+              name={passwordVisible ? 'visibility-off' : 'visibility'}
+              size={20}
+              color={focused ? '#182230' : '#7b7b78'}
+            />
+          </Pressable>
+        )}
+      </View>
 
       {erro ? (
         <AppText tipo="legenda" peso="medio" style={styles.textoErro}>
@@ -71,16 +96,27 @@ const styles = StyleSheet.create({
     color: '#182230',
     marginBottom: 7,
   },
-  input: {
+  inputContainer: {
     minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ded8cd',
     backgroundColor: '#f7f5f0',
     borderRadius: 14,
     paddingHorizontal: 15,
+  },
+  input: {
+    flex: 1,
     paddingVertical: 12,
     fontSize: 15,
     color: '#182230',
+  },
+  eyeButton: {
+    paddingLeft: 10,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputFocado: {
     borderColor: '#182230',

@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/atoms/AppButton';
@@ -45,129 +45,143 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.container}>
-          <Pressable
-            onPress={() => { clearAuthError(); router.back(); }}
-            disabled={isLoading}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}>
-            <MaterialIcons name="arrow-back" size={18} color="#d77c29" />
-            <AppText tipo="legenda" peso="forte" style={styles.link}>Voltar para o login</AppText>
-          </Pressable>
-
-          <View style={styles.card}>
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.title}>Crie sua conta</AppText>
-            <AppText tipo="texto" style={styles.subtitle}>
-              Monte seu painel de assinaturas e descubra o que assistir hoje.
-            </AppText>
-
-            {isConnected === false && (
-              <View style={styles.offlineBanner}>
-                <MaterialIcons name="wifi-off" size={18} color="#9a5b20" />
-                <AppText tipo="legenda" style={styles.offlineText}>
-                  Sem conexão com a internet. Conecte-se para sincronizar sua nova conta.
-                </AppText>
-              </View>
-            )}
-
-            {status === 'error' && errorMessage && (
-              <View style={styles.errorBanner}>
-                <MaterialIcons name="error-outline" size={18} color="#c0392b" />
-                <View style={styles.errorCopy}>
-                  <AppText tipo="legenda" peso="forte" style={styles.errorTitle}>Não foi possível criar a conta</AppText>
-                  <AppText tipo="legenda" style={styles.errorText}>{errorMessage}</AppText>
-                </View>
-                <Pressable onPress={() => { void handleRegister(); }} style={styles.retryChip} accessibilityRole="button">
-                  <AppText tipo="legenda" peso="forte" style={styles.retryText}>Repetir</AppText>
-                </Pressable>
-              </View>
-            )}
-
-            <AppInput
-              rotulo="Nome"
-              placeholder="Como podemos chamar você?"
-              value={name}
-              onChangeText={(value) => { setName(value); setNameError(''); clearAuthError(); }}
-              autoCapitalize="words"
-              autoComplete="name"
-              textContentType="name"
-              returnKeyType="next"
-              editable={!isLoading}
-              erro={nameError}
-            />
-            <AppInput
-              rotulo="E-mail"
-              placeholder="seu@email.com"
-              value={email}
-              onChangeText={(value) => { setEmail(value); setEmailError(''); clearAuthError(); }}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              textContentType="emailAddress"
-              returnKeyType="next"
-              editable={!isLoading}
-              erro={emailError}
-            />
-            <AppInput
-              rotulo="Senha"
-              placeholder="Mínimo de 6 caracteres"
-              value={password}
-              onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
-              secureTextEntry
-              autoComplete="new-password"
-              textContentType="newPassword"
-              returnKeyType="next"
-              editable={!isLoading}
-              erro={passwordError}
-            />
-            <AppInput
-              rotulo="Confirmar senha"
-              placeholder="Digite a senha novamente"
-              value={confirmPassword}
-              onChangeText={(value) => { setConfirmPassword(value); setConfirmPasswordError(''); clearAuthError(); }}
-              secureTextEntry
-              autoComplete="new-password"
-              textContentType="newPassword"
-              returnKeyType="done"
-              editable={!isLoading}
-              onSubmitEditing={() => { void handleRegister(); }}
-              erro={confirmPasswordError}
-            />
-
-            <AppButton
-              titulo={isLoading ? 'Criando conta...' : 'Criar minha conta'}
-              onPress={() => { void handleRegister(); }}
-              disabled={isLoading}
-              estilo={styles.submitButton}
-            />
-            {isLoading && (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color="#d77c29" />
-                <AppText tipo="legenda" style={styles.loadingText}>Preparando seu catálogo e painel…</AppText>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.loginPrompt}>
-            <AppText tipo="legenda" style={styles.accountText}>Já tem uma conta?</AppText>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.container}>
             <Pressable
-              onPress={() => { clearAuthError(); router.replace('/(auth)/login'); }}
+              onPress={() => { clearAuthError(); router.back(); }}
               disabled={isLoading}
-              style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
-              accessibilityRole="button">
-              <AppText tipo="legenda" peso="forte" style={styles.link}>Fazer login</AppText>
+              hitSlop={8}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}>
+              <MaterialIcons name="arrow-back" size={18} color="#d77c29" />
+              <AppText tipo="legenda" peso="forte" style={styles.link}>Voltar para o login</AppText>
             </Pressable>
+
+            <View style={styles.card}>
+              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
+              <AppText tipo="titulo" peso="forte" style={styles.title}>Crie sua conta</AppText>
+              <AppText tipo="texto" style={styles.subtitle}>
+                Monte seu painel de assinaturas e descubra o que assistir hoje.
+              </AppText>
+
+              {isConnected === false && (
+                <View style={styles.offlineBanner}>
+                  <MaterialIcons name="wifi-off" size={18} color="#9a5b20" />
+                  <AppText tipo="legenda" style={styles.offlineText}>
+                    Sem conexão com a internet. Conecte-se para sincronizar sua nova conta.
+                  </AppText>
+                </View>
+              )}
+
+              {status === 'error' && errorMessage && (
+                <View style={styles.errorBanner}>
+                  <MaterialIcons name="error-outline" size={18} color="#c0392b" />
+                  <View style={styles.errorCopy}>
+                    <AppText tipo="legenda" peso="forte" style={styles.errorTitle}>Não foi possível criar a conta</AppText>
+                    <AppText tipo="legenda" style={styles.errorText}>{errorMessage}</AppText>
+                  </View>
+                  <Pressable
+                    onPress={() => { void handleRegister(); }}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.retryChip, pressed && styles.pressed]}
+                    accessibilityRole="button">
+                    <AppText tipo="legenda" peso="forte" style={styles.retryText}>Repetir</AppText>
+                  </Pressable>
+                </View>
+              )}
+
+              <AppInput
+                rotulo="Nome"
+                placeholder="Como podemos chamar você?"
+                value={name}
+                onChangeText={(value) => { setName(value); setNameError(''); clearAuthError(); }}
+                autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
+                returnKeyType="next"
+                editable={!isLoading}
+                erro={nameError}
+              />
+              <AppInput
+                rotulo="E-mail"
+                placeholder="seu@email.com"
+                value={email}
+                onChangeText={(value) => { setEmail(value); setEmailError(''); clearAuthError(); }}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                editable={!isLoading}
+                erro={emailError}
+              />
+              <AppInput
+                rotulo="Senha"
+                placeholder="Mínimo de 6 caracteres"
+                value={password}
+                onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
+                secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="next"
+                editable={!isLoading}
+                erro={passwordError}
+              />
+              <AppInput
+                rotulo="Confirmar senha"
+                placeholder="Digite a senha novamente"
+                value={confirmPassword}
+                onChangeText={(value) => { setConfirmPassword(value); setConfirmPasswordError(''); clearAuthError(); }}
+                secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="done"
+                editable={!isLoading}
+                onSubmitEditing={() => { void handleRegister(); }}
+                erro={confirmPasswordError}
+              />
+
+              <AppButton
+                titulo={isLoading ? 'Criando conta...' : 'Criar minha conta'}
+                onPress={() => { void handleRegister(); }}
+                disabled={isLoading}
+                estilo={styles.submitButton}
+              />
+              {isLoading && (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color="#d77c29" />
+                  <AppText tipo="legenda" style={styles.loadingText}>Preparando seu catálogo e painel…</AppText>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.loginPrompt}>
+              <AppText tipo="legenda" style={styles.accountText}>Já tem uma conta?</AppText>
+              <Pressable
+                onPress={() => { clearAuthError(); router.replace('/(auth)/login'); }}
+                disabled={isLoading}
+                hitSlop={8}
+                style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                accessibilityRole="button">
+                <AppText tipo="legenda" peso="forte" style={styles.link}>Fazer login</AppText>
+              </Pressable>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
+  keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: 'center' },
   container: { width: '100%', maxWidth: 460, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 24 },
   pressed: { opacity: 0.84 },

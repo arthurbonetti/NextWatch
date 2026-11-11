@@ -30,7 +30,12 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
           <View style={[styles.cover, { backgroundColor: title.color }]}>
             <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
             {!hasArtwork && <View style={styles.coverGlow} />}
-            <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Fechar">
+            <Pressable
+              style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+              onPress={onClose}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Fechar">
               <MaterialIcons name="close" size={22} color="#fff" />
             </Pressable>
             {!hasArtwork && <MaterialIcons name={title.icon} size={66} color="rgba(255,255,255,0.9)" />}
@@ -41,7 +46,7 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
             style={styles.detailsScroll}
             contentContainerStyle={styles.detailsContent}
             scrollEnabled={scrollEnabled}
-            showsVerticalScrollIndicator={true}>
+            showsVerticalScrollIndicator={false}>
             <TitleDetailsBody title={title} eyebrow="SORTEADO PARA VOCÊ" onScrollEnabledChange={setScrollEnabled} />
             <Pressable style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]} onPress={onClose} accessibilityRole="button">
               <AppText peso="forte" style={styles.doneButtonText}>Assistir este título</AppText>

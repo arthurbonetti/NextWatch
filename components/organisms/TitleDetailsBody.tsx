@@ -124,7 +124,8 @@ export function TitleDetailsBody({
       </AppText>
       {isLongSynopsis && (
         <Pressable
-          style={styles.expandButton}
+          style={({ pressed }) => [styles.expandButton, pressed && styles.pressed]}
+          hitSlop={8}
           onPress={() => setExpanded((prev) => !prev)}
           accessibilityRole="button">
           <AppText tipo="legenda" peso="forte" style={styles.expandButtonText}>
@@ -138,6 +139,7 @@ export function TitleDetailsBody({
 }
 
 const styles = StyleSheet.create({
+  pressed: { opacity: 0.8 },
   eyebrow: { color: '#d77c29', letterSpacing: 1.3, marginBottom: 4 },
   title: { color: '#182230', fontSize: 24, lineHeight: 29, marginBottom: 4 },
   meta: { color: '#7b7b78' },
