@@ -159,7 +159,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
           <View style={styles.brandRow}>
             <NextWatchLogo size={38} />

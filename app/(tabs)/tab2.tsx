@@ -2,7 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
@@ -17,6 +17,7 @@ type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function ExploreScreen() {
+  const insets = useSafeAreaInsets();
   const { titles, status, errorMessage, refreshCatalog, searchTitles } = useCatalog();
   const { isSaved, toggleSavedTitle, refreshMyList } = useMyList();
 
@@ -143,7 +144,7 @@ export default function ExploreScreen() {
             />
           );
         }}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         initialNumToRender={12}

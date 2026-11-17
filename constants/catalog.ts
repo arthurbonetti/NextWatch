@@ -186,6 +186,11 @@ export function getMetacriticScore(title: MediaTitle): number | null {
   return null;
 }
 
+function floorToOneDecimal(value: number): number {
+  // 1e-9 evita erro de ponto flutuante (ex: 5.999999999999999 virando 5.9 em vez de 6.0)
+  return Math.floor(value * 10 + 1e-9) / 10;
+}
+
 export function getTitleAverageRating(title: MediaTitle): number {
   const tmdb = Number(title.imdbRating.replace(',', '.'));
   const hasTmdb = !Number.isNaN(tmdb) && tmdb > 0;
@@ -194,10 +199,10 @@ export function getTitleAverageRating(title: MediaTitle): number {
 
   if (hasTmdb && hasMetacritic) {
     const metacriticNormalized = metacritic / 10;
-    return Number(((tmdb + metacriticNormalized) / 2).toFixed(1));
+    return floorToOneDecimal((tmdb + metacriticNormalized) / 2);
   }
-  if (hasTmdb) return tmdb;
-  if (hasMetacritic) return Number((metacritic / 10).toFixed(1));
+  if (hasTmdb) return floorToOneDecimal(tmdb);
+  if (hasMetacritic) return floorToOneDecimal(metacritic / 10);
   return 0;
 }
 

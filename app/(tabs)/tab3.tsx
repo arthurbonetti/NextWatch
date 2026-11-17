@@ -2,7 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +10,7 @@ import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 export default function ProfileTabScreen() {
+  const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const { subscriptions } = useSubscriptions();
   const { savedTitles, refreshMyList } = useMyList();
@@ -37,7 +38,7 @@ export default function ProfileTabScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
         <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>MEU PERFIL</AppText>
 
         <View style={styles.profileCard}>
@@ -92,7 +93,7 @@ export default function ProfileTabScreen() {
           style={({ pressed }) => [styles.row, pressed && styles.pressed]}
           onPress={() => router.push('/(tabs)/tab2')}
           accessibilityRole="button">
-          <MaterialIcons name="local-movies" size={22} color="#182230" />
+          <MaterialIcons name="local-movies" size={22} color="#d77c29" />
           <AppText peso="forte" style={styles.rowText}>Explorar catálogo completo</AppText>
           <MaterialIcons name="chevron-right" size={22} color="#aaa59b" />
         </Pressable>
