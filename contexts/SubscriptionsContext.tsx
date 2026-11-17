@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { INITIAL_SUBSCRIPTIONS, Subscription } from '@/constants/subscriptions';
+import { Subscription } from '@/constants/subscriptions';
 import { useAuth } from '@/contexts/AuthContext';
 import { buildSupabaseHeaders, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
 
@@ -32,7 +32,7 @@ const SubscriptionsContext = createContext<SubscriptionsContextValue | null>(nul
 
 export function SubscriptionsProvider({ children }: PropsWithChildren) {
   const { user, token } = useAuth();
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>(INITIAL_SUBSCRIPTIONS);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [storageReady, setStorageReady] = useState(false);
 
   const storageKey = user ? `${BASE_STORAGE_KEY}:${user.id}` : null;

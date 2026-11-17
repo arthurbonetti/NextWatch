@@ -7,7 +7,7 @@ import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getMetacriticScore, getTitleServices, MediaTitle } from '@/constants/catalog';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
-export const SYNOPSIS_PREVIEW_LIMIT = 280;
+const SYNOPSIS_PREVIEW_LIMIT = 280;
 
 type TitleDetailsBodyProps = {
   title: MediaTitle;

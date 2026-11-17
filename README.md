@@ -35,7 +35,7 @@ Com o NextWatch, o usuário cadastra suas assinaturas ativas e tem acesso a um c
 - 🔍 **Exploração e Busca no Catálogo**:
   - Carregamento completo de todo o catálogo disponível na API do TMDB (região Brasil) de uma só vez, com listagem virtualizada (`FlatList`).
   - Pesquisa em tempo real por títulos e termos com *debounce* e cache local de consultas.
-  - Filtros avançados por nota de avaliação (`7+`, `8+`), status (*Quero ver* / *Assistidos*), gênero e serviço.
+  - Filtros avançados por nota de avaliação (`7+`, `8+`), tipo de mídia, gênero e serviço.
   - Modal e página de detalhes completos com sinopse, ano, duração, pôsteres e banners de alta resolução.
 
 - 💳 **Painel de Gestão de Assinaturas**:
@@ -145,19 +145,21 @@ Ao finalizar o processo, o link de download direto do arquivo `.apk` será dispo
 NextWatch/
 ├── app/                  # Roteamento file-based (Expo Router)
 │   ├── (auth)/           # Telas de login e cadastro
-│   ├── (tabs)/           # Abas de navegação (Início, Explorar, Assinaturas)
+│   ├── (tabs)/           # Abas de navegação (Início, Explorar, Perfil)
+│   ├── my-list.tsx       # Coleção salva (Minha Lista)
+│   ├── subscriptions.tsx # Painel de gerenciamento de assinaturas
 │   ├── title/[id].tsx    # Detalhes dinâmicos da obra
-│   ├── profile.tsx       # Tela de perfil do usuário
 │   └── _layout.tsx       # Layout raiz e provedores globais
 ├── assets/               # Ícones e splash screens do aplicativo
 ├── components/           # Componentes modulares (Atomic Design)
 │   ├── atoms/            # Botões, inputs, textos, capas e logos
-│   └── organisms/        # Modais de detalhes e de edição de assinatura
-├── constants/            # Catálogo estático, assinaturas e mapeamento de capas TMDB
-├── contexts/             # Context API (AuthContext, CatalogContext, SubscriptionsContext)
-├── services/             # Clientes de API (tmdb.ts)
-├── utils/                # Funções utilitárias (algoritmo QuickSort, etc.)
-└── scripts/              # Scripts auxiliares de build e sincronização
+│   └── organisms/        # Cards e modais de detalhes e de edição de assinatura
+├── constants/            # Catálogo estático, assinaturas, tipografia e capas TMDB
+├── contexts/             # Context API (AuthContext, CatalogContext, MyListContext, SubscriptionsContext)
+├── hooks/                # Hooks customizados (useNetworkStatus)
+├── services/             # Clientes de API e persistência (authApi, secureStore, tmdb)
+├── utils/                # Funções utilitárias (algoritmo Fisher-Yates / QuickSort)
+└── scripts/              # Scripts auxiliares de sincronização de capas
 ```
 
 ---

@@ -61,12 +61,7 @@ type TmdbMediaDetails = {
 
 type MediaEndpoint = 'movie' | 'tv';
 
-export type TmdbCatalogResult = {
-  titles: MediaTitle[];
-  totalResults: number;
-};
-
-export type TmdbCatalogBatchCallback = (titles: MediaTitle[], totalResults: number) => void;
+type TmdbCatalogBatchCallback = (titles: MediaTitle[]) => void;
 
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
@@ -77,7 +72,7 @@ const REQUEST_TIMEOUT_MS = 15000;
 const MAX_SEARCH_QUERY_LENGTH = 100;
 const SAFE_TMDB_PATH_REGEX = /^\/[a-zA-Z0-9._-]+$/;
 
-export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
+type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
 
 let cachedProvidersPromise: Promise<TmdbProvider[]> | null = null;
 const dynamicProviderLogos = new Map<string, string>();
@@ -201,13 +196,13 @@ export async function fetchAllCatalogForProviders(
   providerNames: string[],
   onBatch?: TmdbCatalogBatchCallback,
   shouldAbort?: () => boolean,
-): Promise<TmdbCatalogResult> {
+): Promise<void> {
   if (!hasSupabaseConfig() && !API_TOKEN) {
     throw new Error('Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para habilitar o catálogo automático.');
   }
   if (providerNames.length === 0) {
-    onBatch?.([], 0);
-    return { titles: [], totalResults: 0 };
+    onBatch?.([]);
+    return;
   }
 
   const allProviders = await getWatchProviders();
@@ -263,7 +258,7 @@ export async function fetchAllCatalogForProviders(
     }),
   );
 
-  if (shouldAbort?.()) return { titles: [], totalResults: 0 };
+  if (shouldAbort?.()) return;
 
   const firstBatchItems: MediaTitle[] = [];
   for (const { endpoint, providerName, params, response } of firstPages) {
@@ -290,8 +285,7 @@ export async function fetchAllCatalogForProviders(
     mergeTitleIntoCatalog(catalogById, idByNameKey, title);
   }
 
-  const initialList = Array.from(catalogById.values());
-  onBatch?.(initialList, initialList.length);
+  onBatch?.(Array.from(catalogById.values()));
 
   if (remainingTasks.length > 0) {
     let taskIndex = 0;
@@ -310,8 +304,7 @@ export async function fetchAllCatalogForProviders(
         completedSinceEmit += 1;
         if (completedSinceEmit >= 20) {
           completedSinceEmit = 0;
-          const updatedList = Array.from(catalogById.values());
-          onBatch?.(updatedList, updatedList.length);
+          onBatch?.(Array.from(catalogById.values()));
         }
       }
     });
@@ -319,14 +312,9 @@ export async function fetchAllCatalogForProviders(
     await Promise.all(workers);
   }
 
-  if (shouldAbort?.()) return { titles: [], totalResults: 0 };
+  if (shouldAbort?.()) return;
 
-  const finalList = Array.from(catalogById.values());
-  onBatch?.(finalList, finalList.length);
-  return {
-    titles: finalList,
-    totalResults: finalList.length,
-  };
+  onBatch?.(Array.from(catalogById.values()));
 }
 
 export async function searchCatalogTitles(query: string, fallbackProviders: string[] = []): Promise<MediaTitle[]> {

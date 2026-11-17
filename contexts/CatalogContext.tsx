@@ -5,14 +5,13 @@ import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 import { fetchAllCatalogForProviders, hasTmdbApiKey, searchCatalogTitles } from '@/services/tmdb';
 import { quickSortByRandom } from '@/utils/quickSort';
 
-export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
+type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 
 type CatalogContextValue = {
   titles: MediaTitle[];
   status: CatalogStatus;
   isFetchingCatalog: boolean;
   errorMessage: string | null;
-  totalResults: number;
   refreshCatalog: () => Promise<void>;
   searchTitles: (query: string) => Promise<MediaTitle[]>;
   findTitle: (id: string) => MediaTitle | undefined;
@@ -32,7 +31,6 @@ export function CatalogProvider({ children }: PropsWithChildren) {
   currentProviderKeyRef.current = providerKey;
   const [remoteTitles, setRemoteTitles] = useState<MediaTitle[] | null>(null);
   const [remoteProviderKey, setRemoteProviderKey] = useState('');
-  const [totalResults, setTotalResults] = useState(0);
   const [status, setStatus] = useState<CatalogStatus>('loading');
   const [isFetchingCatalog, setIsFetchingCatalog] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,11 +58,10 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     try {
       await fetchAllCatalogForProviders(
         providerKey ? providerKey.split('|') : [],
-        (batchTitles, batchTotal) => {
+        (batchTitles) => {
           if (shouldAbort()) return;
           setRemoteTitles(batchTitles);
           setRemoteProviderKey(providerKey);
-          setTotalResults(batchTotal);
           setStatus('ready');
         },
         shouldAbort,
@@ -133,11 +130,10 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     status,
     isFetchingCatalog,
     errorMessage,
-    totalResults: remoteProviderKey === providerKey ? totalResults : 0,
     refreshCatalog,
     searchTitles,
     findTitle,
-  }), [activeTitles, errorMessage, findTitle, isFetchingCatalog, providerKey, refreshCatalog, remoteProviderKey, searchTitles, status, totalResults]);
+  }), [activeTitles, errorMessage, findTitle, isFetchingCatalog, refreshCatalog, searchTitles, status]);
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 }

@@ -25,5 +25,3 @@ export const SUBSCRIPTION_PROVIDERS: SubscriptionProvider[] = [
   { name: 'Globoplay', color: '#ed1c24', symbol: 'G', logo: '/9A6Oxd3F7iXm7mds7CxYOBicojs.png' },
   { name: 'Crunchyroll', color: '#f47521', symbol: 'C', logo: '/fzN5Jok5Ig1eJ7gyNGoMhnLSCfh.jpg' },
 ];
-
-export const INITIAL_SUBSCRIPTIONS: Subscription[] = [];

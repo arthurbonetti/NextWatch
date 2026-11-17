@@ -269,6 +269,8 @@ async function remoteDeleteTitle(
     return classifyHttpOutcome(response);
   } catch {
     return 'retry';
+  } finally {
+    clearTimeout(timer);
   }
 }
 

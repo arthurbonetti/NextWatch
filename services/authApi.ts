@@ -11,17 +11,17 @@ export type AuthUser = {
 
 export type AuthStatus = 'idle' | 'loading' | 'success' | 'error';
 
-export type AuthSession = {
+type AuthSession = {
   user: AuthUser;
   accessToken: string;
 };
 
-export type LoginCredentials = {
+type LoginCredentials = {
   email: string;
   password: string;
 };
 
-export type RegisterPayload = {
+type RegisterPayload = {
   name: string;
   email: string;
   password: string;
@@ -36,8 +36,8 @@ const REQUEST_TIMEOUT_MS = 15000;
 const SESSION_RESTORE_TIMEOUT_MS = 4000;
 
 export const MIN_PASSWORD_LENGTH = 6;
-export const MAX_PASSWORD_LENGTH = 128;
-export const MAX_EMAIL_LENGTH = 254;
+const MAX_PASSWORD_LENGTH = 128;
+const MAX_EMAIL_LENGTH = 254;
 export const MAX_NAME_LENGTH = 80;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -383,11 +383,4 @@ export async function clearAuthSession(): Promise<void> {
     }
   }
   await purgeLocalSession();
-}
-
-/**
- * Limpa toda a sessão localmente.
- */
-export async function clearAllStoredAccounts(): Promise<void> {
-  await clearAuthSession();
 }

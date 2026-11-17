@@ -4,14 +4,11 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   type AuthStatus,
   type AuthUser,
-  clearAllStoredAccounts,
   clearAuthSession,
   loginWithCredentials,
   registerAccount,
   restoreAuthSession,
 } from '@/services/authApi';
-
-export type { AuthStatus, AuthUser };
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -23,7 +20,6 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (name: string, email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
-  clearAllAccounts: () => Promise<void>;
   clearAuthError: () => void;
 };
 
@@ -118,14 +114,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setStatus('idle');
   }, []);
 
-  const clearAllAccounts = useCallback(async () => {
-    await clearAllStoredAccounts();
-    setUser(null);
-    setToken(null);
-    setErrorMessage(null);
-    setStatus('idle');
-  }, []);
-
   const value = useMemo<AuthContextValue>(() => ({
     user,
     token,
@@ -136,9 +124,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     signIn,
     signUp,
     signOut,
-    clearAllAccounts,
     clearAuthError,
-  }), [authReady, clearAllAccounts, clearAuthError, errorMessage, isConnected, signIn, signOut, signUp, status, token, user]);
+  }), [authReady, clearAuthError, errorMessage, isConnected, signIn, signOut, signUp, status, token, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,5 +1,4 @@
 import { Image } from 'expo-image';
-import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
 const LOGO_SOURCE = require('@/assets/images/nextwatch-logo.png');

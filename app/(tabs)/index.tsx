@@ -32,7 +32,6 @@ export default function HomeScreen() {
   const [incompleteCatalogConfirmVisible, setIncompleteCatalogConfirmVisible] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
-  const [drawError, setDrawError] = useState<string | null>(null);
   const [lastDrawnId, setLastDrawnId] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [rouletteTitle, setRouletteTitle] = useState<MediaTitle | null>(null);
@@ -87,7 +86,6 @@ export default function HomeScreen() {
   const drawTitle = () => {
     if (drawLock.current || eligibleTitles.length === 0) return;
     drawLock.current = true;
-    setDrawError(null);
 
     const drawCandidates = eligibleTitles;
     const candidates = drawCandidates.length > 1
@@ -234,7 +232,7 @@ export default function HomeScreen() {
                 (!storageReady || catalogStatus === 'loading' || availableTitles.length === 0) && styles.drawButtonDisabled,
                 pressed && styles.pressed,
               ]}
-              onPress={() => { setDrawError(null); setFilterVisible(true); }}
+              onPress={() => setFilterVisible(true)}
               disabled={!storageReady || catalogStatus === 'loading' || availableTitles.length === 0}
               accessibilityRole="button">
               <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
@@ -452,7 +450,6 @@ export default function HomeScreen() {
             <AppText tipo="legenda" tabular style={styles.resultCount}>
               {`${countFormat.format(eligibleTitles.length)} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
             </AppText>
-            {drawError && <AppText tipo="legenda" style={styles.drawError}>{drawError}</AppText>}
             <Pressable
               style={({ pressed }) => [
                 styles.confirmButton,
@@ -591,7 +588,6 @@ const styles = StyleSheet.create({
   chipText: { color: '#6c6b67' },
   chipTextSelected: { color: '#fffdf8' },
   resultCount: { color: '#7b7b78', textAlign: 'center', marginBottom: 10 },
-  drawError: { color: '#c0392b', textAlign: 'center', marginBottom: 12 },
   confirmButton: { minHeight: 52, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   disabledButton: { opacity: 0.5 },
   confirmButtonText: { color: '#182230' },

@@ -95,7 +95,6 @@ const styles = StyleSheet.create({
   container: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 22 },
-  backButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 3 },
   title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },

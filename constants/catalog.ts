@@ -1,6 +1,6 @@
 export type MediaKind = 'Filme' | 'Série' | 'Anime';
 export type MediaIcon = 'movie' | 'live-tv' | 'theaters';
-export type RatingSource = 'IMDb' | 'TMDB';
+type RatingSource = 'IMDb' | 'TMDB';
 
 export type MediaTitle = {
   id: string;

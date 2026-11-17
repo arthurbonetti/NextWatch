@@ -12,7 +12,6 @@ import { useCatalog } from '@/contexts/CatalogContext';
 import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
-type TypeFilter = 'Quero ver' | 'Assistidos' | 'Todos';
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 
 const countFormat = new Intl.NumberFormat('pt-BR');
@@ -28,12 +27,10 @@ export default function ExploreScreen() {
   );
   const { subscriptions } = useSubscriptions();
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('Quero ver');
   const [kindFilter, setKindFilter] = useState<'Todos' | MediaKind>('Todos');
   const [genreFilter, setGenreFilter] = useState('Todos');
   const [serviceFilter, setServiceFilter] = useState('Todos');
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('Qualquer nota');
-  const [watchedIds] = useState<string[]>([]);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<MediaTitle[] | null>(null);
@@ -44,7 +41,6 @@ export default function ExploreScreen() {
   const searchRequestRef = useRef(0);
 
   const activeServices = useMemo(() => new Set(subscriptions.filter((item) => item.active).map((item) => item.provider)), [subscriptions]);
-  const watchedSet = useMemo(() => new Set(watchedIds), [watchedIds]);
   const availableTitles = useMemo(() => titles.filter((title) =>
     getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
@@ -115,18 +111,16 @@ export default function ExploreScreen() {
     }
 
     const filtered = sourceTitles.filter((title) => {
-      const matchesType = typeFilter === 'Todos'
-        || (typeFilter === 'Assistidos' ? watchedSet.has(title.id) : !watchedSet.has(title.id));
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
       const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
       const matchesService = serviceFilter === 'Todos' || getTitleServices(title).includes(serviceFilter);
       const rating = getTitleAverageRating(title);
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
-      return matchesType && matchesKind && matchesGenre && matchesService && matchesRating;
+      return matchesKind && matchesGenre && matchesService && matchesRating;
     });
 
     return rawQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, rawQuery) : filtered;
-  }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedSet]);
+  }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter]);
 
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
@@ -225,19 +219,6 @@ export default function ExploreScreen() {
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
-              {(['Quero ver', 'Assistidos', 'Todos'] as TypeFilter[]).map((filter) => (
-                <Pressable
-                  key={filter}
-                  onPress={() => setTypeFilter(filter)}
-                  style={({ pressed }) => [
-                    styles.quickChip,
-                    typeFilter === filter && styles.quickChipActive,
-                    pressed && styles.pressed,
-                  ]}>
-                  <AppText tipo="legenda" peso="forte" style={typeFilter === filter ? styles.quickTextActive : styles.quickText}>{filter}</AppText>
-                </Pressable>
-              ))}
-              <View style={styles.quickDivider} />
               {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
                 <Pressable
                   key={filter}
@@ -247,7 +228,7 @@ export default function ExploreScreen() {
                     kindFilter === filter && styles.quickChipActive,
                     pressed && styles.pressed,
                   ]}>
-                  <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Tipo' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
+                  <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
                 </Pressable>
               ))}
             </ScrollView>
@@ -311,7 +292,7 @@ export default function ExploreScreen() {
 
             <View style={styles.resultsHeader}>
               <View>
-                <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : typeFilter === 'Assistidos' ? 'Assistidos' : 'Títulos para assistir'}</AppText>
+                <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : 'Títulos para assistir'}</AppText>
                 <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
                   {searchLoading
                     ? 'Pesquisando no catálogo online…'
@@ -367,7 +348,6 @@ const styles = StyleSheet.create({
   quickChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
   quickText: { color: '#6c6b67', fontSize: 12 },
   quickTextActive: { color: '#fffdf8', fontSize: 12 },
-  quickDivider: { width: 1, height: 24, backgroundColor: '#ded8cd', marginHorizontal: 2 },
   filterPanel: { padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 16 },
   filterPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   filterLabel: { color: '#7b7b78', fontSize: 11, letterSpacing: 1, marginBottom: 8 },

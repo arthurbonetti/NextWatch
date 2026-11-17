@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Pressable,
   StyleProp,

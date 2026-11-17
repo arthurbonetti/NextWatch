@@ -1,11 +1,10 @@
 import { Image } from 'expo-image';
-import React from 'react';
 import { StyleSheet } from 'react-native';
 
 import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
 import { tmdbImageUri } from '@/services/tmdb';
 
-export type ArtworkVariant = 'poster' | 'backdrop';
+type ArtworkVariant = 'poster' | 'backdrop';
 
 const SIZES: Record<ArtworkVariant, 'w342' | 'w780'> = { poster: 'w342', backdrop: 'w780' };
 
