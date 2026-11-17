@@ -65,8 +65,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tab3"
         options={{
-          title: 'Assinaturas',
-          tabBarIcon: ({ color }) => <MaterialIcons size={25} name="subscriptions" color={color} />,
+          title: 'Perfil',
+          tabBarIcon: ({ color }) => <MaterialIcons size={26} name="person" color={color} />,
         }}
       />
     </Tabs>

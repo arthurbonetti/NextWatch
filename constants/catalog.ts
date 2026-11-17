@@ -25,6 +25,49 @@ export type MediaTitle = {
   voteCount?: number;
 };
 
+const VALID_MEDIA_KINDS: ReadonlySet<string> = new Set<MediaKind>(['Filme', 'Série', 'Anime']);
+const VALID_MEDIA_ICONS: ReadonlySet<string> = new Set<MediaIcon>(['movie', 'live-tv', 'theaters']);
+
+export function isMediaTitle(value: unknown): value is MediaTitle {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<MediaTitle>;
+  return (
+    typeof item.id === 'string' &&
+    item.id.length > 0 &&
+    item.id.length <= 128 &&
+    typeof item.title === 'string' &&
+    item.title.length > 0 &&
+    item.title.length <= 500 &&
+    typeof item.kind === 'string' &&
+    VALID_MEDIA_KINDS.has(item.kind) &&
+    typeof item.year === 'number' &&
+    Number.isInteger(item.year) &&
+    item.year >= 0 &&
+    typeof item.duration === 'string' &&
+    Array.isArray(item.genres) &&
+    item.genres.every((genre) => typeof genre === 'string') &&
+    typeof item.service === 'string' &&
+    item.service.length > 0 &&
+    (item.services === undefined ||
+      (Array.isArray(item.services) && item.services.every((service) => typeof service === 'string'))) &&
+    typeof item.imdbRating === 'string' &&
+    (item.metacriticScore === undefined ||
+      item.metacriticScore === null ||
+      (typeof item.metacriticScore === 'number' && Number.isFinite(item.metacriticScore))) &&
+    typeof item.synopsis === 'string' &&
+    typeof item.color === 'string' &&
+    typeof item.icon === 'string' &&
+    VALID_MEDIA_ICONS.has(item.icon) &&
+    (item.ratingSource === undefined || item.ratingSource === 'IMDb' || item.ratingSource === 'TMDB') &&
+    (item.catalogSource === undefined || item.catalogSource === 'tmdb') &&
+    (item.tmdbPosterPath === undefined || item.tmdbPosterPath === null || typeof item.tmdbPosterPath === 'string') &&
+    (item.tmdbBackdropPath === undefined || item.tmdbBackdropPath === null || typeof item.tmdbBackdropPath === 'string') &&
+    (item.originalTitle === undefined || typeof item.originalTitle === 'string') &&
+    (item.popularity === undefined || (typeof item.popularity === 'number' && Number.isFinite(item.popularity))) &&
+    (item.voteCount === undefined || (typeof item.voteCount === 'number' && Number.isFinite(item.voteCount)))
+  );
+}
+
 export function normalizeSearchText(value: string): string {
   return value
     .normalize('NFD')

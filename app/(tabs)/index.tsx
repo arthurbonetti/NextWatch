@@ -5,6 +5,7 @@ import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
@@ -146,13 +147,13 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
-          <View>
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.greeting}>Olá, {user?.name.split(' ')[0] ?? 'amante de filmes'}</AppText>
+          <View style={styles.brandRow}>
+            <NextWatchLogo size={38} />
+            <AppText tipo="subtitulo" peso="forte" style={styles.brandTitle}>NEXTWATCH</AppText>
           </View>
           <Pressable
             style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-            onPress={() => router.push('/profile')}
+            onPress={() => router.push('/(tabs)/tab3')}
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Abrir perfil">
@@ -163,7 +164,7 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <Pressable
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
-            onPress={() => router.push('/(tabs)/tab3')}
+            onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
             <AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{activeSubscriptions.length}</AppText>
             <AppText tipo="legenda" style={styles.muted}>streamings ativos</AppText>
@@ -201,7 +202,7 @@ export default function HomeScreen() {
             <AppText tipo="legenda" style={styles.heroDescription}>
               {availableTitles.length > 0
                 ? `${eligibleTitles.length} obras com nota 6,0+ prontas para sortear nos seus streamings.`
-                : 'Ative seus serviços na aba Assinaturas para liberar o sorteio personalizado.'}
+                : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
             </AppText>
             <Pressable
               style={({ pressed }) => [
@@ -247,7 +248,7 @@ export default function HomeScreen() {
           </View>
           <Pressable
             style={({ pressed }) => [styles.sectionLinkBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/(tabs)/tab3')}
+            onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
             <AppText tipo="legenda" peso="forte" style={styles.link}>Gerenciar</AppText>
             <MaterialIcons name="chevron-right" size={16} color="#d77c29" />
@@ -258,7 +259,7 @@ export default function HomeScreen() {
             <Pressable
               style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
               key={subscription.id}
-              onPress={() => router.push('/(tabs)/tab3')}
+              onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
               <ServiceLogo name={subscription.provider} size={39} />
               <View style={styles.serviceCopy}>
@@ -270,7 +271,7 @@ export default function HomeScreen() {
           {activeSubscriptions.length === 0 && (
             <Pressable
               style={({ pressed }) => [styles.emptyServiceCard, pressed && styles.pressed]}
-              onPress={() => router.push('/(tabs)/tab3')}
+              onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
               <MaterialIcons name="add-circle-outline" size={20} color="#d77c29" />
               <AppText tipo="legenda" peso="forte" style={styles.link}>Ativar primeiro streaming</AppText>
@@ -320,7 +321,7 @@ export default function HomeScreen() {
           {availableTitles.length === 0 && (
             <Pressable
               style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
-              onPress={() => router.push('/(tabs)/tab3')}
+              onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
               <MaterialIcons name="subscriptions" size={22} color="#d77c29" />
               <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
@@ -442,8 +443,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
   container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
   topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
-  greeting: { color: '#182230', fontSize: 25, lineHeight: 30 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  brandTitle: { color: '#e58c34', fontSize: 18, lineHeight: 22, letterSpacing: 1.6 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#182230', borderWidth: 2, borderColor: '#e8e2d5' },
   avatarText: { color: '#f3b43f', fontSize: 17 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.98 }] },

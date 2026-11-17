@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CatalogProvider } from '@/contexts/CatalogContext';
+import { MyListProvider } from '@/contexts/MyListContext';
 import { SubscriptionsProvider } from '@/contexts/SubscriptionsContext';
 
 export const unstable_settings = {
@@ -22,13 +23,16 @@ export default function RootLayout() {
         <AuthProvider>
           <SubscriptionsProvider>
             <CatalogProvider>
-              <Stack>
-                <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="profile" options={{ headerShown: false }} />
-                <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
-              </Stack>
+              <MyListProvider>
+                <Stack>
+                  <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+                  <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
+                  <Stack.Screen name="my-list" options={{ headerShown: false }} />
+                  <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
+                </Stack>
+              </MyListProvider>
             </CatalogProvider>
           </SubscriptionsProvider>
         </AuthProvider>

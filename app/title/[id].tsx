@@ -7,28 +7,46 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
+import { MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
+import { useMyList } from '@/contexts/MyListContext';
 
 export default function TitleDetailsScreen() {
   const { user, authReady } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const { status, findTitle } = useCatalog();
+  const { isSaved, toggleSavedTitle, findSavedTitle } = useMyList();
   const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
-  const title = normalizedId ? findTitle(normalizedId) : undefined;
-  const [saved, setSaved] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState<MediaTitle | null>(null);
+  const liveTitle = normalizedId ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId)) : undefined;
+  const title = liveTitle ?? (savedSnapshot?.id === normalizedId ? savedSnapshot : undefined);
+  const saved = title ? isSaved(title.id) : false;
   const [scrollEnabled, setScrollEnabled] = useState(false);
 
   if (!authReady) return null;
   if (!user) return <Redirect href="/(auth)/login" />;
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/tab2');
+  };
+
   if (!title) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>{status === 'loading' ? 'Carregando título…' : 'Título não encontrado'}</AppText><Pressable onPress={() => router.back()}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
+        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>{status === 'loading' ? 'Carregando título…' : 'Título não encontrado'}</AppText><Pressable onPress={handleBack}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
       </SafeAreaView>
     );
   }
+
+  const handleToggleSaved = () => {
+    setSavedSnapshot(title);
+    toggleSavedTitle(title);
+  };
 
   const hasArtwork = getArtworkUri(title.id, 'backdrop', {
     posterPath: title.tmdbPosterPath,
@@ -43,7 +61,7 @@ export default function TitleDetailsScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={handleBack}
             hitSlop={6}
             style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
             accessibilityRole="button"
@@ -52,7 +70,7 @@ export default function TitleDetailsScreen() {
           </Pressable>
           <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText>
           <Pressable
-            onPress={() => setSaved(!saved)}
+            onPress={handleToggleSaved}
             hitSlop={6}
             style={({ pressed }) => [styles.iconButton, saved && styles.iconButtonSaved, pressed && styles.pressed]}
             accessibilityRole="button"
@@ -67,7 +85,7 @@ export default function TitleDetailsScreen() {
         <TitleDetailsBody title={title} pillBackgroundColor="#fffdf8" onScrollEnabledChange={setScrollEnabled} />
         <Pressable
           style={({ pressed }) => [styles.primaryButton, saved && styles.primaryButtonSaved, pressed && styles.pressed]}
-          onPress={() => setSaved(!saved)}
+          onPress={handleToggleSaved}
           accessibilityRole="button">
           <MaterialIcons name={saved ? 'check' : 'bookmark-add'} size={19} color={saved ? '#f3b43f' : '#182230'} />
           <AppText peso="forte" style={[styles.primaryText, saved && styles.primaryTextSaved]}>
@@ -76,9 +94,9 @@ export default function TitleDetailsScreen() {
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-          onPress={() => router.back()}
+          onPress={handleBack}
           accessibilityRole="button">
-          <AppText peso="forte" style={styles.secondaryText}>Voltar ao catálogo</AppText>
+          <AppText peso="forte" style={styles.secondaryText}>Voltar</AppText>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

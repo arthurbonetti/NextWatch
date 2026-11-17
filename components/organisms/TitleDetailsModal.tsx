@@ -6,6 +6,7 @@ import { AppText } from '@/components/atoms/AppText';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { MediaTitle } from '@/constants/catalog';
+import { useMyList } from '@/contexts/MyListContext';
 
 type Props = {
   title: MediaTitle | null;
@@ -15,8 +16,10 @@ type Props = {
 
 export function TitleDetailsModal({ title, visible, onClose }: Props) {
   const [scrollEnabled, setScrollEnabled] = useState(false);
+  const { isSaved, toggleSavedTitle } = useMyList();
 
   if (!title) return null;
+  const saved = isSaved(title.id);
   const hasArtwork = getArtworkUri(title.id, 'backdrop', {
     posterPath: title.tmdbPosterPath,
     backdropPath: title.tmdbBackdropPath,
@@ -48,10 +51,19 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}>
             <TitleDetailsBody title={title} eyebrow="SORTEADO PARA VOCÊ" onScrollEnabledChange={setScrollEnabled} />
-            <Pressable style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]} onPress={onClose} accessibilityRole="button">
-              <AppText peso="forte" style={styles.doneButtonText}>Assistir este título</AppText>
-              <MaterialIcons name="check" size={19} color="#182230" />
-            </Pressable>
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={({ pressed }) => [styles.saveButton, saved && styles.saveButtonActive, pressed && styles.pressed]}
+                onPress={() => toggleSavedTitle(title)}
+                accessibilityRole="button"
+                accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}>
+                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-add'} size={22} color={saved ? '#f3b43f' : '#182230'} />
+              </Pressable>
+              <Pressable style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]} onPress={onClose} accessibilityRole="button">
+                <AppText peso="forte" style={styles.doneButtonText}>Assistir este título</AppText>
+                <MaterialIcons name="check" size={19} color="#182230" />
+              </Pressable>
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -69,6 +81,9 @@ const styles = StyleSheet.create({
   coverTitle: { maxWidth: '78%', marginTop: 10, color: '#fff', textAlign: 'center', letterSpacing: 1.5 },
   detailsScroll: { flexShrink: 1 },
   detailsContent: { padding: 18, paddingBottom: 20 },
-  doneButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  saveButton: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
+  saveButtonActive: { borderColor: '#182230', backgroundColor: '#182230' },
+  doneButton: { flex: 1, minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   doneButtonText: { color: '#182230' },
 });

@@ -1,22 +1,22 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
-import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
-import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { formatAverageRating, GENRES, getMetacriticScore, getTitleAverageRating, getTitleServices, matchesSearchQuery, MediaKind, MediaTitle, rankTitlesBySearchRelevance } from '@/constants/catalog';
+import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
+import { GENRES, getTitleAverageRating, getTitleServices, matchesSearchQuery, MediaKind, MediaTitle, rankTitlesBySearchRelevance } from '@/constants/catalog';
 import { useCatalog } from '@/contexts/CatalogContext';
+import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
-import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
 type TypeFilter = 'Quero ver' | 'Assistidos' | 'Todos';
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 
 export default function ExploreScreen() {
   const { titles, status, errorMessage, refreshCatalog, searchTitles } = useCatalog();
+  const { isSaved, toggleSavedTitle } = useMyList();
   const { subscriptions } = useSubscriptions();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('Quero ver');
@@ -24,7 +24,7 @@ export default function ExploreScreen() {
   const [genreFilter, setGenreFilter] = useState('Todos');
   const [serviceFilter, setServiceFilter] = useState('Todos');
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('Qualquer nota');
-  const [watchedIds, setWatchedIds] = useState<string[]>([]);
+  const [watchedIds] = useState<string[]>([]);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<MediaTitle[] | null>(null);
@@ -119,9 +119,6 @@ export default function ExploreScreen() {
     return rawQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, rawQuery) : filtered;
   }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter, typeFilter, watchedSet]);
 
-  const toggleWatched = useCallback((id: string) => setWatchedIds((current) =>
-    current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-  ), []);
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
   return (
@@ -129,14 +126,20 @@ export default function ExploreScreen() {
       <FlatList
         data={results}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ExploreResultCard
-            title={item}
-            watched={watchedSet.has(item.id)}
-            onOpen={() => openTitle(item)}
-            onToggleWatched={() => toggleWatched(item.id)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const saved = isSaved(item.id);
+          return (
+            <MediaTitleCard
+              title={item}
+              onOpen={() => openTitle(item)}
+              actionIcon={saved ? 'bookmark' : 'bookmark-add'}
+              actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
+              onAction={() => toggleSavedTitle(item)}
+              actionButtonStyle={saved ? styles.savedButtonActive : undefined}
+              actionIconColor={saved ? '#e58c34' : '#657078'}
+            />
+          );
+        }}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -323,69 +326,13 @@ export default function ExploreScreen() {
             <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#d77c29" /></View>
             <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
             <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
-            {activeServices.size === 0 && <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={() => router.push('/(tabs)/tab3')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
+            {activeServices.size === 0 && <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={() => router.push('/subscriptions')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
           </View>
         }
       />
     </SafeAreaView>
   );
 }
-
-const ExploreResultCard = memo(function ExploreResultCard({ title, watched, onOpen, onToggleWatched }: { title: MediaTitle; watched: boolean; onOpen: () => void; onToggleWatched: () => void }) {
-  const [duration, setDuration] = useState(() => getCachedTitleDuration(title));
-
-  useEffect(() => {
-    let active = true;
-    setDuration(getCachedTitleDuration(title));
-    void fetchTitleDuration(title).then((resolved) => {
-      if (active) setDuration(resolved);
-    });
-    return () => {
-      active = false;
-    };
-  }, [title]);
-
-  const hasArtwork = getArtworkUri(title.id, 'poster', {
-    posterPath: title.tmdbPosterPath,
-    backdropPath: title.tmdbBackdropPath,
-  }) !== null;
-  const metacritic = getMetacriticScore(title);
-  return (
-    <View style={styles.resultCard}>
-      <Pressable
-        style={({ pressed }) => [styles.poster, { backgroundColor: title.color }, pressed && styles.pressed]}
-        onPress={onOpen}
-        accessibilityRole="button"
-        accessibilityLabel={`Abrir ${title.title}`}>
-        <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
-        {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
-        <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}><MaterialIcons name="star" size={12} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{formatAverageRating(title)}</AppText></View>
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [styles.resultCopy, pressed && styles.pressed]}
-        onPress={onOpen}
-        accessibilityRole="button">
-        <AppText peso="forte" style={styles.resultTitle} numberOfLines={1}>{title.title}</AppText>
-        <AppText tipo="legenda" style={styles.resultMeta}>{title.year || 'Ano não informado'} · {title.kind} · {duration}</AppText>
-        <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>{title.genres.join(' · ')}</AppText>
-        <View style={styles.serviceLine}>
-          <ServiceLogoList services={getTitleServices(title)} size={20} maxVisible={3} gap={5} overflowGap={4} />
-          <AppText tipo="legenda" peso="forte" style={styles.scoreMeta}>
-            TMDB {title.imdbRating}{metacritic !== null ? ` · MC ${metacritic}` : ''}
-          </AppText>
-        </View>
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [styles.watchedButton, watched && styles.watchedButtonActive, pressed && styles.pressed]}
-        onPress={onToggleWatched}
-        hitSlop={6}
-        accessibilityRole="button"
-        accessibilityLabel={watched ? 'Remover de assistidos' : 'Marcar como assistido'}>
-        <MaterialIcons name={watched ? 'check' : 'visibility'} size={18} color={watched ? '#fffdf8' : '#657078'} />
-      </Pressable>
-    </View>
-  );
-});
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
@@ -428,19 +375,7 @@ const styles = StyleSheet.create({
   sortBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#f1e8d7' },
   sortBadgeText: { color: '#8b5827', fontSize: 11 },
   searchError: { color: '#c0392b', marginBottom: 8 },
-  resultCard: { minHeight: 110, flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 16, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginBottom: 10 },
-  poster: { width: 72, height: 92, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, overflow: 'hidden' },
-  posterRatingCorner: { position: 'absolute', bottom: 5 },
-  posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: 'rgba(24,34,48,0.78)' },
-  posterRatingText: { color: '#fffdf8', fontSize: 10 },
-  resultCopy: { flex: 1, paddingHorizontal: 12, paddingVertical: 4 },
-  resultTitle: { color: '#182230', fontSize: 15, marginBottom: 3 },
-  resultMeta: { color: '#7b7b78', fontSize: 11 },
-  resultGenres: { color: '#8d7a61', fontSize: 11, marginTop: 3 },
-  serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  scoreMeta: { color: '#657078', fontSize: 11, marginLeft: 4 },
-  watchedButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1eee7' },
-  watchedButtonActive: { backgroundColor: '#2e8b57' },
+  savedButtonActive: { backgroundColor: '#fff2d8', borderWidth: 1, borderColor: '#e58c34' },
   emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginTop: 10 },
   emptyIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1e8d7', marginBottom: 11 },
   emptyTitle: { color: '#182230', fontSize: 16 },
