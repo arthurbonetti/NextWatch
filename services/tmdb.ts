@@ -5,6 +5,7 @@ import {
   type MediaIcon,
   type MediaTitle,
 } from '@/constants/catalog';
+import { buildSupabaseHeaders, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type TmdbProvider = {
@@ -136,7 +137,7 @@ const GENRE_NAMES: Record<MediaEndpoint, Record<number, string>> = {
 const COVER_COLORS = ['#596b7c', '#76515e', '#397a91', '#806341', '#59517f', '#48616d'];
 
 export function hasTmdbApiKey() {
-  return Boolean(API_TOKEN);
+  return Boolean(API_TOKEN || hasSupabaseConfig());
 }
 
 export function getDynamicProviderLogo(providerName: string): string | undefined {
@@ -201,7 +202,9 @@ export async function fetchAllCatalogForProviders(
   onBatch?: TmdbCatalogBatchCallback,
   shouldAbort?: () => boolean,
 ): Promise<TmdbCatalogResult> {
-  if (!API_TOKEN) throw new Error('Configure EXPO_PUBLIC_TMDB_API_KEY para habilitar o catálogo automático.');
+  if (!hasSupabaseConfig() && !API_TOKEN) {
+    throw new Error('Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para habilitar o catálogo automático.');
+  }
   if (providerNames.length === 0) {
     onBatch?.([], 0);
     return { titles: [], totalResults: 0 };
@@ -328,7 +331,7 @@ export async function fetchAllCatalogForProviders(
 
 export async function searchCatalogTitles(query: string, fallbackProviders: string[] = []): Promise<MediaTitle[]> {
   const encodedQuery = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
-  if (!API_TOKEN || encodedQuery.length < 2) return [];
+  if (!hasTmdbApiKey() || encodedQuery.length < 2) return [];
 
   const [movies, shows] = await Promise.all([
     request<TmdbMediaResponse>('/search/movie', {
@@ -411,12 +414,35 @@ export function tmdbImageUri(path: string | null | undefined, size: TmdbImageSiz
 }
 
 async function request<T>(endpoint: string, params: Record<string, string>, retries = 3): Promise<T> {
-  const url = new URL(`${API_BASE_URL}${endpoint}`);
-  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  const supabaseUrl = getSupabaseUrl();
+  const useSupabaseProxy = hasSupabaseConfig() && Boolean(supabaseUrl);
 
-  const isBearer = API_TOKEN?.startsWith('eyJ');
-  if (!isBearer && API_TOKEN) {
-    url.searchParams.set('api_key', API_TOKEN);
+  let fetchUrl: string;
+  let fetchInit: RequestInit;
+
+  if (useSupabaseProxy && supabaseUrl) {
+    fetchUrl = `${supabaseUrl}/functions/v1/tmdb-proxy`;
+    fetchInit = {
+      method: 'POST',
+      headers: buildSupabaseHeaders(),
+      body: JSON.stringify({ endpoint, params }),
+    };
+  } else {
+    const url = new URL(`${API_BASE_URL}${endpoint}`);
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+
+    const isBearer = API_TOKEN?.startsWith('eyJ');
+    if (!isBearer && API_TOKEN) {
+      url.searchParams.set('api_key', API_TOKEN);
+    }
+
+    fetchUrl = url.toString();
+    fetchInit = {
+      headers: {
+        ...(isBearer ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
+        Accept: 'application/json',
+      },
+    };
   }
 
   const controller = new AbortController();
@@ -424,11 +450,8 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      headers: {
-        ...(isBearer ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
-        Accept: 'application/json',
-      },
+    response = await fetch(fetchUrl, {
+      ...fetchInit,
       signal: controller.signal,
     });
   } catch (error) {
@@ -506,7 +529,7 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
   }
 
   const match = /^tmdb-(movie|tv)-(\d+)$/.exec(title.id);
-  if (!match || !API_TOKEN) {
+  if (!match || !hasTmdbApiKey()) {
     return title.duration;
   }
 

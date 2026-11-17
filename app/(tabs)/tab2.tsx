@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +19,13 @@ const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function ExploreScreen() {
   const { titles, status, errorMessage, refreshCatalog, searchTitles } = useCatalog();
-  const { isSaved, toggleSavedTitle } = useMyList();
+  const { isSaved, toggleSavedTitle, refreshMyList } = useMyList();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMyList({ minIntervalMs: 5000 });
+    }, [refreshMyList]),
+  );
   const { subscriptions } = useSubscriptions();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('Quero ver');
@@ -181,7 +187,7 @@ export default function ExploreScreen() {
                     : status === 'ready'
                       ? 'Disponibilidade no Brasil · notas da comunidade TMDB'
                       : status === 'needs-api-key'
-                        ? 'Configure EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
+                        ? 'Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
                         : errorMessage ?? 'Confira a conexão e tente novamente.'}
                 </AppText>
               </View>

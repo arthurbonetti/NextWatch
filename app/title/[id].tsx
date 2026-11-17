@@ -18,7 +18,7 @@ export default function TitleDetailsScreen() {
   const { user, authReady } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const { status, findTitle } = useCatalog();
-  const { isSaved, toggleSavedTitle, findSavedTitle } = useMyList();
+  const { isSaved, toggleSavedTitle, findSavedTitle, storageReady } = useMyList();
   const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
   const [savedSnapshot, setSavedSnapshot] = useState<MediaTitle | null>(null);
   const liveTitle = normalizedId ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId)) : undefined;
@@ -40,7 +40,7 @@ export default function TitleDetailsScreen() {
   if (!title) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>{status === 'loading' ? 'Carregando título…' : 'Título não encontrado'}</AppText><Pressable onPress={handleBack}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
+        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>{status === 'loading' || !storageReady ? 'Carregando título…' : 'Título não encontrado'}</AppText><Pressable onPress={handleBack}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
       </SafeAreaView>
     );
   }

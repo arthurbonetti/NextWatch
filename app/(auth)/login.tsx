@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
+import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { isValidEmail, MIN_PASSWORD_LENGTH } from '@/services/authApi';
@@ -45,16 +46,15 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
             <View style={styles.brandHeader}>
-              <View style={styles.brandMark}>
-                <MaterialIcons name="local-movies" size={24} color="#f3b43f" />
-              </View>
+              <NextWatchLogo size={46} />
               <View style={styles.brandCopy}>
                 <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
                 <AppText tipo="legenda" style={styles.brandTagline}>Curadoria e controle dos seus streamings</AppText>
@@ -181,14 +181,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginBottom: 18,
-  },
-  brandMark: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: '#182230',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   brandCopy: { flex: 1 },
   eyebrow: { color: '#e58c34', letterSpacing: 2.0, marginBottom: 2 },

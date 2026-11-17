@@ -1,5 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,7 +13,13 @@ import { useMyList } from '@/contexts/MyListContext';
 
 export default function MyListScreen() {
   const { user, authReady } = useAuth();
-  const { savedTitles, storageReady, removeFromMyList } = useMyList();
+  const { savedTitles, storageReady, removeFromMyList, refreshMyList } = useMyList();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMyList();
+    }, [refreshMyList]),
+  );
 
   if (!authReady) return null;
   if (!user) return <Redirect href="/(auth)/login" />;

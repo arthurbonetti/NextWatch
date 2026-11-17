@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,7 +12,13 @@ import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 export default function ProfileTabScreen() {
   const { user, signOut } = useAuth();
   const { subscriptions } = useSubscriptions();
-  const { savedTitles } = useMyList();
+  const { savedTitles, refreshMyList } = useMyList();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMyList({ minIntervalMs: 3000 });
+    }, [refreshMyList]),
+  );
 
   const activeSubscriptions = useMemo(
     () => subscriptions.filter((subscription) => subscription.active),

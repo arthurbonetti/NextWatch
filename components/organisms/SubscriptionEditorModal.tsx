@@ -67,7 +67,7 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
     <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoidingView
         style={styles.backdrop}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar formulário" />
         <View style={[styles.sheet, { paddingBottom: Math.max(32, insets.bottom + 18) }]}>
           <View style={styles.sheetHandle} />
