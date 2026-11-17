@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { MediaTitle } from '@/constants/catalog';
@@ -12,9 +13,10 @@ type Props = {
   title: MediaTitle | null;
   visible: boolean;
   onClose: () => void;
+  onDrawAnother?: () => void;
 };
 
-export function TitleDetailsModal({ title, visible, onClose }: Props) {
+export function TitleDetailsModal({ title, visible, onClose, onDrawAnother }: Props) {
   const [scrollEnabled, setScrollEnabled] = useState(false);
   const { isSaved, toggleSavedTitle } = useMyList();
 
@@ -57,13 +59,29 @@ export function TitleDetailsModal({ title, visible, onClose }: Props) {
                 onPress={() => toggleSavedTitle(title)}
                 accessibilityRole="button"
                 accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}>
-                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-add'} size={22} color={saved ? '#f3b43f' : '#182230'} />
+                <BookmarkIcon
+                  saved={saved}
+                  itemKey={title.id}
+                  size={22}
+                  color="#f3b43f"
+                  inactiveColor="#182230"
+                  badgeBorderColor="#182230"
+                />
               </Pressable>
               <Pressable style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]} onPress={onClose} accessibilityRole="button">
                 <AppText peso="forte" style={styles.doneButtonText}>Assistir este título</AppText>
                 <MaterialIcons name="check" size={19} color="#182230" />
               </Pressable>
             </View>
+            {onDrawAnother && (
+              <Pressable
+                style={({ pressed }) => [styles.redrawButton, pressed && styles.pressed]}
+                onPress={onDrawAnother}
+                accessibilityRole="button">
+                <MaterialIcons name="casino" size={16} color="#d77c29" />
+                <AppText tipo="legenda" peso="forte" style={styles.redrawText}>Sortear outro</AppText>
+              </Pressable>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -86,4 +104,6 @@ const styles = StyleSheet.create({
   saveButtonActive: { borderColor: '#182230', backgroundColor: '#182230' },
   doneButton: { flex: 1, minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   doneButtonText: { color: '#182230' },
+  redrawButton: { minHeight: 38, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  redrawText: { color: '#d77c29', fontSize: 13 },
 });

@@ -5,6 +5,8 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BackButton } from '@/components/atoms/BackButton';
+import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { MediaTitle } from '@/constants/catalog';
@@ -60,14 +62,7 @@ export default function TitleDetailsScreen() {
         scrollEnabled={scrollEnabled}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
-          <Pressable
-            onPress={handleBack}
-            hitSlop={6}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Voltar">
-            <MaterialIcons name="arrow-back" size={22} color="#182230" />
-          </Pressable>
+          <BackButton onPress={handleBack} />
           <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText>
           <Pressable
             onPress={handleToggleSaved}
@@ -75,7 +70,7 @@ export default function TitleDetailsScreen() {
             style={({ pressed }) => [styles.iconButton, saved && styles.iconButtonSaved, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}>
-            <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={22} color="#e58c34" />
+            <BookmarkIcon saved={saved} itemKey={title.id} size={22} color="#e58c34" />
           </Pressable>
         </View>
         <View style={[styles.poster, { backgroundColor: title.color }]}>
@@ -91,12 +86,6 @@ export default function TitleDetailsScreen() {
           <AppText peso="forte" style={[styles.primaryText, saved && styles.primaryTextSaved]}>
             {saved ? 'Salvo na minha lista' : 'Salvar na minha lista'}
           </AppText>
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
-          onPress={handleBack}
-          accessibilityRole="button">
-          <AppText peso="forte" style={styles.secondaryText}>Voltar</AppText>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -114,12 +103,10 @@ const styles = StyleSheet.create({
   poster: { height: 195, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(24,34,48,0.08)', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 20, marginBottom: 14, overflow: 'hidden' },
   posterLabel: { color: '#fffdf8', letterSpacing: 1.2, textAlign: 'center' },
   title: { color: '#182230', fontSize: 26, lineHeight: 32, marginBottom: 4 },
-  primaryButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 },
+  primaryButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   primaryButtonSaved: { backgroundColor: '#182230' },
   primaryText: { color: '#182230' },
   primaryTextSaved: { color: '#fffdf8' },
-  secondaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: '#d77c29' },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
   link: { color: '#d77c29' },
 });

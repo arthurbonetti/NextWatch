@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
@@ -22,26 +22,58 @@ export function TitleDetailsBody({
   pillBackgroundColor = '#f1eee7',
   onScrollEnabledChange,
 }: TitleDetailsBodyProps) {
+  const [prevTitle, setPrevTitle] = useState(title);
   const [duration, setDuration] = useState(() => getCachedTitleDuration(title));
   const [expanded, setExpanded] = useState(false);
   const [showAllProviders, setShowAllProviders] = useState(false);
+  const [renderAllProviders, setRenderAllProviders] = useState(false);
+  const [providersAnim] = useState(() => new Animated.Value(0));
+
+  if (prevTitle !== title) {
+    setPrevTitle(title);
+    setExpanded(false);
+    setShowAllProviders(false);
+    setRenderAllProviders(false);
+    setDuration(getCachedTitleDuration(title));
+  }
 
   const isLongSynopsis = title.synopsis.length > SYNOPSIS_PREVIEW_LIMIT;
   const metacritic = getMetacriticScore(title);
   const services = getTitleServices(title);
 
   useEffect(() => {
-    setExpanded(false);
-    setShowAllProviders(false);
+    providersAnim.setValue(0);
     let active = true;
-    setDuration(getCachedTitleDuration(title));
     void fetchTitleDuration(title).then((resolved) => {
       if (active) setDuration(resolved);
     });
     return () => {
       active = false;
     };
-  }, [title]);
+  }, [title, providersAnim]);
+
+  const toggleAllProviders = () => {
+    const next = !showAllProviders;
+    setShowAllProviders(next);
+    if (next) {
+      setRenderAllProviders(true);
+      Animated.timing(providersAnim, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(providersAnim, {
+        toValue: 0,
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setRenderAllProviders(false);
+      });
+    }
+  };
 
   useEffect(() => {
     onScrollEnabledChange?.(isLongSynopsis && expanded);
@@ -88,16 +120,37 @@ export function TitleDetailsBody({
         <View style={styles.providerBadge}>
           <ServiceLogoList
             services={services}
-            size={36}
+            size={34}
             maxVisible={3}
-            overflowSize={31}
-            onPressOverflow={() => setShowAllProviders((prev) => !prev)}
+            overflowSize={30}
+            overflowExpanded={showAllProviders}
+            onPressOverflow={toggleAllProviders}
           />
         </View>
       </View>
 
-      {showAllProviders && services.length > 3 && (
-        <View style={styles.allProvidersRow}>
+      {renderAllProviders && services.length > 3 && (
+        <Animated.View
+          style={[
+            styles.allProvidersRow,
+            {
+              opacity: providersAnim,
+              transform: [
+                {
+                  translateY: providersAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-6, 0],
+                  }),
+                },
+                {
+                  scale: providersAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.97, 1],
+                  }),
+                },
+              ],
+            },
+          ]}>
           {services.map((serviceName) => (
             <View key={serviceName} style={[styles.providerPill, { backgroundColor: pillBackgroundColor }]}>
               <ServiceLogo name={serviceName} size={18} />
@@ -106,7 +159,7 @@ export function TitleDetailsBody({
               </AppText>
             </View>
           ))}
-        </View>
+        </Animated.View>
       )}
 
       <AppText peso="medio" style={styles.genres}>
@@ -143,7 +196,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#d77c29', letterSpacing: 1.3, marginBottom: 4 },
   title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.45, marginBottom: 4 },
   meta: { color: '#7b7b78', fontSize: 13, lineHeight: 18 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 12 },
+  ratingRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 12 },
   ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 11, backgroundColor: '#182230' },
   rating: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
   ratingTag: { color: '#f3b43f', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
@@ -153,7 +206,7 @@ const styles = StyleSheet.create({
   mcRed: { backgroundColor: '#c0392b' },
   metacriticScore: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
   metacriticLabel: { color: 'rgba(255,253,248,0.9)', fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
-  providerBadge: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
+  providerBadge: { flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
   allProvidersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   providerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10 },
   providerPillText: { color: '#182230', fontSize: 11 },

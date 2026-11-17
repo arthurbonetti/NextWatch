@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BackButton } from '@/components/atoms/BackButton';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
 import { Subscription } from '@/constants/subscriptions';
@@ -54,14 +55,7 @@ export default function SubscriptionsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Pressable
-            onPress={handleBack}
-            hitSlop={6}
-            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Voltar">
-            <MaterialIcons name="arrow-back" size={22} color="#182230" />
-          </Pressable>
+          <BackButton onPress={handleBack} />
           <View style={styles.headerCopy}>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
             <AppText tipo="titulo" peso="forte" style={styles.title}>Assinaturas</AppText>
@@ -88,7 +82,10 @@ export default function SubscriptionsScreen() {
               </AppText>
             </View>
           </View>
-          <AppText tipo="destaque" familia="sans" peso="forte" tabular style={styles.totalValue}>{currency.format(monthlyTotal)}</AppText>
+          <AppText tipo="destaque" familia="sans" peso="forte" tabular style={styles.totalValue}>
+            <AppText tipo="subtitulo" familia="sans" peso="semiforte" style={styles.totalCurrency}>R$ </AppText>
+            {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </AppText>
           <View style={styles.totalFooter}>
             <AppText tipo="legenda" tabular style={styles.totalHint}>{currency.format(monthlyTotal * 12)} por ano</AppText>
             <Pressable
@@ -114,11 +111,11 @@ export default function SubscriptionsScreen() {
         </View>
 
         <View style={styles.sectionHeader}>
-          <View>
+          <View style={styles.sectionHeaderCopy}>
             <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus serviços</AppText>
             <AppText tipo="legenda" style={styles.sectionSubtitle}>Toque em um serviço para editar valor ou vencimento</AppText>
           </View>
-          <AppText tipo="legenda" peso="forte" tabular style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
+          <AppText tipo="legenda" peso="forte" tabular numberOfLines={1} style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
         </View>
 
         {subscriptions.length === 0 ? (
@@ -235,7 +232,6 @@ const styles = StyleSheet.create({
   container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 42 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  backButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 3 },
   title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
@@ -250,6 +246,7 @@ const styles = StyleSheet.create({
   activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#55c596' },
   activeText: { color: '#a5e6ca', fontSize: 11 },
   totalValue: { color: '#fffdf8', fontSize: 32, lineHeight: 38, marginTop: 12, marginBottom: 12 },
+  totalCurrency: { color: 'rgba(255,253,248,0.75)', fontSize: 19, lineHeight: 26 },
   totalFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 12 },
   totalHint: { color: '#bdc6ce', fontSize: 12 },
   costLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
@@ -258,10 +255,11 @@ const styles = StyleSheet.create({
   breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   annualText: { color: '#bdc6ce', fontSize: 12 },
   annualValue: { color: '#fffdf8', fontSize: 13 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13 },
+  sectionHeaderCopy: { flex: 1 },
   sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
   sectionSubtitle: { color: '#7b7b78', marginTop: 2, fontSize: 12, lineHeight: 17 },
-  countBadge: { color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12 },
+  countBadge: { flexShrink: 0, textAlign: 'center', color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12 },
   subscriptionCard: { borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', padding: 14, marginBottom: 12 },
   subscriptionInactive: { opacity: 0.68 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

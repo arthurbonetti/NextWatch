@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BackButton } from '@/components/atoms/BackButton';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
 import { MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,14 +33,7 @@ export default function MyListScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Pressable
-            onPress={handleBack}
-            hitSlop={6}
-            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Voltar">
-            <MaterialIcons name="arrow-back" size={22} color="#182230" />
-          </Pressable>
+          <BackButton onPress={handleBack} />
           <View style={styles.headerCopy}>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SUA COLEÇÃO</AppText>
             <AppText tipo="titulo" peso="forte" style={styles.title}>Minha Lista</AppText>

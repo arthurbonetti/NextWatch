@@ -3,9 +3,10 @@ import { ComponentProps, memo, useEffect, useState } from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { formatAverageRating, getMetacriticScore, getTitleServices, MediaTitle } from '@/constants/catalog';
+import { getMetacriticScore, getTitleServices, MediaTitle } from '@/constants/catalog';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -63,25 +64,19 @@ export const MediaTitleCard = memo(function MediaTitleCard({
           backdropPath={title.tmdbBackdropPath}
         />
         {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
-        <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}>
-          <MaterialIcons name="star" size={12} color="#f3b43f" />
-          <AppText tipo="legenda" peso="forte" tabular style={styles.posterRatingText}>
-            {formatAverageRating(title)}
-          </AppText>
-        </View>
       </Pressable>
       <Pressable
         style={({ pressed }) => [styles.resultCopy, pressed && styles.pressed]}
         onPress={onOpen}
         accessibilityRole="button">
-        <AppText peso="forte" style={styles.resultTitle} numberOfLines={1}>
+        <AppText peso="forte" style={styles.resultTitle} numberOfLines={2}>
           {title.title}
         </AppText>
         <AppText tipo="legenda" tabular style={styles.resultMeta}>
           {title.year || 'Ano não informado'} · {title.kind} · {duration}
         </AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>
-          {title.genres.join(' · ')}
+          {title.genres.slice(0, 2).join(' · ')}
         </AppText>
         <View style={styles.serviceLine}>
           <ServiceLogoList services={getTitleServices(title)} size={20} maxVisible={3} gap={5} overflowGap={4} />
@@ -96,7 +91,16 @@ export const MediaTitleCard = memo(function MediaTitleCard({
         hitSlop={6}
         accessibilityRole="button"
         accessibilityLabel={actionLabel}>
-        <MaterialIcons name={actionIcon} size={18} color={actionIconColor} />
+        {actionIcon === 'bookmark' || actionIcon === 'bookmark-add' ? (
+          <BookmarkIcon
+            saved={actionIcon === 'bookmark'}
+            itemKey={title.id}
+            size={18}
+            color={actionIconColor}
+          />
+        ) : (
+          <MaterialIcons name={actionIcon} size={18} color={actionIconColor} />
+        )}
       </Pressable>
     </View>
   );
@@ -124,19 +128,8 @@ const styles = StyleSheet.create({
     gap: 7,
     overflow: 'hidden',
   },
-  posterRatingCorner: { position: 'absolute', bottom: 5 },
-  posterRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    backgroundColor: 'rgba(24,34,48,0.78)',
-  },
-  posterRatingText: { color: '#fffdf8', fontSize: 10 },
   resultCopy: { flex: 1, paddingHorizontal: 12, paddingVertical: 4 },
-  resultTitle: { color: '#182230', fontSize: 15, lineHeight: 20, marginBottom: 3 },
+  resultTitle: { color: '#182230', fontSize: 14.5, lineHeight: 19, marginBottom: 3 },
   resultMeta: { color: '#7b7b78', fontSize: 12, lineHeight: 17 },
   resultGenres: { color: '#8d7a61', fontSize: 12, lineHeight: 17, marginTop: 2 },
   serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },

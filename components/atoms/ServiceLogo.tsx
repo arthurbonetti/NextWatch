@@ -18,6 +18,7 @@ type ServiceLogoListProps = {
   overflowSize?: number;
   gap?: number;
   overflowGap?: number;
+  overflowExpanded?: boolean;
   onPressOverflow?: () => void;
 };
 
@@ -59,6 +60,7 @@ export function ServiceLogoList({
   overflowSize,
   gap = 6,
   overflowGap = 5,
+  overflowExpanded = false,
   onPressOverflow,
 }: ServiceLogoListProps) {
   const hasOverflow = services.length > maxVisible;
@@ -83,11 +85,20 @@ export function ServiceLogoList({
         onPressOverflow ? (
           <Pressable
             onPress={onPressOverflow}
-            style={[styles.moreBadge, badgeBox]}
+            style={({ pressed }) => [styles.moreBadge, badgeBox, pressed && styles.moreBadgePressed]}
             accessibilityRole="button"
-            accessibilityLabel={`Mais ${extraCount} ${extraCount === 1 ? 'plataforma' : 'plataformas'}`}>
-            <AppText peso="forte" style={[styles.moreText, { fontSize: badgeFontSize, lineHeight: badgeFontSize + 3 }]}>
-              +{extraCount}
+            accessibilityLabel={
+              overflowExpanded
+                ? 'Recolher plataformas'
+                : `Mais ${extraCount} ${extraCount === 1 ? 'plataforma' : 'plataformas'}`
+            }>
+            <AppText
+              peso="forte"
+              style={[
+                styles.moreText,
+                { fontSize: overflowExpanded ? badgeFontSize + 2 : badgeFontSize, lineHeight: badgeFontSize + 3 },
+              ]}>
+              {overflowExpanded ? '×' : `+${extraCount}`}
             </AppText>
           </Pressable>
         ) : (
@@ -115,5 +126,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d8ccb9',
   },
+  moreBadgePressed: { opacity: 0.8, transform: [{ scale: 0.92 }] },
   moreText: { color: '#182230' },
 });

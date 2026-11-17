@@ -15,6 +15,8 @@ import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 type TypeFilter = 'Quero ver' | 'Assistidos' | 'Todos';
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 
+const countFormat = new Intl.NumberFormat('pt-BR');
+
 export default function ExploreScreen() {
   const { titles, status, errorMessage, refreshCatalog, searchTitles } = useCatalog();
   const { isSaved, toggleSavedTitle } = useMyList();
@@ -308,8 +310,8 @@ export default function ExploreScreen() {
                   {searchLoading
                     ? 'Pesquisando no catálogo online…'
                     : status === 'ready'
-                    ? `${results.length} de ${availableTitles.length} títulos disponíveis`
-                    : `${results.length} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
+                    ? `${countFormat.format(results.length)} de ${countFormat.format(availableTitles.length)} títulos disponíveis`
+                    : `${countFormat.format(results.length)} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
                 </AppText>
               </View>
               <View style={styles.sortBadge}>
@@ -354,8 +356,8 @@ const styles = StyleSheet.create({
   catalogNoticeTitle: { color: '#8b5827', fontSize: 13, lineHeight: 18, marginBottom: 2 },
   catalogNoticeText: { color: '#706555', fontSize: 12, lineHeight: 17 },
   refreshButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#fffdf8' },
-  quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 17 },
-  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
+  quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 17 },
+  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 11, paddingVertical: 8, backgroundColor: '#fffdf8' },
   quickChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
   quickText: { color: '#6c6b67', fontSize: 12 },
   quickTextActive: { color: '#fffdf8', fontSize: 12 },

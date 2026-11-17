@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/atoms/AppButton';
@@ -20,7 +20,17 @@ export default function RegisterScreen() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [backPressAnim] = useState(() => new Animated.Value(0));
   const isLoading = status === 'loading';
+
+  const animateBack = (toValue: number) => {
+    Animated.spring(backPressAnim, {
+      toValue,
+      useNativeDriver: true,
+      speed: 36,
+      bounciness: 6,
+    }).start();
+  };
 
   if (authReady && user) {
     return <Redirect href="/(tabs)" />;
@@ -60,11 +70,25 @@ export default function RegisterScreen() {
           <View style={styles.container}>
             <Pressable
               onPress={() => { clearAuthError(); router.back(); }}
+              onPressIn={() => animateBack(1)}
+              onPressOut={() => animateBack(0)}
               disabled={isLoading}
               hitSlop={8}
               accessibilityRole="button"
               style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}>
-              <MaterialIcons name="arrow-back" size={18} color="#d77c29" />
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      translateX: backPressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -3.5],
+                      }),
+                    },
+                  ],
+                }}>
+                <MaterialIcons name="arrow-back" size={18} color="#d77c29" />
+              </Animated.View>
               <AppText tipo="legenda" peso="forte" style={styles.link}>Voltar para o login</AppText>
             </Pressable>
 
@@ -165,18 +189,6 @@ export default function RegisterScreen() {
                 </View>
               )}
             </View>
-
-            <View style={styles.loginPrompt}>
-              <AppText tipo="legenda" style={styles.accountText}>Já tem uma conta?</AppText>
-              <Pressable
-                onPress={() => { clearAuthError(); router.replace('/(auth)/login'); }}
-                disabled={isLoading}
-                hitSlop={8}
-                style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
-                accessibilityRole="button">
-                <AppText tipo="legenda" peso="forte" style={styles.link}>Fazer login</AppText>
-              </Pressable>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -233,8 +245,5 @@ const styles = StyleSheet.create({
   submitButton: { backgroundColor: '#182230', borderRadius: 14, marginTop: 4 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
   loadingText: { color: '#6c6b67' },
-  loginPrompt: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 18 },
-  accountText: { color: '#6c6b67' },
-  linkButton: { paddingVertical: 4, paddingHorizontal: 2 },
   link: { color: '#d77c29' },
 });

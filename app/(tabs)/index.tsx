@@ -19,6 +19,7 @@ import { quickSortByRandom } from '@/utils/quickSort';
 type KindFilter = 'Todos' | MediaKind;
 const MIN_DRAW_RATING = 6.0;
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -181,7 +182,7 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
             onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{activeSubscriptions.length}</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{countFormat.format(activeSubscriptions.length)}</AppText>
             <AppText tipo="legenda" peso="medio" style={styles.statLabel}>streamings ativos</AppText>
           </Pressable>
           <View style={styles.statDivider} />
@@ -189,12 +190,12 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
             onPress={() => router.push('/(tabs)/tab2')}
             accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{availableTitles.length}</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{countFormat.format(availableTitles.length)}</AppText>
             <AppText tipo="legenda" peso="medio" style={styles.statLabel}>no catálogo</AppText>
           </Pressable>
           <View style={styles.statDivider} />
           <View style={styles.statBlock}>
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{eligibleTitles.length}</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{countFormat.format(eligibleTitles.length)}</AppText>
             <AppText tipo="legenda" peso="medio" style={styles.statLabel}>nota 6,0+</AppText>
           </View>
         </View>
@@ -224,7 +225,7 @@ export default function HomeScreen() {
             <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
             <AppText tipo="legenda" style={styles.heroDescription}>
               {availableTitles.length > 0
-                ? `${eligibleTitles.length} obras com nota 6,0+ prontas para sortear nos seus streamings.`
+                ? `${countFormat.format(eligibleTitles.length)} obras com nota 6,0+ prontas para sortear nos seus streamings.`
                 : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
             </AppText>
             <Pressable
@@ -287,7 +288,7 @@ export default function HomeScreen() {
               <ServiceLogo name={subscription.provider} size={39} />
               <View style={styles.serviceCopy}>
                 <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>{subscription.provider}</AppText>
-                <AppText tipo="legenda" tabular style={styles.muted}>{currency.format(subscription.monthlyPrice)}/mês</AppText>
+                <AppText tipo="legenda" tabular style={styles.servicePrice}>{currency.format(subscription.monthlyPrice)}/mês</AppText>
               </View>
             </Pressable>
           ))}
@@ -374,7 +375,7 @@ export default function HomeScreen() {
               <View style={[styles.wheelDot, styles.wheelDotLeft]} />
               <View style={styles.wheelCenter}><MaterialIcons name="casino" size={37} color="#182230" /></View>
             </Animated.View>
-            <AppText tipo="legenda" tabular style={styles.rouletteCaption}>Escolhendo entre {eligibleTitles.length} títulos…</AppText>
+            <AppText tipo="legenda" tabular style={styles.rouletteCaption}>Escolhendo entre {countFormat.format(eligibleTitles.length)} títulos…</AppText>
             <View style={styles.roulettePreview}>
               <View style={[styles.previewPoster, { backgroundColor: rouletteTitle?.color ?? '#263b50' }]}>
                 {rouletteTitle && <TitleArtwork id={rouletteTitle.id} variant="poster" posterPath={rouletteTitle.tmdbPosterPath} backdropPath={rouletteTitle.tmdbBackdropPath} />}
@@ -449,7 +450,7 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
             <AppText tipo="legenda" tabular style={styles.resultCount}>
-              {`${eligibleTitles.length} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
+              {`${countFormat.format(eligibleTitles.length)} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
             </AppText>
             {drawError && <AppText tipo="legenda" style={styles.drawError}>{drawError}</AppText>}
             <Pressable
@@ -505,7 +506,19 @@ export default function HomeScreen() {
         )}
       </Modal>
 
-      <TitleDetailsModal title={selectedTitle} visible={detailsVisible} onClose={() => setDetailsVisible(false)} />
+      <TitleDetailsModal
+        title={selectedTitle}
+        visible={detailsVisible}
+        onClose={() => setDetailsVisible(false)}
+        onDrawAnother={
+          eligibleTitles.length > 1
+            ? () => {
+                setDetailsVisible(false);
+                drawTitle();
+              }
+            : undefined
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -531,10 +544,10 @@ const styles = StyleSheet.create({
   muted: { color: '#7b7b78' },
   hero: { minHeight: 206, overflow: 'hidden', borderRadius: 22, backgroundColor: '#182230', borderWidth: 1, borderColor: '#263442', flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
   heroGlow: { position: 'absolute', width: 210, height: 210, borderRadius: 105, right: -44, top: -36, backgroundColor: '#223246' },
-  heroCopy: { flex: 1, padding: 18, zIndex: 1 },
+  heroCopy: { flex: 1, paddingVertical: 18, paddingLeft: 18, paddingRight: 10, zIndex: 1 },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   pillText: { color: '#f3b43f', letterSpacing: 1.3 },
-  heroTitle: { color: '#fffdf8', fontSize: 21, lineHeight: 27, letterSpacing: -0.35, marginBottom: 7 },
+  heroTitle: { color: '#fffdf8', fontSize: 19, lineHeight: 25, letterSpacing: -0.3, marginBottom: 7 },
   heroDescription: { color: '#bdc6ce', maxWidth: 240, fontSize: 13, lineHeight: 19, marginBottom: 16 },
   drawButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, backgroundColor: '#f3b43f', paddingHorizontal: 16, paddingVertical: 11 },
   drawButtonDisabled: { opacity: 0.55 },
@@ -551,7 +564,8 @@ const styles = StyleSheet.create({
   serviceCard: { width: 178, height: 70, padding: 11, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', flexDirection: 'row', alignItems: 'center', gap: 10 },
   emptyServiceCard: { minWidth: 200, height: 70, paddingHorizontal: 16, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#ded8cd', borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', gap: 9 },
   serviceCopy: { flex: 1 },
-  serviceName: { color: '#182230', fontSize: 13 },
+  serviceName: { color: '#182230', fontSize: 14, lineHeight: 19, marginBottom: 1 },
+  servicePrice: { color: '#8c8a84', fontSize: 11.5, lineHeight: 15 },
   titleList: { gap: 13, paddingBottom: 28 },
   emptyTitlesCard: { minHeight: 118, width: 260, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, padding: 14, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
   titleCard: { width: 136 },

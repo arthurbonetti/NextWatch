@@ -56,7 +56,8 @@ export default function ProfileTabScreen() {
           <View style={styles.statDivider} />
           <View style={styles.stat}>
             <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>
-              {monthlyTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              <AppText tipo="legenda" peso="semiforte" style={styles.currencyPrefix}>R$ </AppText>
+              {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </AppText>
             <AppText tipo="legenda" style={styles.muted}>por mês</AppText>
           </View>
@@ -121,6 +122,7 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
   statDivider: { width: 1, height: 34, backgroundColor: '#e8e2d5' },
   number: { color: '#182230', textAlign: 'center', fontSize: 18, lineHeight: 24, marginBottom: 2 },
+  currencyPrefix: { color: '#657078', fontSize: 12.5, lineHeight: 18 },
   row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 16, paddingHorizontal: 16, marginBottom: 10 },
   rowText: { color: '#182230', flex: 1, fontSize: 15, lineHeight: 20, marginLeft: 12 },
   rowCount: { color: '#8b5827', backgroundColor: '#f1e8d7', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, fontSize: 12, marginRight: 6 },
