@@ -10,6 +10,7 @@ export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 type CatalogContextValue = {
   titles: MediaTitle[];
   status: CatalogStatus;
+  isFetchingCatalog: boolean;
   errorMessage: string | null;
   totalResults: number;
   refreshCatalog: () => Promise<void>;
@@ -33,6 +34,7 @@ export function CatalogProvider({ children }: PropsWithChildren) {
   const [remoteProviderKey, setRemoteProviderKey] = useState('');
   const [totalResults, setTotalResults] = useState(0);
   const [status, setStatus] = useState<CatalogStatus>('loading');
+  const [isFetchingCatalog, setIsFetchingCatalog] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessionCatalog] = useState(() => quickSortByRandom(CATALOG));
   const [searchedTitles, setSearchedTitles] = useState<MediaTitle[]>([]);
@@ -44,11 +46,13 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     const requestVersion = ++requestVersionRef.current;
     if (!hasTmdbApiKey()) {
       setStatus('needs-api-key');
+      setIsFetchingCatalog(false);
       setErrorMessage(null);
       return;
     }
 
     setStatus('loading');
+    setIsFetchingCatalog(true);
     setErrorMessage(null);
     const shouldAbort = () =>
       requestVersionRef.current !== requestVersion || currentProviderKeyRef.current !== providerKey;
@@ -65,9 +69,13 @@ export function CatalogProvider({ children }: PropsWithChildren) {
         },
         shouldAbort,
       );
+      if (!shouldAbort()) {
+        setIsFetchingCatalog(false);
+      }
     } catch (error) {
       if (shouldAbort()) return;
       setStatus('error');
+      setIsFetchingCatalog(false);
       setErrorMessage(error instanceof Error ? error.message : 'Não foi possível atualizar o catálogo do TMDB.');
     }
   }, [providerKey, storageReady]);
@@ -123,12 +131,13 @@ export function CatalogProvider({ children }: PropsWithChildren) {
   const value = useMemo<CatalogContextValue>(() => ({
     titles: activeTitles,
     status,
+    isFetchingCatalog,
     errorMessage,
     totalResults: remoteProviderKey === providerKey ? totalResults : 0,
     refreshCatalog,
     searchTitles,
     findTitle,
-  }), [activeTitles, errorMessage, findTitle, providerKey, refreshCatalog, remoteProviderKey, searchTitles, status, totalResults]);
+  }), [activeTitles, errorMessage, findTitle, isFetchingCatalog, providerKey, refreshCatalog, remoteProviderKey, searchTitles, status, totalResults]);
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 }

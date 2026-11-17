@@ -1,24 +1,57 @@
 import React from 'react';
 import { StyleSheet, Text, TextProps } from 'react-native';
 
+import {
+  FONT_FAMILIES,
+  TABULAR_NUMS_STYLE,
+  TextFamily,
+  TextRole,
+  TextWeight,
+} from '@/constants/typography';
+
 type TextoProps = TextProps & {
-  tipo?: 'titulo' | 'subtitulo' | 'texto' | 'legenda';
-  peso?: 'normal' | 'medio' | 'forte';
+  tipo?: TextRole;
+  peso?: TextWeight;
+  familia?: TextFamily;
+  tabular?: boolean;
 };
+
+function resolveFontFamily(family: TextFamily, peso: TextWeight): string {
+  if (family === 'editorial') {
+    return peso === 'forte' ? FONT_FAMILIES.display.bold : FONT_FAMILIES.display.semibold;
+  }
+
+  switch (peso) {
+    case 'forte':
+      return FONT_FAMILIES.sans.bold;
+    case 'semiforte':
+      return FONT_FAMILIES.sans.semibold;
+    case 'medio':
+      return FONT_FAMILIES.sans.medium;
+    default:
+      return FONT_FAMILIES.sans.regular;
+  }
+}
 
 export function AppText({
   tipo = 'texto',
   peso = 'normal',
+  familia,
+  tabular = false,
   style,
   children,
   ...props
 }: TextoProps) {
+  const resolvedFamily: TextFamily = familia ?? (tipo === 'destaque' || tipo === 'titulo' ? 'editorial' : 'sans');
+  const fontFamily = resolveFontFamily(resolvedFamily, peso);
+
   return (
     <Text
       style={[
         styles.base,
         estiloTipo[tipo],
-        estiloPeso[peso],
+        { fontFamily },
+        tabular && TABULAR_NUMS_STYLE,
         style,
       ]}
       {...props}
@@ -29,40 +62,36 @@ export function AppText({
 }
 
 const estiloTipo = StyleSheet.create({
+  destaque: {
+    fontSize: 32,
+    lineHeight: 37,
+    letterSpacing: -0.6,
+  },
   titulo: {
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.3,
+    fontSize: 26,
+    lineHeight: 31,
+    letterSpacing: -0.45,
   },
   subtitulo: {
-    fontSize: 19,
-    lineHeight: 25,
-    letterSpacing: -0.15,
+    fontSize: 18,
+    lineHeight: 24,
+    letterSpacing: -0.18,
   },
   texto: {
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0,
   },
   legenda: {
     fontSize: 12,
     lineHeight: 17,
-  },
-});
-
-const estiloPeso = StyleSheet.create({
-  normal: {
-    fontWeight: '400',
-  },
-  medio: {
-    fontWeight: '500',
-  },
-  forte: {
-    fontWeight: '700',
+    letterSpacing: 0,
   },
 });
 
 const styles = StyleSheet.create({
   base: {
     color: '#182230',
+    fontWeight: '400',
   },
 });

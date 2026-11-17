@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 
+import { FONT_FAMILIES } from '@/constants/typography';
+
 import { AppText } from './AppText';
 
 type CampoProps = TextInputProps & {
@@ -35,7 +37,7 @@ export function AppInput({
   return (
     <View style={styles.wrapper}>
       {rotulo ? (
-        <AppText tipo="legenda" peso="forte" style={styles.rotulo}>
+        <AppText tipo="legenda" peso="semiforte" style={styles.rotulo}>
           {rotulo}
         </AppText>
       ) : null}
@@ -94,6 +96,8 @@ const styles = StyleSheet.create({
   },
   rotulo: {
     color: '#182230',
+    fontSize: 13,
+    lineHeight: 18,
     marginBottom: 7,
   },
   inputContainer: {
@@ -109,7 +113,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 15,
+    fontFamily: FONT_FAMILIES.sans.regular,
+    fontSize: 16,
+    lineHeight: 22,
     color: '#182230',
   },
   eyeButton: {

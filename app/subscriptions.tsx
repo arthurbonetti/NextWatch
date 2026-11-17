@@ -83,14 +83,14 @@ export default function SubscriptionsScreen() {
             <AppText tipo="legenda" peso="forte" style={styles.totalLabel}>GASTO MENSAL ATIVO</AppText>
             <View style={styles.activeBadge}>
               <View style={styles.activeDot} />
-              <AppText tipo="legenda" peso="forte" style={styles.activeText}>
+              <AppText tipo="legenda" peso="forte" tabular style={styles.activeText}>
                 {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'ativa' : 'ativas'}
               </AppText>
             </View>
           </View>
-          <AppText tipo="titulo" peso="forte" style={styles.totalValue}>{currency.format(monthlyTotal)}</AppText>
+          <AppText tipo="destaque" familia="sans" peso="forte" tabular style={styles.totalValue}>{currency.format(monthlyTotal)}</AppText>
           <View style={styles.totalFooter}>
-            <AppText tipo="legenda" style={styles.totalHint}>{currency.format(monthlyTotal * 12)} por ano</AppText>
+            <AppText tipo="legenda" tabular style={styles.totalHint}>{currency.format(monthlyTotal * 12)} por ano</AppText>
             <Pressable
               onPress={() => setShowAnnualCost((value) => !value)}
               style={({ pressed }) => [styles.costLink, pressed && styles.pressed]}
@@ -103,11 +103,11 @@ export default function SubscriptionsScreen() {
             <View style={styles.annualBreakdown}>
               <View style={styles.breakdownRow}>
                 <AppText tipo="legenda" style={styles.annualText}>Média por streaming ativo</AppText>
-                <AppText tipo="legenda" peso="forte" style={styles.annualValue}>{currency.format(averagePerService)}</AppText>
+                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{currency.format(averagePerService)}</AppText>
               </View>
               <View style={styles.breakdownRow}>
                 <AppText tipo="legenda" style={styles.annualText}>Projeção em 6 meses</AppText>
-                <AppText tipo="legenda" peso="forte" style={styles.annualValue}>{currency.format(monthlyTotal * 6)}</AppText>
+                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{currency.format(monthlyTotal * 6)}</AppText>
               </View>
             </View>
           )}
@@ -118,7 +118,7 @@ export default function SubscriptionsScreen() {
             <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus serviços</AppText>
             <AppText tipo="legenda" style={styles.sectionSubtitle}>Toque em um serviço para editar valor ou vencimento</AppText>
           </View>
-          <AppText tipo="legenda" peso="forte" style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
+          <AppText tipo="legenda" peso="forte" tabular style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
         </View>
 
         {subscriptions.length === 0 ? (
@@ -147,12 +147,12 @@ export default function SubscriptionsScreen() {
                   <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>
                     {subscription.provider}
                   </AppText>
-                  <AppText tipo="legenda" style={styles.billingText} numberOfLines={1}>
+                  <AppText tipo="legenda" tabular style={styles.billingText} numberOfLines={1}>
                     Vence todo dia {subscription.billingDay}
                   </AppText>
                 </View>
                 <View style={styles.priceArea}>
-                  <AppText peso="forte" style={styles.price}>{currency.format(subscription.monthlyPrice)}</AppText>
+                  <AppText peso="forte" tabular style={styles.price}>{currency.format(subscription.monthlyPrice)}</AppText>
                   <AppText tipo="legenda" style={styles.priceCaption}>por mês</AppText>
                 </View>
               </Pressable>
@@ -171,7 +171,7 @@ export default function SubscriptionsScreen() {
                   {subscription.active && subscription.renewalAlert && (
                     <View style={styles.reminderBadge}>
                       <MaterialIcons name="notifications-none" size={13} color="#a36a21" />
-                      <AppText tipo="legenda" peso="forte" style={styles.reminderText} numberOfLines={1}>
+                      <AppText tipo="legenda" peso="forte" tabular style={styles.reminderText} numberOfLines={1}>
                         Aviso {subscription.alertDays} {subscription.alertDays === 1 ? 'dia' : 'dias'} antes
                       </AppText>
                     </View>
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   backButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: '#182230', fontSize: 24, lineHeight: 28 },
+  title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
   headerActionBtn: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 13, backgroundColor: '#f3b43f' },
   headerActionText: { color: '#182230', fontSize: 13 },
   totalCard: { overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: '#263442', paddingHorizontal: 18, paddingTop: 18, paddingBottom: 16, backgroundColor: '#182230', marginBottom: 26 },
@@ -260,17 +260,17 @@ const styles = StyleSheet.create({
   annualValue: { color: '#fffdf8', fontSize: 13 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
   sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  sectionSubtitle: { color: '#7b7b78', marginTop: 2, fontSize: 11 },
-  countBadge: { color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 11 },
+  sectionSubtitle: { color: '#7b7b78', marginTop: 2, fontSize: 12, lineHeight: 17 },
+  countBadge: { color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12 },
   subscriptionCard: { borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', padding: 14, marginBottom: 12 },
   subscriptionInactive: { opacity: 0.68 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   serviceInfo: { flex: 1 },
-  serviceName: { color: '#182230', fontSize: 16, lineHeight: 20 },
-  billingText: { color: '#7b7b78', fontSize: 12, marginTop: 2 },
+  serviceName: { color: '#182230', fontSize: 16, lineHeight: 21 },
+  billingText: { color: '#7b7b78', fontSize: 12, lineHeight: 17, marginTop: 2 },
   priceArea: { alignItems: 'flex-end' },
-  price: { color: '#182230', fontSize: 16, lineHeight: 20 },
-  priceCaption: { color: '#7b7b78', fontSize: 11, marginTop: 1 },
+  price: { color: '#182230', fontSize: 16, lineHeight: 21 },
+  priceCaption: { color: '#7b7b78', fontSize: 12, marginTop: 1 },
   cardDivider: { height: 1, backgroundColor: '#f1ece1', marginVertical: 11 },
   cardBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   badgesRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, flex: 1 },
@@ -293,12 +293,12 @@ const styles = StyleSheet.create({
   addRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d3c9', borderStyle: 'dashed', backgroundColor: '#fffdf8', marginTop: 6 },
   addIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3b43f', marginRight: 12 },
   addCopy: { flex: 1 },
-  addTitle: { color: '#182230', fontSize: 14 },
-  addSubtitle: { color: '#7b7b78', fontSize: 11, marginTop: 2 },
+  addTitle: { color: '#182230', fontSize: 14, lineHeight: 19 },
+  addSubtitle: { color: '#7b7b78', fontSize: 12, lineHeight: 17, marginTop: 2 },
   emptyState: { alignItems: 'center', paddingHorizontal: 26, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
   emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#f1e8d7', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  emptyTitle: { color: '#182230', fontSize: 16 },
-  emptyDescription: { color: '#7b7b78', textAlign: 'center', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  emptyTitle: { color: '#182230', fontSize: 17, lineHeight: 22 },
+  emptyDescription: { color: '#7b7b78', textAlign: 'center', fontSize: 13, lineHeight: 19, marginTop: 6 },
   emptyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 13, paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#f3b43f', marginTop: 16 },
   emptyButtonText: { color: '#182230', fontSize: 13 },
 });

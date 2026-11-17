@@ -130,7 +130,7 @@ export default function LoginScreen() {
               />
 
               <AppButton
-                titulo={isLoading ? 'Entrando...' : 'Entrar na conta'}
+                titulo={isLoading ? 'Entrando…' : 'Entrar na conta'}
                 onPress={() => { void handleLogin(); }}
                 disabled={isLoading}
                 estilo={styles.submitButton}
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandCopy: { flex: 1 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.6, marginBottom: 2 },
+  eyebrow: { color: '#e58c34', letterSpacing: 2.0, marginBottom: 2 },
   brandTagline: { color: '#687078' },
   card: {
     backgroundColor: '#fffdf8',
@@ -200,8 +200,8 @@ const styles = StyleSheet.create({
     borderColor: '#e8e2d5',
     padding: 22,
   },
-  title: { color: '#182230', fontSize: 25, lineHeight: 30, marginBottom: 6 },
-  subtitle: { color: '#687078', marginBottom: 16 },
+  title: { color: '#182230', fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
+  subtitle: { color: '#687078', fontSize: 15, lineHeight: 23, marginBottom: 16 },
   servicesStrip: {
     alignItems: 'center',
     backgroundColor: '#f7f5f0',

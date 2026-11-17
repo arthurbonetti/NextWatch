@@ -44,7 +44,7 @@ export default function MyListScreen() {
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SUA COLEÇÃO</AppText>
             <AppText tipo="titulo" peso="forte" style={styles.title}>Minha Lista</AppText>
           </View>
-          <AppText tipo="legenda" peso="forte" style={styles.countBadge}>
+          <AppText tipo="legenda" peso="forte" tabular style={styles.countBadge}>
             {savedTitles.length} {savedTitles.length === 1 ? 'obra' : 'obras'}
           </AppText>
         </View>
@@ -97,13 +97,13 @@ const styles = StyleSheet.create({
   backButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: '#182230', fontSize: 24, lineHeight: 28 },
-  countBadge: { color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 11 },
+  title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
+  countBadge: { color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12 },
   savedBadgeButton: { backgroundColor: '#fff2d8', borderWidth: 1, borderColor: '#e58c34' },
   emptyState: { alignItems: 'center', paddingHorizontal: 26, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
   emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#f1e8d7', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  emptyTitle: { color: '#182230', fontSize: 16 },
-  emptyDescription: { color: '#7b7b78', textAlign: 'center', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  emptyTitle: { color: '#182230', fontSize: 17, lineHeight: 22 },
+  emptyDescription: { color: '#7b7b78', textAlign: 'center', fontSize: 13, lineHeight: 19, marginTop: 6 },
   emptyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 13, paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#f3b43f', marginTop: 16 },
   emptyButtonText: { color: '#182230', fontSize: 13 },
 });

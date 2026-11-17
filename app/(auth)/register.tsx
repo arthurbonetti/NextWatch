@@ -153,7 +153,7 @@ export default function RegisterScreen() {
               />
 
               <AppButton
-                titulo={isLoading ? 'Criando conta...' : 'Criar minha conta'}
+                titulo={isLoading ? 'Criando conta…' : 'Criar minha conta'}
                 onPress={() => { void handleRegister(); }}
                 disabled={isLoading}
                 estilo={styles.submitButton}
@@ -198,9 +198,9 @@ const styles = StyleSheet.create({
     borderColor: '#e8e2d5',
     padding: 22,
   },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.6, marginBottom: 6 },
-  title: { color: '#182230', fontSize: 25, lineHeight: 30, marginBottom: 6 },
-  subtitle: { color: '#687078', marginBottom: 18 },
+  eyebrow: { color: '#e58c34', letterSpacing: 2.0, marginBottom: 6 },
+  title: { color: '#182230', fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
+  subtitle: { color: '#687078', fontSize: 15, lineHeight: 23, marginBottom: 18 },
   offlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',

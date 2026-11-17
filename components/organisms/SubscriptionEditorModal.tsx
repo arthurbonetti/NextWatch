@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SUBSCRIPTION_PROVIDERS, Subscription, SubscriptionProvider } from '@/constants/subscriptions';
+import { FONT_FAMILIES } from '@/constants/typography';
 
 type Props = {
   initialSubscription?: Subscription;
@@ -73,7 +74,7 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
           <View style={styles.header}>
             <View>
               <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>{initialSubscription ? 'EDITAR PLANO' : 'NOVA ASSINATURA'}</AppText>
-              <AppText tipo="subtitulo" peso="forte" style={styles.title}>{initialSubscription ? 'Atualize os dados' : 'Adicionar serviço'}</AppText>
+              <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.title}>{initialSubscription ? 'Atualize os dados' : 'Adicionar serviço'}</AppText>
             </View>
             <Pressable
               style={({ pressed }) => [styles.close, pressed && styles.pressed]}
@@ -192,7 +193,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.4, marginBottom: 5 },
-  title: { color: '#182230', fontSize: 21, lineHeight: 26 },
+  title: { color: '#182230', fontSize: 22, lineHeight: 27, letterSpacing: -0.35 },
   close: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
   label: { color: '#7b7b78', letterSpacing: 0.8, marginBottom: 10 },
   providers: { gap: 8, paddingBottom: 22 },
@@ -205,14 +206,14 @@ const styles = StyleSheet.create({
   inputWrap: { minHeight: 50, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#ded8cd', backgroundColor: '#f7f5f0', paddingHorizontal: 12 },
   inputWrapFocused: { borderColor: '#182230', backgroundColor: '#fffdf8' },
   currency: { color: '#d77c29', marginRight: 7 },
-  input: { flex: 1, color: '#182230', fontSize: 15, paddingVertical: 9 },
-  daySuffix: { color: '#7b7b78', fontSize: 11 },
+  input: { flex: 1, color: '#182230', fontFamily: FONT_FAMILIES.sans.semibold, fontSize: 16, lineHeight: 22, fontVariant: ['tabular-nums'], paddingVertical: 9 },
+  daySuffix: { color: '#7b7b78', fontSize: 12 },
   alertCard: { borderRadius: 16, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', padding: 13, marginBottom: 17 },
   alertHeader: { flexDirection: 'row', alignItems: 'center' },
   alertIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: '#fff7e8', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   alertCopy: { flex: 1 },
   alertTitle: { color: '#182230', fontSize: 13 },
-  helper: { color: '#7b7b78', fontSize: 11, marginTop: 2 },
+  helper: { color: '#7b7b78', fontSize: 12, lineHeight: 16, marginTop: 2 },
   customSwitchTrack: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#d8d3c9', padding: 3, justifyContent: 'center', marginLeft: 8 },
   customSwitchTrackActive: { backgroundColor: '#182230' },
   customSwitchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fffdf8' },
@@ -220,8 +221,8 @@ const styles = StyleSheet.create({
   reminderOptions: { flexDirection: 'row', gap: 7, marginTop: 12, paddingLeft: 44 },
   reminderChip: { borderRadius: 11, borderWidth: 1, borderColor: '#d8ccb9', paddingHorizontal: 12, paddingVertical: 7 },
   reminderSelected: { borderColor: '#e58c34', backgroundColor: '#fff2d8' },
-  reminderText: { color: '#7b7b78', fontSize: 11 },
-  reminderSelectedText: { color: '#a36a21', fontSize: 11 },
+  reminderText: { color: '#7b7b78', fontSize: 12 },
+  reminderSelectedText: { color: '#a36a21', fontSize: 12 },
   error: { color: '#c0392b', marginBottom: 9 },
   saveButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 15, backgroundColor: '#f3b43f' },
   saveText: { color: '#182230' },

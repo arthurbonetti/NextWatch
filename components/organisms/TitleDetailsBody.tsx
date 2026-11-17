@@ -57,14 +57,14 @@ export function TitleDetailsBody({
       <AppText tipo="titulo" peso="forte" style={styles.title}>
         {title.title}
       </AppText>
-      <AppText tipo="legenda" style={styles.meta}>
+      <AppText tipo="legenda" tabular style={styles.meta}>
         {title.year || 'Ano não informado'}  ·  {title.kind}  ·  {duration}
       </AppText>
 
       <View style={styles.ratingRow}>
         <View style={styles.ratingBadge}>
           <MaterialIcons name="star" size={16} color="#f3b43f" />
-          <AppText peso="forte" style={styles.rating}>
+          <AppText peso="forte" tabular style={styles.rating}>
             {title.imdbRating}
           </AppText>
           <AppText peso="forte" style={styles.ratingTag}>
@@ -77,7 +77,7 @@ export function TitleDetailsBody({
               styles.metacriticBadge,
               metacritic >= 61 ? styles.mcGreen : metacritic >= 40 ? styles.mcYellow : styles.mcRed,
             ]}>
-            <AppText peso="forte" style={styles.metacriticScore}>
+            <AppText peso="forte" tabular style={styles.metacriticScore}>
               {metacritic}
             </AppText>
             <AppText peso="forte" style={styles.metacriticLabel}>
@@ -141,8 +141,8 @@ export function TitleDetailsBody({
 const styles = StyleSheet.create({
   pressed: { opacity: 0.8 },
   eyebrow: { color: '#d77c29', letterSpacing: 1.3, marginBottom: 4 },
-  title: { color: '#182230', fontSize: 24, lineHeight: 29, marginBottom: 4 },
-  meta: { color: '#7b7b78' },
+  title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.45, marginBottom: 4 },
+  meta: { color: '#7b7b78', fontSize: 13, lineHeight: 18 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 12 },
   ratingBadge: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 11, backgroundColor: '#182230' },
   rating: { color: '#fffdf8', fontSize: 15, lineHeight: 18 },
@@ -157,9 +157,9 @@ const styles = StyleSheet.create({
   allProvidersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   providerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10 },
   providerPillText: { color: '#182230', fontSize: 11 },
-  genres: { color: '#8d7a61', fontSize: 13, lineHeight: 18, letterSpacing: 0.2, marginBottom: 14 },
-  sectionTitle: { color: '#182230', fontSize: 17, lineHeight: 22, marginBottom: 5 },
-  synopsis: { color: '#687078', lineHeight: 21, marginBottom: 18 },
+  genres: { color: '#8d7a61', fontSize: 13, lineHeight: 19, letterSpacing: 0.2, marginBottom: 14 },
+  sectionTitle: { color: '#182230', fontSize: 17, lineHeight: 23, marginBottom: 6 },
+  synopsis: { color: '#687078', fontSize: 15.5, lineHeight: 24, maxWidth: 560, marginBottom: 18 },
   synopsisWithToggle: { marginBottom: 4 },
   expandButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 3, marginBottom: 14 },
   expandButtonText: { color: '#d77c29', fontSize: 13 },

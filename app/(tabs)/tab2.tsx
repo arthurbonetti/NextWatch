@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
 import { GENRES, getTitleAverageRating, getTitleServices, matchesSearchQuery, MediaKind, MediaTitle, rankTitlesBySearchRelevance } from '@/constants/catalog';
+import { FONT_FAMILIES } from '@/constants/typography';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
@@ -163,7 +164,7 @@ export default function ExploreScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Abrir filtros">
                 <MaterialIcons name="tune" size={20} color="#182230" />
-                {activeFilterCount > 0 && <View style={styles.filterCount}><AppText style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
+                {activeFilterCount > 0 && <View style={styles.filterCount}><AppText peso="forte" tabular style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
               </Pressable>
             </View>
 
@@ -303,7 +304,7 @@ export default function ExploreScreen() {
             <View style={styles.resultsHeader}>
               <View>
                 <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : typeFilter === 'Assistidos' ? 'Assistidos' : 'Títulos para assistir'}</AppText>
-                <AppText tipo="legenda" style={styles.resultsSubtitle}>
+                <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
                   {searchLoading
                     ? 'Pesquisando no catálogo online…'
                     : status === 'ready'
@@ -344,14 +345,14 @@ const styles = StyleSheet.create({
   filterButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
   filterButtonActive: { borderColor: '#182230', backgroundColor: '#f1e8d7' },
   filterCount: { position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e58c34' },
-  filterCountText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  filterCountText: { color: '#fff', fontSize: 10, lineHeight: 14 },
   searchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginBottom: 14 },
   searchBoxFocused: { borderColor: '#182230' },
-  searchInput: { flex: 1, color: '#182230', fontSize: 15, paddingVertical: 10 },
+  searchInput: { flex: 1, color: '#182230', fontFamily: FONT_FAMILIES.sans.regular, fontSize: 16, lineHeight: 22, paddingVertical: 10 },
   catalogNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 14 },
   catalogNoticeCopy: { flex: 1 },
-  catalogNoticeTitle: { color: '#8b5827', marginBottom: 2 },
-  catalogNoticeText: { color: '#706555', fontSize: 11 },
+  catalogNoticeTitle: { color: '#8b5827', fontSize: 13, lineHeight: 18, marginBottom: 2 },
+  catalogNoticeText: { color: '#706555', fontSize: 12, lineHeight: 17 },
   refreshButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#fffdf8' },
   quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 17 },
   quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
@@ -361,19 +362,19 @@ const styles = StyleSheet.create({
   quickDivider: { width: 1, height: 24, backgroundColor: '#ded8cd', marginHorizontal: 2 },
   filterPanel: { padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 16 },
   filterPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  filterLabel: { color: '#7b7b78', fontSize: 10, letterSpacing: 0.9, marginBottom: 8 },
-  clearFilters: { color: '#d77c29', fontSize: 11, marginBottom: 8 },
+  filterLabel: { color: '#7b7b78', fontSize: 11, letterSpacing: 1, marginBottom: 8 },
+  clearFilters: { color: '#d77c29', fontSize: 12, marginBottom: 8 },
   secondFilterLabel: { marginTop: 12 },
   filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fffdf8' },
   filterChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  filterChipText: { color: '#6c6b67', fontSize: 11 },
-  filterChipTextActive: { color: '#fffdf8', fontSize: 11 },
+  filterChipText: { color: '#6c6b67', fontSize: 12 },
+  filterChipTextActive: { color: '#fffdf8', fontSize: 12 },
   resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3, marginBottom: 12 },
   resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  resultsSubtitle: { color: '#7b7b78', fontSize: 11, marginTop: 2 },
+  resultsSubtitle: { color: '#7b7b78', fontSize: 12, lineHeight: 17, marginTop: 2 },
   sortBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#f1e8d7' },
-  sortBadgeText: { color: '#8b5827', fontSize: 11 },
+  sortBadgeText: { color: '#8b5827', fontSize: 12 },
   searchError: { color: '#c0392b', marginBottom: 8 },
   savedButtonActive: { backgroundColor: '#fff2d8', borderWidth: 1, borderColor: '#e58c34' },
   emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginTop: 10 },

@@ -101,6 +101,8 @@ const styles = StyleSheet.create({
   },
   textoBase: {
     fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.1,
   },
   textoClaro: {
     color: '#fffdf8',

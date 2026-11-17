@@ -24,12 +24,12 @@ export default function TabLayout() {
         tabBarLabel: ({ color, children }) => (
           <AppText
             tipo="legenda"
-            peso="forte"
+            peso="semiforte"
             style={{
               color,
               fontSize: 11,
               lineHeight: 16,
-              letterSpacing: 0.2,
+              letterSpacing: 0.25,
               textAlign: 'center',
             }}>
             {children}

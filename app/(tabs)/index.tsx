@@ -23,11 +23,12 @@ const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: '
 export default function HomeScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { titles, status: catalogStatus } = useCatalog();
+  const { titles, status: catalogStatus, isFetchingCatalog } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
   const [kind, setKind] = useState<KindFilter>('Todos');
   const [genre, setGenre] = useState('Todos os gêneros');
   const [filterVisible, setFilterVisible] = useState(false);
+  const [incompleteCatalogConfirmVisible, setIncompleteCatalogConfirmVisible] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [drawError, setDrawError] = useState<string | null>(null);
@@ -141,6 +142,20 @@ export default function HomeScreen() {
     rouletteTimer.current = setTimeout(advanceRoulette, 100);
   };
 
+  const handleDrawPress = () => {
+    if (drawLock.current || eligibleTitles.length === 0) return;
+    if (isFetchingCatalog) {
+      setIncompleteCatalogConfirmVisible(true);
+      return;
+    }
+    drawTitle();
+  };
+
+  const closeFilterModal = () => {
+    setIncompleteCatalogConfirmVisible(false);
+    setFilterVisible(false);
+  };
+
   const featuredSample = eligibleTitles[0] ?? availableTitles[0] ?? titles[0] ?? null;
 
   return (
@@ -161,28 +176,36 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, isFetchingCatalog && availableTitles.length > 0 && styles.statsRowSyncing]}>
           <Pressable
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
             onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{activeSubscriptions.length}</AppText>
-            <AppText tipo="legenda" style={styles.muted}>streamings ativos</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{activeSubscriptions.length}</AppText>
+            <AppText tipo="legenda" peso="medio" style={styles.statLabel}>streamings ativos</AppText>
           </Pressable>
           <View style={styles.statDivider} />
           <Pressable
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
             onPress={() => router.push('/(tabs)/tab2')}
             accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" style={styles.statNumber}>{availableTitles.length}</AppText>
-            <AppText tipo="legenda" style={styles.muted}>títulos no catálogo</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{availableTitles.length}</AppText>
+            <AppText tipo="legenda" peso="medio" style={styles.statLabel}>no catálogo</AppText>
           </Pressable>
           <View style={styles.statDivider} />
           <View style={styles.statBlock}>
-            <AppText tipo="subtitulo" peso="forte" style={styles.statHighlight}>{eligibleTitles.length}</AppText>
-            <AppText tipo="legenda" style={styles.muted}>nota 6,0+ na roleta</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{eligibleTitles.length}</AppText>
+            <AppText tipo="legenda" peso="medio" style={styles.statLabel}>nota 6,0+</AppText>
           </View>
         </View>
+        {isFetchingCatalog && availableTitles.length > 0 && (
+          <View style={styles.syncNotice}>
+            <MaterialIcons name="autorenew" size={14} color="#d77c29" />
+            <AppText tipo="legenda" peso="medio" style={styles.syncNoticeText}>
+              Carregando mais títulos do catálogo…
+            </AppText>
+          </View>
+        )}
 
         <Animated.View
           style={[
@@ -198,7 +221,7 @@ export default function HomeScreen() {
               <MaterialIcons name="casino" size={14} color="#f3b43f" />
               <AppText tipo="legenda" peso="forte" style={styles.pillText}>ROLETA DE CURADORIA</AppText>
             </View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
+            <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
             <AppText tipo="legenda" style={styles.heroDescription}>
               {availableTitles.length > 0
                 ? `${eligibleTitles.length} obras com nota 6,0+ prontas para sortear nos seus streamings.`
@@ -232,7 +255,7 @@ export default function HomeScreen() {
                 />
                 <View style={styles.heroPosterBadge}>
                   <MaterialIcons name="star" size={11} color="#f3b43f" />
-                  <AppText tipo="legenda" peso="forte" style={styles.heroPosterBadgeText}>
+                  <AppText tipo="legenda" peso="forte" tabular style={styles.heroPosterBadgeText}>
                     {formatAverageRating(featuredSample)}
                   </AppText>
                 </View>
@@ -264,7 +287,7 @@ export default function HomeScreen() {
               <ServiceLogo name={subscription.provider} size={39} />
               <View style={styles.serviceCopy}>
                 <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>{subscription.provider}</AppText>
-                <AppText tipo="legenda" style={styles.muted}>{currency.format(subscription.monthlyPrice)}/mês</AppText>
+                <AppText tipo="legenda" tabular style={styles.muted}>{currency.format(subscription.monthlyPrice)}/mês</AppText>
               </View>
             </Pressable>
           ))}
@@ -309,12 +332,12 @@ export default function HomeScreen() {
                   {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
                   <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}>
                     <MaterialIcons name="star" size={12} color="#f3b43f" />
-                    <AppText tipo="legenda" peso="forte" style={styles.posterRatingText}>{formatAverageRating(title)}</AppText>
+                    <AppText tipo="legenda" peso="forte" tabular style={styles.posterRatingText}>{formatAverageRating(title)}</AppText>
                   </View>
                   {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
                 </View>
                 <AppText peso="forte" style={styles.titleName} numberOfLines={1}>{title.title}</AppText>
-                <AppText tipo="legenda" style={styles.muted}>{title.kind} · {title.year}</AppText>
+                <AppText tipo="legenda" tabular style={styles.muted}>{title.kind} · {title.year}</AppText>
               </Pressable>
             );
           })}
@@ -351,31 +374,42 @@ export default function HomeScreen() {
               <View style={[styles.wheelDot, styles.wheelDotLeft]} />
               <View style={styles.wheelCenter}><MaterialIcons name="casino" size={37} color="#182230" /></View>
             </Animated.View>
-            <AppText tipo="legenda" style={styles.rouletteCaption}>Escolhendo entre {eligibleTitles.length} títulos...</AppText>
+            <AppText tipo="legenda" tabular style={styles.rouletteCaption}>Escolhendo entre {eligibleTitles.length} títulos…</AppText>
             <View style={styles.roulettePreview}>
               <View style={[styles.previewPoster, { backgroundColor: rouletteTitle?.color ?? '#263b50' }]}>
                 {rouletteTitle && <TitleArtwork id={rouletteTitle.id} variant="poster" posterPath={rouletteTitle.tmdbPosterPath} backdropPath={rouletteTitle.tmdbBackdropPath} />}
                 {rouletteTitle && !getArtworkUri(rouletteTitle.id, 'poster', { posterPath: rouletteTitle.tmdbPosterPath, backdropPath: rouletteTitle.tmdbBackdropPath }) && <MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
               </View>
               <View style={styles.previewCopy}>
-                <AppText tipo="legenda" peso="forte" style={styles.previewType}>{rouletteTitle ? `${rouletteTitle.kind.toUpperCase()} · ${rouletteTitle.year}` : 'SORTEANDO'}</AppText>
-                <AppText peso="forte" style={styles.previewTitle} numberOfLines={1}>{rouletteTitle?.title ?? 'Surpresa a caminho...'}</AppText>
+                <AppText tipo="legenda" peso="forte" tabular style={styles.previewType}>{rouletteTitle ? `${rouletteTitle.kind.toUpperCase()} · ${rouletteTitle.year}` : 'SORTEANDO'}</AppText>
+                <AppText peso="forte" style={styles.previewTitle} numberOfLines={1}>{rouletteTitle?.title ?? 'Surpresa a caminho…'}</AppText>
               </View>
-              {rouletteTitle && <View style={styles.previewRating}><MaterialIcons name="star" size={13} color="#f3b43f" /><AppText tipo="legenda" peso="forte" style={styles.previewRatingText}>{formatAverageRating(rouletteTitle)}</AppText></View>}
+              {rouletteTitle && <View style={styles.previewRating}><MaterialIcons name="star" size={13} color="#f3b43f" /><AppText tipo="legenda" peso="forte" tabular style={styles.previewRatingText}>{formatAverageRating(rouletteTitle)}</AppText></View>}
             </View>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={filterVisible} transparent animationType="slide" onRequestClose={() => setFilterVisible(false)} statusBarTranslucent>
+      <Modal
+        visible={filterVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (incompleteCatalogConfirmVisible) {
+            setIncompleteCatalogConfirmVisible(false);
+            return;
+          }
+          closeFilterModal();
+        }}
+        statusBarTranslucent>
         <View style={styles.filterBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterVisible(false)} accessibilityLabel="Fechar filtros" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeFilterModal} accessibilityLabel="Fechar filtros" />
           <View style={[styles.filterCard, { paddingBottom: Math.max(32, insets.bottom + 18) }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.filterHeader}>
-              <View><AppText tipo="legenda" peso="forte" style={styles.modalEyebrow}>SORTEIO</AppText><AppText tipo="subtitulo" peso="forte" style={styles.modalTitle}>O que combina com você?</AppText></View>
+              <View><AppText tipo="legenda" peso="forte" style={styles.modalEyebrow}>SORTEIO</AppText><AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.modalTitle}>O que combina com você?</AppText></View>
               <Pressable
-                onPress={() => setFilterVisible(false)}
+                onPress={closeFilterModal}
                 hitSlop={8}
                 style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
                 accessibilityRole="button"
@@ -414,7 +448,7 @@ export default function HomeScreen() {
                 </Pressable>
               ))}
             </ScrollView>
-            <AppText tipo="legenda" style={styles.resultCount}>
+            <AppText tipo="legenda" tabular style={styles.resultCount}>
               {`${eligibleTitles.length} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
             </AppText>
             {drawError && <AppText tipo="legenda" style={styles.drawError}>{drawError}</AppText>}
@@ -424,7 +458,7 @@ export default function HomeScreen() {
                 eligibleTitles.length === 0 && styles.disabledButton,
                 pressed && eligibleTitles.length > 0 && styles.pressed,
               ]}
-              onPress={drawTitle}
+              onPress={handleDrawPress}
               disabled={eligibleTitles.length === 0}
               accessibilityRole="button">
               <AppText peso="forte" style={styles.confirmButtonText}>Sortear meu próximo título</AppText>
@@ -432,6 +466,43 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
+        {incompleteCatalogConfirmVisible && (
+          <View style={styles.confirmBackdrop}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setIncompleteCatalogConfirmVisible(false)}
+              accessibilityLabel="Fechar aviso de carregamento"
+            />
+            <View style={styles.confirmCard}>
+              <View style={styles.confirmIconBadge}>
+                <MaterialIcons name="hourglass-top" size={24} color="#d77c29" />
+              </View>
+              <AppText tipo="legenda" peso="forte" style={styles.confirmEyebrow}>CATÁLOGO EM CARREGAMENTO</AppText>
+              <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.confirmTitle}>Títulos ainda carregando</AppText>
+              <AppText tipo="legenda" style={styles.confirmMessage}>
+                Nem todos os títulos foram carregados ainda. Deseja sortear apenas com os disponíveis?
+              </AppText>
+              <View style={styles.confirmActions}>
+                <Pressable
+                  style={({ pressed }) => [styles.confirmProceedButton, pressed && styles.pressed]}
+                  onPress={() => {
+                    setIncompleteCatalogConfirmVisible(false);
+                    drawTitle();
+                  }}
+                  accessibilityRole="button">
+                  <MaterialIcons name="auto-awesome" size={18} color="#182230" />
+                  <AppText peso="forte" style={styles.confirmProceedText} numberOfLines={1}>Sortear mesmo assim</AppText>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.confirmCancelButton, pressed && styles.pressed]}
+                  onPress={() => setIncompleteCatalogConfirmVisible(false)}
+                  accessibilityRole="button">
+                  <AppText peso="forte" style={styles.confirmCancelText}>Cancelar</AppText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        )}
       </Modal>
 
       <TitleDetailsModal title={selectedTitle} visible={detailsVisible} onClose={() => setDetailsVisible(false)} />
@@ -441,31 +512,35 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
+  container: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
   topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  brandTitle: { color: '#e58c34', fontSize: 18, lineHeight: 22, letterSpacing: 1.6 },
+  brandTitle: { color: '#182230', fontSize: 17, lineHeight: 22, letterSpacing: 2.1 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#182230', borderWidth: 2, borderColor: '#e8e2d5' },
   avatarText: { color: '#f3b43f', fontSize: 17 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.98 }] },
-  statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffdf8', borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', paddingVertical: 14, paddingHorizontal: 14, marginBottom: 22 },
-  statBlock: { flex: 1, alignItems: 'center' },
-  statNumber: { color: '#182230', fontSize: 20, lineHeight: 24, marginBottom: 2 },
-  statHighlight: { color: '#d77c29', fontSize: 20, lineHeight: 24, marginBottom: 2 },
-  statDivider: { width: 1, height: 30, backgroundColor: '#e8e2d5' },
+  statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffdf8', borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', paddingVertical: 15, paddingHorizontal: 10, marginBottom: 22 },
+  statsRowSyncing: { marginBottom: 10 },
+  syncNotice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 18 },
+  syncNoticeText: { color: '#8d7a61', fontSize: 12, lineHeight: 16 },
+  statBlock: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
+  statNumber: { color: '#182230', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
+  statHighlight: { color: '#d77c29', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
+  statLabel: { color: '#7b7b78', fontSize: 11.5, lineHeight: 15, textAlign: 'center' },
+  statDivider: { width: 1, height: 34, backgroundColor: '#e8e2d5' },
   muted: { color: '#7b7b78' },
   hero: { minHeight: 206, overflow: 'hidden', borderRadius: 22, backgroundColor: '#182230', borderWidth: 1, borderColor: '#263442', flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
   heroGlow: { position: 'absolute', width: 210, height: 210, borderRadius: 105, right: -44, top: -36, backgroundColor: '#223246' },
-  heroCopy: { flex: 1, padding: 20, zIndex: 1 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  pillText: { color: '#f3b43f', letterSpacing: 1.1 },
-  heroTitle: { color: '#fffdf8', fontSize: 22, lineHeight: 27, marginBottom: 6 },
-  heroDescription: { color: '#bdc6ce', maxWidth: 235, marginBottom: 16, lineHeight: 18 },
+  heroCopy: { flex: 1, padding: 18, zIndex: 1 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  pillText: { color: '#f3b43f', letterSpacing: 1.3 },
+  heroTitle: { color: '#fffdf8', fontSize: 21, lineHeight: 27, letterSpacing: -0.35, marginBottom: 7 },
+  heroDescription: { color: '#bdc6ce', maxWidth: 240, fontSize: 13, lineHeight: 19, marginBottom: 16 },
   drawButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, backgroundColor: '#f3b43f', paddingHorizontal: 16, paddingVertical: 11 },
   drawButtonDisabled: { opacity: 0.55 },
   drawButtonText: { color: '#182230', fontSize: 14 },
-  heroShowcase: { paddingRight: 18, paddingVertical: 18, zIndex: 1 },
-  heroPosterFrame: { width: 96, height: 142, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,253,248,0.22)', overflow: 'hidden', justifyContent: 'flex-end', padding: 7 },
+  heroShowcase: { paddingRight: 16, paddingVertical: 18, zIndex: 1 },
+  heroPosterFrame: { width: 90, height: 134, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,253,248,0.22)', overflow: 'hidden', justifyContent: 'flex-end', padding: 7 },
   heroPosterBadge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(24,34,48,0.88)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
   heroPosterBadgeText: { color: '#fffdf8', fontSize: 10 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
@@ -482,7 +557,7 @@ const styles = StyleSheet.create({
   titleCard: { width: 136 },
   poster: { height: 176, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(24,34,48,0.08)', justifyContent: 'center', alignItems: 'center', gap: 10, padding: 11, marginBottom: 9, overflow: 'hidden' },
   posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(20,28,38,0.72)', borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
-  posterRatingCorner: { position: 'absolute', top: 8, left: 8 },
+  posterRatingCorner: { position: 'absolute', bottom: 8, left: 8 },
   posterRatingText: { color: '#fffdf8', fontSize: 10 },
   posterLabel: { color: 'rgba(255,255,255,0.95)', textAlign: 'center', letterSpacing: 0.8 },
   titleName: { color: '#182230', fontSize: 13, lineHeight: 18 },
@@ -490,10 +565,10 @@ const styles = StyleSheet.create({
   filterCard: { backgroundColor: '#fffdf8', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 23, paddingTop: 12, paddingBottom: 32 },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#d8d3c9', alignSelf: 'center', marginBottom: 14 },
   filterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  modalEyebrow: { color: '#e58c34', letterSpacing: 1.2, marginBottom: 6 },
-  modalTitle: { color: '#182230', fontSize: 21, lineHeight: 26, maxWidth: 280 },
+  modalEyebrow: { color: '#e58c34', letterSpacing: 1.3, marginBottom: 6 },
+  modalTitle: { color: '#182230', fontSize: 22, lineHeight: 27, letterSpacing: -0.35, maxWidth: 280 },
   closeButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
-  modalDescription: { color: '#7b7b78', marginTop: 8, marginBottom: 19, lineHeight: 18 },
+  modalDescription: { color: '#7b7b78', fontSize: 13, lineHeight: 19, marginTop: 8, marginBottom: 19 },
   filterLabel: { color: '#7b7b78', letterSpacing: 1, marginBottom: 9 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 15 },
   chip: { borderRadius: 18, borderWidth: 1, borderColor: '#ded8cd', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
@@ -505,6 +580,17 @@ const styles = StyleSheet.create({
   confirmButton: { minHeight: 52, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   disabledButton: { opacity: 0.5 },
   confirmButtonText: { color: '#182230' },
+  confirmBackdrop: { ...StyleSheet.absoluteFill, padding: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.72)' },
+  confirmCard: { width: '100%', maxWidth: 360, alignItems: 'center', borderRadius: 24, paddingHorizontal: 22, paddingTop: 24, paddingBottom: 20, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
+  confirmIconBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#f6ebd4', borderWidth: 1, borderColor: '#ebd9b3', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  confirmEyebrow: { color: '#e58c34', letterSpacing: 1.3, textAlign: 'center', marginBottom: 6 },
+  confirmTitle: { color: '#182230', fontSize: 21, lineHeight: 26, letterSpacing: -0.35, textAlign: 'center', marginBottom: 8 },
+  confirmMessage: { color: '#687078', fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 22 },
+  confirmActions: { width: '100%', gap: 10 },
+  confirmProceedButton: { width: '100%', minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
+  confirmProceedText: { color: '#182230', fontSize: 14, textAlign: 'center' },
+  confirmCancelButton: { width: '100%', minHeight: 46, borderRadius: 14, borderWidth: 1, borderColor: '#ded8cd', backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  confirmCancelText: { color: '#182230', fontSize: 14, textAlign: 'center' },
   rouletteBackdrop: { flex: 1, padding: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.82)' },
   rouletteCard: { width: '100%', maxWidth: 380, alignItems: 'center', borderRadius: 26, paddingHorizontal: 22, paddingTop: 27, paddingBottom: 23, backgroundColor: '#fffdf8' },
   rouletteEyebrow: { color: '#d77c29', letterSpacing: 1.5, marginBottom: 19 },
