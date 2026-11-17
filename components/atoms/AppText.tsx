@@ -92,6 +92,5 @@ const estiloTipo = StyleSheet.create({
 const styles = StyleSheet.create({
   base: {
     color: '#182230',
-    fontWeight: '400',
   },
 });

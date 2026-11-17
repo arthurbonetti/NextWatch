@@ -430,20 +430,20 @@ export default function HomeScreen() {
                   key={item}
                   onPress={() => setKind(item)}
                   style={({ pressed }) => [styles.chip, kind === item && styles.chipSelected, pressed && styles.pressed]}>
-                  <AppText tipo="legenda" peso="forte" style={kind === item ? styles.chipTextSelected : styles.chipText}>
+                  <AppText tipo="legenda" peso="forte" numberOfLines={1} style={kind === item ? styles.chipTextSelected : styles.chipText}>
                     {item === 'Todos' ? 'Tanto faz' : item === 'Filme' ? 'Filmes' : item === 'Série' ? 'Séries' : 'Animes'}
                   </AppText>
                 </Pressable>
               ))}
             </View>
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollRow}>
               {['Todos os gêneros', ...availableGenres].map((item) => (
                 <Pressable
                   key={item}
                   onPress={() => setGenre(item)}
                   style={({ pressed }) => [styles.chip, genre === item && styles.chipSelected, pressed && styles.pressed]}>
-                  <AppText tipo="legenda" peso="forte" style={genre === item ? styles.chipTextSelected : styles.chipText}>
+                  <AppText tipo="legenda" peso="forte" numberOfLines={1} style={genre === item ? styles.chipTextSelected : styles.chipText}>
                     {item === 'Todos os gêneros' ? 'Tanto faz' : item}
                   </AppText>
                 </Pressable>
@@ -585,7 +585,8 @@ const styles = StyleSheet.create({
   modalDescription: { color: '#7b7b78', fontSize: 13, lineHeight: 19, marginTop: 8, marginBottom: 19 },
   filterLabel: { color: '#7b7b78', letterSpacing: 1, marginBottom: 9 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 15 },
-  chip: { borderRadius: 18, borderWidth: 1, borderColor: '#ded8cd', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
+  chipScrollRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 15 },
+  chip: { flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderWidth: 1, borderColor: '#ded8cd', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
   chipSelected: { backgroundColor: '#182230', borderColor: '#182230' },
   chipText: { color: '#6c6b67' },
   chipTextSelected: { color: '#fffdf8' },
