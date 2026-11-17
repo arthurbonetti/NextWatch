@@ -1,11 +1,17 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CATALOG, MediaTitle } from '@/constants/catalog';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
-import { fetchAllCatalogForProviders, hasTmdbApiKey, searchCatalogTitles } from '@/services/tmdb';
+import {
+  CatalogBackendNotConfiguredError,
+  fetchAllCatalogForProviders,
+  hasCatalogBackend,
+  searchCatalogTitles,
+} from '@/services/tmdb';
 import { quickSortByRandom } from '@/utils/quickSort';
 
-type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
+export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 
 type CatalogContextValue = {
   titles: MediaTitle[];
@@ -22,6 +28,8 @@ const MAX_SEARCH_CACHE_ENTRIES = 50;
 const CatalogContext = createContext<CatalogContextValue | null>(null);
 
 export function CatalogProvider({ children }: PropsWithChildren) {
+  const { token } = useAuth();
+  const hasAuthSession = Boolean(token);
   const { subscriptions, storageReady } = useSubscriptions();
   const providerKey = subscriptions
     .filter((subscription) => subscription.active)
@@ -29,9 +37,10 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     .sort()
     .join('|');
   const activeProvidersRef = useRef<string[]>([]);
+  const [prevHasAuthSession, setPrevHasAuthSession] = useState(hasAuthSession);
   const [remoteTitles, setRemoteTitles] = useState<MediaTitle[] | null>(null);
   const [remoteProviderKey, setRemoteProviderKey] = useState('');
-  const [status, setStatus] = useState<CatalogStatus>('loading');
+  const [status, setStatus] = useState<CatalogStatus>(() => (hasAuthSession && hasCatalogBackend() ? 'loading' : 'needs-api-key'));
   const [isFetchingCatalog, setIsFetchingCatalog] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessionCatalog] = useState(() => quickSortByRandom(CATALOG));
@@ -39,15 +48,35 @@ export function CatalogProvider({ children }: PropsWithChildren) {
   const requestVersionRef = useRef(0);
   const searchCacheRef = useRef(new Map<string, MediaTitle[]>());
 
+  if (prevHasAuthSession !== hasAuthSession) {
+    setPrevHasAuthSession(hasAuthSession);
+    if (!hasAuthSession) {
+      setRemoteTitles(null);
+      setRemoteProviderKey('');
+      setSearchedTitles([]);
+      setStatus('needs-api-key');
+      setIsFetchingCatalog(false);
+      setErrorMessage(null);
+    }
+  }
+
   useEffect(() => {
     activeProvidersRef.current = providerKey ? providerKey.split('|') : [];
     searchCacheRef.current.clear();
   }, [providerKey]);
 
-  const refreshCatalog = useCallback(async () => {
+  useEffect(() => {
+    if (!hasAuthSession) {
+      requestVersionRef.current += 1;
+      searchCacheRef.current.clear();
+    }
+  }, [hasAuthSession]);
+
+  const executeCatalogRefresh = useCallback(async () => {
     if (!storageReady) return;
     const requestVersion = ++requestVersionRef.current;
-    if (!hasTmdbApiKey()) {
+
+    if (!hasAuthSession || !hasCatalogBackend()) {
       setStatus('needs-api-key');
       setIsFetchingCatalog(false);
       setErrorMessage(null);
@@ -75,15 +104,21 @@ export function CatalogProvider({ children }: PropsWithChildren) {
       }
     } catch (error) {
       if (shouldAbort()) return;
+      if (error instanceof CatalogBackendNotConfiguredError) {
+        setStatus('needs-api-key');
+        setIsFetchingCatalog(false);
+        setErrorMessage(null);
+        return;
+      }
       setStatus('error');
       setIsFetchingCatalog(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível atualizar o catálogo do TMDB.');
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível atualizar o catálogo.');
     }
-  }, [providerKey, storageReady]);
+  }, [hasAuthSession, providerKey, storageReady]);
 
   const searchTitles = useCallback(async (query: string) => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    if (normalizedQuery.length < 2 || !hasTmdbApiKey()) return [];
+    if (normalizedQuery.length < 2 || !hasAuthSession || !hasCatalogBackend()) return [];
     const cachedResults = searchCacheRef.current.get(normalizedQuery);
     if (cachedResults) {
       setSearchedTitles((current) => mergeTitles(current, cachedResults));
@@ -100,11 +135,15 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     searchCacheRef.current.set(normalizedQuery, results);
     setSearchedTitles((current) => mergeTitles(current, results));
     return results;
-  }, []);
+  }, [hasAuthSession]);
 
   useEffect(() => {
-    void refreshCatalog();
-  }, [refreshCatalog]);
+    if (!storageReady || !hasAuthSession) return;
+    const timer = setTimeout(() => {
+      void executeCatalogRefresh();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [executeCatalogRefresh, hasAuthSession, storageReady]);
 
   const activeTitles = useMemo(() => {
     if (remoteTitles && remoteProviderKey === providerKey) {
@@ -133,10 +172,10 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     status,
     isFetchingCatalog,
     errorMessage,
-    refreshCatalog,
+    refreshCatalog: executeCatalogRefresh,
     searchTitles,
     findTitle,
-  }), [activeTitles, errorMessage, findTitle, isFetchingCatalog, refreshCatalog, searchTitles, status]);
+  }), [activeTitles, errorMessage, executeCatalogRefresh, findTitle, isFetchingCatalog, searchTitles, status]);
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 }

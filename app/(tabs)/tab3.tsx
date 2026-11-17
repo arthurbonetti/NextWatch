@@ -174,7 +174,7 @@ export default function ProfileTabScreen() {
                 : status === 'ready'
                   ? `${formatCount(titles.length)} títulos sincronizados · disponibilidade no Brasil`
                   : status === 'needs-api-key'
-                    ? 'Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
+                    ? 'Configure o segredo TMDB_API_TOKEN na Edge Function tmdb-proxy do Supabase para carregar títulos automaticamente.'
                     : errorMessage ?? 'Confira a conexão e tente novamente.'}
             </AppText>
           </View>

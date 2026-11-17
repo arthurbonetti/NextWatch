@@ -6,7 +6,7 @@ import {
   type MediaIcon,
   type MediaTitle,
 } from '@/constants/catalog';
-import { buildSupabaseHeaders, fetchWithTimeout, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
+import { getValidAccessToken, hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type TmdbProvider = {
@@ -62,17 +62,26 @@ type TmdbMediaDetails = {
 
 type MediaEndpoint = 'movie' | 'tv';
 
-type TmdbCatalogBatchCallback = (titles: MediaTitle[]) => void;
+export type TmdbCatalogBatchCallback = (titles: MediaTitle[]) => void;
 
-const API_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
-const API_TOKEN = process.env.EXPO_PUBLIC_TMDB_API_KEY?.trim();
 const MAX_PAGES_PER_ENDPOINT = 50;
 const REQUEST_CONCURRENCY = 8;
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_SEARCH_QUERY_LENGTH = 100;
 
-type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
+let upstreamUnavailable = false;
+
+export class CatalogBackendNotConfiguredError extends Error {
+  constructor(
+    message = 'Configure o segredo TMDB_API_TOKEN na Edge Function tmdb-proxy do Supabase para habilitar o catálogo dinâmico.',
+  ) {
+    super(message);
+    this.name = 'CatalogBackendNotConfiguredError';
+  }
+}
+
+export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
 
 let cachedProvidersPromise: Promise<TmdbProvider[]> | null = null;
 const dynamicProviderLogos = new Map<string, string>();
@@ -131,8 +140,8 @@ const GENRE_NAMES: Record<MediaEndpoint, Record<number, string>> = {
 
 const COVER_COLORS = ['#596b7c', '#76515e', '#397a91', '#806341', '#59517f', '#48616d'];
 
-export function hasTmdbApiKey() {
-  return Boolean(API_TOKEN || hasSupabaseConfig());
+export function hasCatalogBackend() {
+  return hasSupabaseConfig();
 }
 
 export function getDynamicProviderLogo(providerName: string): string | undefined {
@@ -197,9 +206,10 @@ export async function fetchAllCatalogForProviders(
   onBatch?: TmdbCatalogBatchCallback,
   shouldAbort?: () => boolean,
 ): Promise<void> {
-  if (!hasSupabaseConfig() && !API_TOKEN) {
-    throw new Error('Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para habilitar o catálogo automático.');
+  if (!hasCatalogBackend()) {
+    throw new CatalogBackendNotConfiguredError();
   }
+  upstreamUnavailable = false;
   if (providerNames.length === 0) {
     onBatch?.([]);
     return;
@@ -219,7 +229,7 @@ export async function fetchAllCatalogForProviders(
 
   const catalogById = new Map<string, MediaTitle>();
   const idByNameKey = new Map<string, string>();
-  const remainingTasks: Array<() => Promise<MediaTitle[]>> = [];
+  const remainingTasks: (() => Promise<MediaTitle[]>)[] = [];
 
   const firstPages = await Promise.all(
     resolvedProviders.flatMap(({ providerName, ids }) => {
@@ -314,7 +324,8 @@ export async function fetchAllCatalogForProviders(
 
 export async function searchCatalogTitles(query: string, fallbackProviders: string[] = []): Promise<MediaTitle[]> {
   const encodedQuery = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
-  if (!hasTmdbApiKey() || encodedQuery.length < 2) return [];
+  if (!hasCatalogBackend() || encodedQuery.length < 2) return [];
+  upstreamUnavailable = false;
 
   const [movies, shows] = await Promise.all([
     request<TmdbMediaResponse>('/search/movie', {
@@ -332,7 +343,7 @@ export async function searchCatalogTitles(query: string, fallbackProviders: stri
     }),
   ]);
 
-  const rawItems: Array<{ item: TmdbMediaResult; endpoint: MediaEndpoint; preliminaryScore: number }> = [
+  const rawItems: { item: TmdbMediaResult; endpoint: MediaEndpoint; preliminaryScore: number }[] = [
     ...movies.results.map((item) => ({
       item,
       endpoint: 'movie' as const,
@@ -397,35 +408,8 @@ export function tmdbImageUri(path: string | null | undefined, size: TmdbImageSiz
 }
 
 async function request<T>(endpoint: string, params: Record<string, string>, retries = 3): Promise<T> {
-  const supabaseUrl = getSupabaseUrl();
-  const useSupabaseProxy = hasSupabaseConfig() && Boolean(supabaseUrl);
-
-  let fetchUrl: string;
-  let fetchInit: RequestInit;
-
-  if (useSupabaseProxy && supabaseUrl) {
-    fetchUrl = `${supabaseUrl}/functions/v1/tmdb-proxy`;
-    fetchInit = {
-      method: 'POST',
-      headers: buildSupabaseHeaders(),
-      body: JSON.stringify({ endpoint, params }),
-    };
-  } else {
-    const url = new URL(`${API_BASE_URL}${endpoint}`);
-    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-
-    const isBearer = API_TOKEN?.startsWith('eyJ');
-    if (!isBearer && API_TOKEN) {
-      url.searchParams.set('api_key', API_TOKEN);
-    }
-
-    fetchUrl = url.toString();
-    fetchInit = {
-      headers: {
-        ...(isBearer ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
-        Accept: 'application/json',
-      },
-    };
+  if (!hasCatalogBackend()) {
+    throw new CatalogBackendNotConfiguredError();
   }
 
   const retryRequest = async () => {
@@ -433,12 +417,29 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
     return request<T>(endpoint, params, retries - 1);
   };
 
-  let response: Response;
+  let response: Response | null;
   try {
-    response = await fetchWithTimeout(fetchUrl, fetchInit, REQUEST_TIMEOUT_MS);
+    response = await supabaseRestFetch(
+      '/functions/v1/tmdb-proxy',
+      {
+        method: 'POST',
+        body: JSON.stringify({ endpoint, params }),
+      },
+      undefined,
+      REQUEST_TIMEOUT_MS,
+    );
   } catch (error) {
     if (retries > 0) return retryRequest();
     throw error;
+  }
+
+  if (!response) {
+    throw new Error('Faça login para consultar o catálogo.');
+  }
+
+  if (response.status === 503) {
+    upstreamUnavailable = true;
+    throw new CatalogBackendNotConfiguredError();
   }
 
   if ((response.status === 429 || response.status >= 500) && retries > 0) {
@@ -446,7 +447,7 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
   }
 
   if (!response.ok) {
-    throw new Error(`TMDB respondeu com erro ${response.status}. Verifique a chave da API e tente novamente.`);
+    throw new Error(`Serviço de catálogo respondeu com erro ${response.status}. Tente novamente.`);
   }
   return response.json() as Promise<T>;
 }
@@ -503,7 +504,7 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
   }
 
   const match = /^tmdb-(movie|tv)-(\d+)$/.exec(title.id);
-  if (!match || !hasTmdbApiKey()) {
+  if (!match || !hasCatalogBackend() || upstreamUnavailable) {
     return title.duration;
   }
 
@@ -515,24 +516,27 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
   const endpoint = match[1] as MediaEndpoint;
   const tmdbId = match[2];
 
-  const promise = request<TmdbMediaDetails>(`/${endpoint}/${tmdbId}`, { language: 'pt-BR' })
-    .then((details) => {
-      let formatted = title.duration;
-      if (endpoint === 'movie') {
-        if (details.runtime && details.runtime > 0) {
-          formatted = formatMovieRuntime(details.runtime);
+  const promise = getValidAccessToken()
+    .then((validToken) => {
+      if (!validToken) return title.duration;
+      return request<TmdbMediaDetails>(`/${endpoint}/${tmdbId}`, { language: 'pt-BR' }).then((details) => {
+        let formatted = title.duration;
+        if (endpoint === 'movie') {
+          if (details.runtime && details.runtime > 0) {
+            formatted = formatMovieRuntime(details.runtime);
+          }
+        } else {
+          if (details.number_of_seasons && details.number_of_seasons > 0) {
+            formatted = formatSeasonsCount(details.number_of_seasons);
+          } else if (details.number_of_episodes && details.number_of_episodes > 0) {
+            formatted = details.number_of_episodes === 1
+              ? '1 episódio'
+              : `${details.number_of_episodes} episódios`;
+          }
         }
-      } else {
-        if (details.number_of_seasons && details.number_of_seasons > 0) {
-          formatted = formatSeasonsCount(details.number_of_seasons);
-        } else if (details.number_of_episodes && details.number_of_episodes > 0) {
-          formatted = details.number_of_episodes === 1
-            ? '1 episódio'
-            : `${details.number_of_episodes} episódios`;
-        }
-      }
-      resolvedDurationCache.set(title.id, formatted);
-      return formatted;
+        resolvedDurationCache.set(title.id, formatted);
+        return formatted;
+      });
     })
     .catch(() => title.duration)
     .finally(() => {

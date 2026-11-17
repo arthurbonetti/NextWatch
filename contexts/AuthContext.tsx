@@ -8,6 +8,8 @@ import {
   loginWithCredentials,
   registerAccount,
   restoreAuthSession,
+  subscribeSessionInvalidated,
+  subscribeSessionRefreshed,
 } from '@/services/authApi';
 
 type AuthContextValue = {
@@ -36,6 +38,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let active = true;
 
+    const unsubscribeRefreshed = subscribeSessionRefreshed((session) => {
+      if (!active) return;
+      setUser(session.user);
+      setToken(session.accessToken);
+      setStatus('success');
+    });
+
+    const unsubscribeInvalidated = subscribeSessionInvalidated(() => {
+      if (!active) return;
+      setUser(null);
+      setToken(null);
+      setStatus('idle');
+    });
+
     restoreAuthSession()
       .then((session) => {
         if (!active) return;
@@ -56,6 +72,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return () => {
       active = false;
+      unsubscribeRefreshed();
+      unsubscribeInvalidated();
     };
   }, []);
 

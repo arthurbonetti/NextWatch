@@ -9,7 +9,7 @@ import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { useAuth } from '@/contexts/AuthContext';
-import { isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/services/authApi';
+import { isStrongPassword, isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/services/authApi';
 
 export default function RegisterScreen() {
   const { user, authReady, signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();
@@ -44,12 +44,16 @@ export default function RegisterScreen() {
     const normalizedEmail = email.trim();
     const validName = normalizedName.length >= 2;
     const validEmail = isValidEmail(normalizedEmail);
-    const validPassword = password.length >= MIN_PASSWORD_LENGTH;
+    const validPassword = isStrongPassword(password);
     const passwordsMatch = password === confirmPassword;
 
     setNameError(validName ? '' : 'Informe seu nome (pelo menos 2 caracteres).');
     setEmailError(validEmail ? '' : 'Informe um e-mail válido.');
-    setPasswordError(validPassword ? '' : `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+    setPasswordError(
+      validPassword
+        ? ''
+        : `Use pelo menos ${MIN_PASSWORD_LENGTH} caracteres com letras e números.`,
+    );
     setConfirmPasswordError(passwordsMatch ? '' : 'As senhas não coincidem.');
     if (!validName || !validEmail || !validPassword || !passwordsMatch) return;
 
@@ -137,7 +141,7 @@ export default function RegisterScreen() {
               />
               <AppInput
                 rotulo="Senha"
-                placeholder="Mínimo de 6 caracteres"
+                placeholder={`Mínimo ${MIN_PASSWORD_LENGTH} caracteres (letras e números)`}
                 value={password}
                 onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
                 secureTextEntry

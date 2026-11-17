@@ -10,7 +10,7 @@ import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { useAuth } from '@/contexts/AuthContext';
-import { isValidEmail, MIN_PASSWORD_LENGTH } from '@/services/authApi';
+import { isValidEmail, MAX_PASSWORD_LENGTH, MIN_LOGIN_PASSWORD_LENGTH } from '@/services/authApi';
 
 const SHOWCASE_SERVICES = ['Netflix', 'Max', 'Disney+', 'Prime Video', 'Crunchyroll'];
 
@@ -31,9 +31,14 @@ export default function LoginScreen() {
     clearAuthError();
     const normalizedEmail = email.trim();
     const validEmail = isValidEmail(normalizedEmail);
-    const validPassword = password.length >= MIN_PASSWORD_LENGTH;
+    const validPassword =
+      password.length >= MIN_LOGIN_PASSWORD_LENGTH && password.length <= MAX_PASSWORD_LENGTH;
     setEmailError(validEmail ? '' : 'Informe um e-mail válido.');
-    setPasswordError(validPassword ? '' : `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+    setPasswordError(
+      validPassword
+        ? ''
+        : `A senha deve ter entre ${MIN_LOGIN_PASSWORD_LENGTH} e ${MAX_PASSWORD_LENGTH} caracteres.`,
+    );
     if (!validEmail || !validPassword) return;
 
     const ok = await signIn(normalizedEmail, password);

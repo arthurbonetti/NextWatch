@@ -19,12 +19,17 @@ const MAX_SUBSCRIPTION_PRICE = 9999.99;
 const ALLOWED_PROVIDER_NAMES = new Set(SUBSCRIPTION_PROVIDERS.map((p) => p.name));
 
 function generateSubscriptionId(providerName: string): string {
-  const slug = providerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slug = providerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sub';
   if (typeof globalThis.crypto?.randomUUID === 'function') {
     return `${slug}-${globalThis.crypto.randomUUID().slice(0, 8)}`;
   }
-  const randomSuffix = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
-  return `${slug}-${randomSuffix}`;
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    const bytes = new Uint8Array(4);
+    globalThis.crypto.getRandomValues(bytes);
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${slug}-${hex}`;
+  }
+  return `${slug}-${Date.now().toString(36)}`;
 }
 
 export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }: Props) {

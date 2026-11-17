@@ -6,7 +6,7 @@
   **Curadoria inteligente de streaming e gestão financeira de assinaturas.**
 
   [![React Native](https://img.shields.io/badge/React%20Native-0.86.3-61DAFB?logo=react&logoColor=black)](https://reactnative.dev)
-  [![Expo](https://img.shields.io/badge/Expo-~57.0.0-000020?logo=expo&logoColor=white)](https://expo.dev)
+  [![Expo](https://img.shields.io/badge/Expo-~57.0.33-000020?logo=expo&logoColor=white)](https://expo.dev)
   [![TypeScript](https://img.shields.io/badge/TypeScript-~6.0.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
   [![TMDB API](https://img.shields.io/badge/TMDB-API%20v3%2Fv4-01B4E4?logo=themoviedatabase&logoColor=white)](https://www.themoviedb.org)
   [![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20Sync-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
@@ -48,7 +48,7 @@ A arquitetura opera com sincronização autenticada via Supabase e persistência
 - Registro imediato da decisão tomada pelo usuário (`assistiu`, `salvou`, `sorteou outro`, `ignorou`).
 
 ### Catálogo e Busca
-- Integração com a API do **The Movie Database (TMDB)** configurada para a região Brasil (`BR`), com carregamento paginado concorrente e fallback estático embutido.
+- Integração com a API do **The Movie Database (TMDB)** via Edge Function autenticada (`tmdb-proxy`) configurada para a região Brasil (`BR`), com carregamento paginado concorrente e fallback estático embutido.
 - Busca textual com normalização, ranqueamento por relevância e *debounce*.
 - Filtros combináveis por avaliação, tipo de mídia, gênero e plataforma de streaming.
 - Tela e modal de detalhes com resolução sob demanda de duração (filmes) ou quantidade de temporadas e episódios (séries e animes), sinopse expansível e artes em alta resolução.
@@ -63,8 +63,8 @@ A arquitetura opera com sincronização autenticada via Supabase e persistência
 - Histórico cronológico dos últimos sorteios realizados, com contagem e filtragem por ação tomada.
 
 ### Autenticação e Perfil
-- Fluxo completo de login e cadastro integrado ao Supabase Auth, com validação de credenciais e controle de tentativas (*rate limiting*).
-- Armazenamento seguro de sessão e sincronização automática entre dispositivos quando conectado.
+- Fluxo completo de login e cadastro integrado ao Supabase Auth, com validação de senha forte, renovação automática via `refresh_token` e controle de tentativas (*rate limiting*).
+- Armazenamento seguro de sessão no Keychain/Keystore nativo (`expo-secure-store`) e sincronização automática entre dispositivos quando conectado.
 
 ---
 
@@ -75,9 +75,9 @@ A arquitetura opera com sincronização autenticada via Supabase e persistência
 | Framework | React Native 0.86 + Expo SDK 57 | Base multiplataforma (Android, iOS e Web) |
 | Linguagem | TypeScript ~6.0 | Tipagem estática |
 | Roteamento | Expo Router ~57.0 | Navegação baseada em arquivos (Tabs, Stacks e Modais) |
-| Backend e Auth | Supabase | Autenticação e sincronização de dados do usuário |
-| Catálogo Externo | TMDB API (v3/v4) | Metadados, provedores de streaming (`BR`) e imagens |
-| Persistência Local | AsyncStorage e Expo SecureStore | Cache offline, fila de sincronização e tokens de sessão |
+| Backend e Auth | Supabase | Autenticação, RLS e Edge Functions |
+| Catálogo Externo | TMDB API (v3/v4) | Metadados, provedores (`BR`) e imagens via proxy autenticado (`tmdb-proxy`) |
+| Persistência Local | AsyncStorage e Expo SecureStore | Cache offline, fila de sincronização e tokens de sessão seguros |
 | UI e Animações | React Native Reanimated, Expo Image e MaterialIcons | Transições fluidas, renderização otimizada de capas e ícones |
 
 ---
@@ -103,7 +103,8 @@ NextWatch/
 ├── hooks/                        # Hooks customizados (useNetworkStatus)
 ├── scripts/                      # Utilitários de manutenção (fetch-tmdb-artwork.mts)
 ├── services/                     # Clientes de API e armazenamento (authApi, secureStore, tmdb)
-└── utils/                        # Funções utilitárias (quickSort)
+├── supabase/                     # Edge Function tmdb-proxy e migrations SQL com RLS
+└── utils/                        # Funções utilitárias (quickSort, format)
 ```
 
 ---
@@ -136,14 +137,15 @@ Preencha as variáveis conforme o ambiente desejado:
 ```env
 # Autenticação e sincronização (Supabase)
 EXPO_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sua_chave_anon_aqui
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_sua_chave_publica
 
-# Catálogo dinâmico (TMDB API Read Access Token v4)
-EXPO_PUBLIC_TMDB_API_KEY=seu_token_tmdb_aqui
-TMDB_API_KEY=seu_token_tmdb_aqui
+# Usada apenas localmente pelo script `npm run artwork` (nunca expor com EXPO_PUBLIC_)
+TMDB_API_KEY=seu_token_tmdb_apenas_para_script_local
 ```
 
-> **Nota:** Caso `EXPO_PUBLIC_TMDB_API_KEY` não seja informada, o aplicativo utiliza o catálogo estático embutido como fallback. A variável `TMDB_API_KEY` é utilizada apenas pelo script auxiliar `npm run artwork`. Sem as credenciais do Supabase, os dados ficam restritos ao armazenamento local do dispositivo.
+Para o catálogo dinâmico do aplicativo, configure o segredo `TMDB_API_TOKEN` diretamente nas **Edge Functions Secrets** do projeto Supabase (utilizado pela função `tmdb-proxy`, sem expor a chave no bundle do cliente).
+
+> **Nota:** Caso o proxy `tmdb-proxy` não esteja configurado, o aplicativo utiliza o catálogo estático embutido como fallback. A variável `TMDB_API_KEY` é utilizada apenas pelo script auxiliar `npm run artwork`. Sem as credenciais do Supabase, os dados ficam restritos ao armazenamento local do dispositivo.
 
 ### 3. Iniciar o servidor de desenvolvimento
 
@@ -176,13 +178,13 @@ npm run start:tunnel  # Inicia via túnel Expo para dispositivos em redes distin
 
 ## Build Android (EAS)
 
-O projeto possui o perfil `preview` configurado em [eas.json](./eas.json) para geração de arquivos `.apk` de distribuição interna.
+O projeto possui os perfis `preview` (APK de distribuição interna) e `production` (AAB para publicação) configurados em [eas.json](./eas.json).
 
 1. Autentique-se na CLI da Expo:
    ```bash
    npx eas-cli@latest login
    ```
-2. Cadastre as variáveis de ambiente (`EXPO_PUBLIC_TMDB_API_KEY`, `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY`) no painel da Expo em **Project Settings → Environment Variables** para o ambiente `preview`.
+2. Cadastre `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` no painel da Expo em **Project Settings → Environment Variables**. A chave do TMDB (`TMDB_API_TOKEN`) deve permanecer exclusivamente nos segredos do servidor Supabase (Edge Functions), nunca como `EXPO_PUBLIC_*`.
 3. Inicie a compilação:
    ```bash
    npx eas-cli@latest build --platform android --profile preview

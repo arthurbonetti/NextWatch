@@ -11,17 +11,18 @@ export type AuthUser = {
 
 export type AuthStatus = 'idle' | 'loading' | 'success' | 'error';
 
-type AuthSession = {
+export type AuthSession = {
   user: AuthUser;
   accessToken: string;
+  refreshToken?: string;
 };
 
-type LoginCredentials = {
+export type LoginCredentials = {
   email: string;
   password: string;
 };
 
-type RegisterPayload = {
+export type RegisterPayload = {
   name: string;
   email: string;
   password: string;
@@ -31,21 +32,58 @@ const RAW_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || '';
 
 const ACCESS_TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
 const USER_CACHE_KEY = '@nextwatch/auth-user';
+const APP_STORAGE_PREFIX = '@nextwatch/';
 const REQUEST_TIMEOUT_MS = 15000;
 const SESSION_RESTORE_TIMEOUT_MS = 4000;
+const TOKEN_REFRESH_BUFFER_MS = 30_000;
 
-export const MIN_PASSWORD_LENGTH = 6;
-const MAX_PASSWORD_LENGTH = 128;
-const MAX_EMAIL_LENGTH = 254;
+export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_LOGIN_PASSWORD_LENGTH = 6;
+export const MAX_PASSWORD_LENGTH = 128;
+export const MAX_EMAIL_LENGTH = 254;
 export const MAX_NAME_LENGTH = 80;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Rate limiting contra força bruta (better-auth-security-best-practices: máx 5 tentativas por janela de 60s)
+// Proteção auxiliar contra cliques repetidos no cliente (controle efetivo deve estar no Supabase Auth)
 const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 const AUTH_RATE_LIMIT_MAX_ATTEMPTS = 5;
 const authAttemptTimestamps: number[] = [];
+
+type SessionInvalidatedListener = () => void;
+type SessionRefreshedListener = (session: AuthSession) => void;
+
+const sessionInvalidatedListeners = new Set<SessionInvalidatedListener>();
+const sessionRefreshedListeners = new Set<SessionRefreshedListener>();
+let activeRefreshPromise: Promise<AuthSession | null> | null = null;
+
+export function subscribeSessionInvalidated(listener: SessionInvalidatedListener): () => void {
+  sessionInvalidatedListeners.add(listener);
+  return () => {
+    sessionInvalidatedListeners.delete(listener);
+  };
+}
+
+export function subscribeSessionRefreshed(listener: SessionRefreshedListener): () => void {
+  sessionRefreshedListeners.add(listener);
+  return () => {
+    sessionRefreshedListeners.delete(listener);
+  };
+}
+
+function notifySessionInvalidated(): void {
+  for (const listener of sessionInvalidatedListeners) {
+    listener();
+  }
+}
+
+function notifySessionRefreshed(session: AuthSession): void {
+  for (const listener of sessionRefreshedListeners) {
+    listener(session);
+  }
+}
 
 function checkAuthRateLimit(): void {
   const now = Date.now();
@@ -63,16 +101,27 @@ export function isValidEmail(email: string): boolean {
   return trimmed.length > 0 && trimmed.length <= MAX_EMAIL_LENGTH && EMAIL_REGEX.test(trimmed);
 }
 
+export function isStrongPassword(password: string): boolean {
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    return false;
+  }
+  return /[a-zA-Z]/.test(password) && /\d/.test(password);
+}
+
 /**
- * Valida se a URL do Supabase usa protocolo seguro (HTTPS ou localhost em desenvolvimento),
- * prevenindo requisições relativas acidentais ou tráfego sem criptografia (REACT-NET-001 / OWASP A04).
+ * Valida se a URL do Supabase usa protocolo seguro (HTTPS em produção ou localhost apenas em __DEV__),
+ * prevenindo requisições sem criptografia em produção (OWASP M5 / A04).
  */
 export function getSupabaseUrl(): string | null {
   if (!RAW_SUPABASE_URL) return null;
   try {
     const parsed = new URL(RAW_SUPABASE_URL);
     const isSecure = parsed.protocol === 'https:';
-    const isLocalDev = parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+    const isDevRuntime = typeof __DEV__ !== 'undefined' && __DEV__;
+    const isLocalDev =
+      isDevRuntime &&
+      parsed.protocol === 'http:' &&
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
     if (!isSecure && !isLocalDev) return null;
     return parsed.origin;
   } catch {
@@ -101,11 +150,23 @@ export async function fetchWithTimeout(
   timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController();
+  const externalSignal = init.signal;
+  const onExternalAbort = () => controller.abort();
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+  }
+
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -132,14 +193,77 @@ async function parseJsonSafe<T>(response: Response): Promise<T | null> {
   }
 }
 
+function decodeBase64Url(input: string): string | null {
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+
+  try {
+    if (typeof atob === 'function') {
+      const binary = atob(padded);
+      const bytes = Array.from(binary, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
+      return decodeURIComponent(bytes);
+    }
+
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let bits = 0;
+    let bitCount = 0;
+    const outputBytes: number[] = [];
+    for (const char of padded) {
+      if (char === '=') break;
+      const val = alphabet.indexOf(char);
+      if (val === -1) return null;
+      bits = (bits << 6) | val;
+      bitCount += 6;
+      if (bitCount >= 8) {
+        bitCount -= 8;
+        outputBytes.push((bits >> bitCount) & 0xff);
+      }
+    }
+    const percentEncoded = outputBytes.map((b) => `%${b.toString(16).padStart(2, '0')}`).join('');
+    return decodeURIComponent(percentEncoded);
+  } catch {
+    return null;
+  }
+}
+
+function decodeJwtPayload(token: string): { sub?: string; exp?: number } | null {
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts[1]) return null;
+  const json = decodeBase64Url(parts[1]);
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as { sub?: string; exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+function isTokenUnexpired(token: string, bufferMs = 0): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== 'number') return false;
+  return payload.exp * 1000 > Date.now() + bufferMs;
+}
+
 async function persistSession(session: AuthSession): Promise<void> {
   await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, session.accessToken);
+  if (session.refreshToken) {
+    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, session.refreshToken);
+  }
   await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(session.user));
 }
 
 async function purgeLocalSession(): Promise<void> {
-  await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-  await AsyncStorage.removeItem(USER_CACHE_KEY);
+  await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY).catch(() => {});
+  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY).catch(() => {});
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const appKeys = keys.filter((key) => key.startsWith(APP_STORAGE_PREFIX));
+    if (appKeys.length > 0) {
+      await AsyncStorage.multiRemove(appKeys);
+    }
+  } catch {
+    await AsyncStorage.removeItem(USER_CACHE_KEY).catch(() => {});
+  }
 }
 
 function isValidAuthUser(value: unknown): value is AuthUser {
@@ -158,23 +282,53 @@ function isValidAuthUser(value: unknown): value is AuthUser {
   );
 }
 
+type RawSupabaseUser = {
+  id?: string;
+  email?: string;
+  created_at?: string;
+  user_metadata?: {
+    name?: unknown;
+    [key: string]: unknown;
+  };
+};
+
 type SupabaseAuthResponse = {
   access_token?: string;
+  refresh_token?: string;
   token_type?: string;
-  user?: {
-    id: string;
-    email?: string;
-    created_at?: string;
-    user_metadata?: {
-      name?: string;
-      [key: string]: unknown;
-    };
-  };
+  user?: RawSupabaseUser & { id: string };
   msg?: string;
   message?: string;
   error_description?: string;
   error?: string;
 };
+
+function toAuthUser(rawUser: RawSupabaseUser & { id: string }, fallbackEmail = '', fallbackName?: string): AuthUser {
+  const metadataName = typeof rawUser.user_metadata?.name === 'string'
+    ? rawUser.user_metadata.name.trim().slice(0, MAX_NAME_LENGTH)
+    : '';
+  const email = rawUser.email || fallbackEmail;
+  return {
+    id: rawUser.id,
+    name: metadataName || fallbackName || email.split('@')[0] || 'Usuário',
+    email,
+    createdAt: rawUser.created_at || new Date().toISOString(),
+  };
+}
+
+function buildSessionFromAuthResponse(
+  data: SupabaseAuthResponse,
+  fallbackEmail: string,
+  fallbackName?: string,
+): AuthSession | null {
+  if (!data.access_token || !data.user?.id) return null;
+
+  return {
+    user: toAuthUser(data.user, fallbackEmail, fallbackName),
+    accessToken: data.access_token,
+    ...(typeof data.refresh_token === 'string' && data.refresh_token ? { refreshToken: data.refresh_token } : {}),
+  };
+}
 
 /**
  * Mapeia erros de autenticação para mensagens genéricas e seguras,
@@ -189,8 +343,8 @@ function formatSupabaseError(errorMsg?: string): string {
   if (lower.includes('user already registered') || lower.includes('already exists')) {
     return 'Não foi possível concluir o cadastro com este e-mail. Tente fazer login.';
   }
-  if (lower.includes('password should be at least')) {
-    return `A senha deve conter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`;
+  if (lower.includes('password should be at least') || lower.includes('weak_password')) {
+    return `A senha deve conter no mínimo ${MIN_PASSWORD_LENGTH} caracteres com letras e números.`;
   }
   if (lower.includes('email not confirmed')) {
     return 'E-mail ainda não confirmado. Verifique sua caixa de entrada.';
@@ -199,26 +353,6 @@ function formatSupabaseError(errorMsg?: string): string {
     return 'Muitas solicitações. Aguarde alguns instantes e tente novamente.';
   }
   return 'Não foi possível concluir a autenticação. Verifique os dados e tente novamente.';
-}
-
-type RawSupabaseUser = {
-  id?: string;
-  email?: string;
-  created_at?: string;
-  user_metadata?: { name?: unknown };
-};
-
-function toAuthUser(rawUser: RawSupabaseUser & { id: string }, fallbackEmail = '', fallbackName?: string): AuthUser {
-  const metadataName = typeof rawUser.user_metadata?.name === 'string'
-    ? rawUser.user_metadata.name.trim().slice(0, MAX_NAME_LENGTH)
-    : '';
-  const email = rawUser.email || fallbackEmail;
-  return {
-    id: rawUser.id,
-    name: fallbackName || metadataName || email.split('@')[0] || 'Usuário',
-    email,
-    createdAt: rawUser.created_at || new Date().toISOString(),
-  };
 }
 
 async function postAuth(path: string, body: Record<string, unknown>): Promise<SupabaseAuthResponse> {
@@ -246,11 +380,11 @@ async function postAuth(path: string, body: Record<string, unknown>): Promise<Su
 
 /**
  * POST /auth/login — Autentica o usuário no Supabase Auth via REST API.
- * Salva o `accessToken` via `SecureStore` (conforme exigido na disciplina) e o perfil em `AsyncStorage`.
+ * Salva `accessToken` e `refreshToken` no `SecureStore` e o perfil em cache no `AsyncStorage`.
  */
 export async function loginWithCredentials({ email, password }: LoginCredentials): Promise<AuthSession> {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!isValidEmail(normalizedEmail) || password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+  if (!isValidEmail(normalizedEmail) || password.length < MIN_LOGIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
     throw new Error('E-mail ou senha inválidos.');
   }
 
@@ -258,21 +392,19 @@ export async function loginWithCredentials({ email, password }: LoginCredentials
     email: normalizedEmail,
     password,
   });
-  if (!data.access_token || !data.user) {
-    throw new Error(formatSupabaseError(data.msg || data.message || data.error_description || data.error));
+
+  const session = buildSessionFromAuthResponse(data, normalizedEmail);
+  if (!session) {
+    const msg = data.msg || data.message || data.error_description || data.error;
+    throw new Error(formatSupabaseError(msg));
   }
 
-  const session: AuthSession = {
-    user: toAuthUser(data.user, normalizedEmail),
-    accessToken: data.access_token,
-  };
   await persistSession(session);
   return session;
 }
 
 /**
  * POST /auth/register — Cria uma nova conta no Supabase Auth via REST API.
- * Salva o token de acesso no `SecureStore` e os dados do usuário no `AsyncStorage`.
  */
 export async function registerAccount({ name, email, password }: RegisterPayload): Promise<AuthSession> {
   const normalizedName = name.trim().slice(0, MAX_NAME_LENGTH);
@@ -280,10 +412,9 @@ export async function registerAccount({ name, email, password }: RegisterPayload
   if (
     normalizedName.length < 2 ||
     !isValidEmail(normalizedEmail) ||
-    password.length < MIN_PASSWORD_LENGTH ||
-    password.length > MAX_PASSWORD_LENGTH
+    !isStrongPassword(password)
   ) {
-    throw new Error('Verifique os dados informados para criar sua conta.');
+    throw new Error(`Verifique os dados informados. A senha precisa ter ao menos ${MIN_PASSWORD_LENGTH} caracteres com letras e números.`);
   }
 
   const data = await postAuth('/auth/v1/signup', {
@@ -292,11 +423,8 @@ export async function registerAccount({ name, email, password }: RegisterPayload
     data: { name: normalizedName },
   });
 
-  if (data.access_token && data.user) {
-    const session: AuthSession = {
-      user: toAuthUser(data.user, normalizedEmail, normalizedName),
-      accessToken: data.access_token,
-    };
+  const session = buildSessionFromAuthResponse(data, normalizedEmail, normalizedName);
+  if (session) {
     await persistSession(session);
     return session;
   }
@@ -306,8 +434,120 @@ export async function registerAccount({ name, email, password }: RegisterPayload
 }
 
 /**
- * GET /auth/me — Restaura a sessão validando o `accessToken` armazenado no `SecureStore`
- * com verificação online no Supabase `/auth/v1/user` e fallback offline no `AsyncStorage`.
+ * Renova a sessão atual utilizando `refresh_token` armazenado no `SecureStore` (single-flight).
+ */
+export async function refreshAuthSession(): Promise<AuthSession | null> {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
+
+  activeRefreshPromise = (async () => {
+    const baseUrl = getSupabaseUrl();
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    if (!baseUrl || !SUPABASE_ANON_KEY || !refreshToken) {
+      return null;
+    }
+
+    try {
+      const response = await fetchWithTimeout(`${baseUrl}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: buildSupabaseHeaders(),
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (response.status === 400 || response.status === 401 || response.status === 403) {
+        await purgeLocalSession();
+        notifySessionInvalidated();
+        return null;
+      }
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await parseJsonSafe<SupabaseAuthResponse>(response);
+      if (!data) return null;
+      const session = buildSessionFromAuthResponse(data, '');
+      if (!session) {
+        return null;
+      }
+
+      await persistSession(session);
+      notifySessionRefreshed(session);
+      return session;
+    } catch {
+      return null;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+
+  return activeRefreshPromise;
+}
+
+/**
+ * Retorna um `accessToken` não expirado; tenta renovar automaticamente quando próximo da expiração.
+ */
+export async function getValidAccessToken(): Promise<string | null> {
+  const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+  if (token && isTokenUnexpired(token, TOKEN_REFRESH_BUFFER_MS)) {
+    return token;
+  }
+
+  const refreshed = await refreshAuthSession();
+  if (refreshed) {
+    return refreshed.accessToken;
+  }
+
+  if (token && isTokenUnexpired(token)) {
+    return token;
+  }
+
+  return null;
+}
+
+/**
+ * Executa uma requisição autenticada contra o Supabase (REST / Edge Functions),
+ * garantindo token válido e tentativa única de renovação em caso de 401.
+ */
+export async function supabaseRestFetch(
+  pathWithQuery: string,
+  init: RequestInit = {},
+  fallbackToken?: string | null,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response | null> {
+  const baseUrl = getSupabaseUrl();
+  if (!baseUrl || !hasSupabaseConfig()) return null;
+
+  const accessToken = (await getValidAccessToken()) ?? fallbackToken ?? null;
+  if (!accessToken) return null;
+
+  const extraHeaders = (init.headers ?? {}) as Record<string, string>;
+  const makeRequest = (bearer: string) =>
+    fetchWithTimeout(
+      `${baseUrl}${pathWithQuery}`,
+      {
+        ...init,
+        headers: {
+          ...buildSupabaseHeaders(bearer),
+          ...extraHeaders,
+        },
+      },
+      timeoutMs,
+    );
+
+  const response = await makeRequest(accessToken);
+  if (response.status === 401) {
+    const refreshed = await refreshAuthSession();
+    if (!refreshed) return response;
+    return makeRequest(refreshed.accessToken);
+  }
+  return response;
+}
+
+/**
+ * GET /auth/me — Restaura a sessão validando `accessToken` e `refreshToken` no `SecureStore`
+ * com verificação online no Supabase e fallback offline apenas quando o JWT ainda não expirou.
  */
 export async function restoreAuthSession(): Promise<AuthSession | null> {
   const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
@@ -322,8 +562,9 @@ export async function restoreAuthSession(): Promise<AuthSession | null> {
         SESSION_RESTORE_TIMEOUT_MS,
       );
 
-      // Se o token foi revogado ou expirou (401/403), limpa a sessão local e exige novo login (OWASP A07)
       if (response.status === 401 || response.status === 403) {
+        const refreshed = await refreshAuthSession();
+        if (refreshed) return refreshed;
         await purgeLocalSession();
         return null;
       }
@@ -337,28 +578,37 @@ export async function restoreAuthSession(): Promise<AuthSession | null> {
         }
       }
     } catch {
-      // Offline ou falha transitória: recorre ao cache local
+      // Offline ou falha transitória: prossegue para validação estrita de expiração local
     }
   }
 
+  // Se o accessToken local expirou, tenta renovar antes de invalidar a sessão
+  if (!isTokenUnexpired(token)) {
+    const refreshed = await refreshAuthSession();
+    if (refreshed) return refreshed;
+    await purgeLocalSession();
+    return null;
+  }
+
+  const jwtPayload = decodeJwtPayload(token);
   const cachedUserRaw = await AsyncStorage.getItem(USER_CACHE_KEY);
-  if (cachedUserRaw) {
+  if (cachedUserRaw && jwtPayload?.sub) {
     try {
       const parsed: unknown = JSON.parse(cachedUserRaw);
-      if (isValidAuthUser(parsed)) {
+      if (isValidAuthUser(parsed) && parsed.id === jwtPayload.sub) {
         return { user: parsed, accessToken: token };
       }
     } catch {
-      // Ignora erro de JSON e remove cache corrompido
+      // Ignora JSON inválido e limpa cache
     }
-    await AsyncStorage.removeItem(USER_CACHE_KEY);
   }
 
+  await purgeLocalSession();
   return null;
 }
 
 /**
- * DELETE /auth/session — Desloga a sessão atual no Supabase e remove o token do `SecureStore`.
+ * DELETE /auth/session — Desloga a sessão no Supabase e remove tokens e caches locais do usuário.
  */
 export async function clearAuthSession(): Promise<void> {
   const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
@@ -366,13 +616,20 @@ export async function clearAuthSession(): Promise<void> {
   if (token && baseUrl && SUPABASE_ANON_KEY) {
     try {
       await fetchWithTimeout(
-        `${baseUrl}/auth/v1/logout`,
+        `${baseUrl}/auth/v1/logout?scope=global`,
         { method: 'POST', headers: buildSupabaseHeaders(token) },
         SESSION_RESTORE_TIMEOUT_MS,
       );
     } catch {
-      // Prossegue mesmo se estiver offline
+      // Prossegue com limpeza local mesmo se offline
     }
   }
   await purgeLocalSession();
+}
+
+/**
+ * Limpa toda a sessão e os caches locais.
+ */
+export async function clearAllStoredAccounts(): Promise<void> {
+  await clearAuthSession();
 }

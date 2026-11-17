@@ -3,7 +3,7 @@ import { createContext, PropsWithChildren, useCallback, useContext, useEffect, u
 
 import { Subscription } from '@/constants/subscriptions';
 import { useAuth } from '@/contexts/AuthContext';
-import { buildSupabaseHeaders, fetchWithTimeout, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
+import { hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
 
 const BASE_STORAGE_KEY = '@nextwatch/subscriptions';
 const SYNC_TIMEOUT_MS = 8000;
@@ -32,12 +32,24 @@ const SubscriptionsContext = createContext<SubscriptionsContextValue | null>(nul
 
 export function SubscriptionsProvider({ children }: PropsWithChildren) {
   const { user, token } = useAuth();
+  const userId = user?.id ?? null;
+  const hasToken = Boolean(token);
+  const storageKey = userId ? `${BASE_STORAGE_KEY}:${userId}` : null;
+  const [prevStorageKey, setPrevStorageKey] = useState(storageKey);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [storageReady, setStorageReady] = useState(false);
+  const [storageReady, setStorageReady] = useState(() => !storageKey);
   const latestSubscriptionsRef = useRef<Subscription[]>([]);
+  const tokenRef = useRef<string | null>(token);
 
-  const storageKey = user ? `${BASE_STORAGE_KEY}:${user.id}` : null;
-  const userId = user?.id;
+  if (prevStorageKey !== storageKey) {
+    setPrevStorageKey(storageKey);
+    setSubscriptions([]);
+    setStorageReady(!storageKey);
+  }
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   const commitSubscriptions = useCallback((next: Subscription[], persist = true) => {
     latestSubscriptionsRef.current = next;
@@ -50,15 +62,12 @@ export function SubscriptionsProvider({ children }: PropsWithChildren) {
   // Carrega cache local imediatamente e sincroniza com Supabase quando autenticado
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     if (!storageKey || !userId) {
       latestSubscriptionsRef.current = [];
-      setSubscriptions([]);
-      setStorageReady(true);
       return;
     }
-
-    setStorageReady(false);
 
     async function loadSubscriptions(activeKey: string, activeUserId: string) {
       try {
@@ -78,16 +87,16 @@ export function SubscriptionsProvider({ children }: PropsWithChildren) {
         if (!cancelled) setStorageReady(true);
       }
 
-      const baseUrl = getSupabaseUrl();
-      if (cancelled || !baseUrl || !token || !hasSupabaseConfig()) return;
+      if (cancelled || !hasToken || !hasSupabaseConfig()) return;
 
       try {
-        const response = await fetchWithTimeout(
-          `${baseUrl}/rest/v1/user_subscriptions?user_id=eq.${encodeURIComponent(activeUserId)}&select=*`,
-          { headers: buildSupabaseHeaders(token) },
+        const response = await supabaseRestFetch(
+          `/rest/v1/user_subscriptions?user_id=eq.${encodeURIComponent(activeUserId)}&select=*`,
+          { signal: controller.signal },
+          tokenRef.current,
           SYNC_TIMEOUT_MS,
         );
-        if (cancelled || !response.ok) return;
+        if (cancelled || !response || !response.ok) return;
         const rows: unknown = await response.json();
         if (cancelled || !Array.isArray(rows)) return;
 
@@ -115,20 +124,17 @@ export function SubscriptionsProvider({ children }: PropsWithChildren) {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [storageKey, userId, token]);
+  }, [hasToken, storageKey, userId]);
 
   const syncUpsertToRemote = useCallback((sub: Subscription) => {
-    const baseUrl = getSupabaseUrl();
-    if (!userId || !token || !baseUrl || !hasSupabaseConfig()) return;
-    void fetchWithTimeout(
-      `${baseUrl}/rest/v1/user_subscriptions`,
+    if (!userId || !tokenRef.current || !hasSupabaseConfig()) return;
+    void supabaseRestFetch(
+      '/rest/v1/user_subscriptions',
       {
         method: 'POST',
-        headers: {
-          ...buildSupabaseHeaders(token),
-          Prefer: 'resolution=merge-duplicates',
-        },
+        headers: { Prefer: 'resolution=merge-duplicates' },
         body: JSON.stringify({
           user_id: userId,
           subscription_id: sub.id,
@@ -140,22 +146,20 @@ export function SubscriptionsProvider({ children }: PropsWithChildren) {
           alert_days: sub.alertDays,
         }),
       },
+      tokenRef.current,
       SYNC_TIMEOUT_MS,
     ).catch(() => {});
-  }, [token, userId]);
+  }, [userId]);
 
   const syncDeleteFromRemote = useCallback((subId: string) => {
-    const baseUrl = getSupabaseUrl();
-    if (!userId || !token || !baseUrl || !hasSupabaseConfig()) return;
-    void fetchWithTimeout(
-      `${baseUrl}/rest/v1/user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&subscription_id=eq.${encodeURIComponent(subId)}`,
-      {
-        method: 'DELETE',
-        headers: buildSupabaseHeaders(token),
-      },
+    if (!userId || !tokenRef.current || !hasSupabaseConfig()) return;
+    void supabaseRestFetch(
+      `/rest/v1/user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&subscription_id=eq.${encodeURIComponent(subId)}`,
+      { method: 'DELETE' },
+      tokenRef.current,
       SYNC_TIMEOUT_MS,
     ).catch(() => {});
-  }, [token, userId]);
+  }, [userId]);
 
   const saveSubscription = useCallback((subscription: Subscription) => {
     if (!isSubscription(subscription)) return;
