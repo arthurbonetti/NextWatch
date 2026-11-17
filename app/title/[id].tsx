@@ -108,5 +108,5 @@ const styles = StyleSheet.create({
   primaryText: { color: '#182230' },
   primaryTextSaved: { color: '#fffdf8' },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  link: { color: '#d77c29' },
+  link: { color: '#a3520d', fontSize: 14 },
 });

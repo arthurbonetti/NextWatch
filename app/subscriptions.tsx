@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
@@ -19,6 +19,7 @@ export default function SubscriptionsScreen() {
   const { subscriptions, saveSubscription, toggleSubscription, removeSubscription } = useSubscriptions();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | undefined>();
+  const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null);
   const [showAnnualCost, setShowAnnualCost] = useState(false);
 
   const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
@@ -113,7 +114,7 @@ export default function SubscriptionsScreen() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionHeaderCopy}>
             <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus serviços</AppText>
-            <AppText tipo="legenda" style={styles.sectionSubtitle}>Toque em um serviço para editar valor ou vencimento</AppText>
+            <AppText tipo="legenda" style={styles.sectionSubtitle}>Planos ativos e pausados no seu painel</AppText>
           </View>
           <AppText tipo="legenda" peso="forte" tabular numberOfLines={1} style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
         </View>
@@ -167,7 +168,7 @@ export default function SubscriptionsScreen() {
 
                   {subscription.active && subscription.renewalAlert && (
                     <View style={styles.reminderBadge}>
-                      <MaterialIcons name="notifications-none" size={13} color="#a36a21" />
+                      <MaterialIcons name="notifications-none" size={14} color="#944c0d" />
                       <AppText tipo="legenda" peso="forte" tabular style={styles.reminderText} numberOfLines={1}>
                         Aviso {subscription.alertDays} {subscription.alertDays === 1 ? 'dia' : 'dias'} antes
                       </AppText>
@@ -179,27 +180,26 @@ export default function SubscriptionsScreen() {
                   <Pressable
                     style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
                     onPress={() => editSubscription(subscription)}
-                    hitSlop={6}
                     accessibilityRole="button"
                     accessibilityLabel={`Editar ${subscription.provider}`}>
-                    <MaterialIcons name="edit" size={17} color="#687078" />
+                    <MaterialIcons name="edit" size={18} color="#5e5c57" />
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
-                    onPress={() => removeSubscription(subscription.id)}
-                    hitSlop={6}
+                    onPress={() => setDeletingSubscription(subscription)}
                     accessibilityRole="button"
                     accessibilityLabel={`Remover ${subscription.provider}`}>
-                    <MaterialIcons name="delete-outline" size={18} color="#c0392b" />
+                    <MaterialIcons name="delete-outline" size={19} color="#c0392b" />
                   </Pressable>
                   <Pressable
                     onPress={() => toggleSubscription(subscription.id)}
-                    hitSlop={6}
                     accessibilityRole="switch"
                     accessibilityState={{ checked: subscription.active }}
                     accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
-                    style={[styles.customSwitchTrack, subscription.active && styles.customSwitchTrackActive]}>
-                    <View style={[styles.customSwitchThumb, subscription.active && styles.customSwitchThumbActive]} />
+                    style={({ pressed }) => [styles.switchHitArea, pressed && styles.pressed]}>
+                    <View style={[styles.customSwitchTrack, subscription.active && styles.customSwitchTrackActive]}>
+                      <View style={[styles.customSwitchThumb, subscription.active && styles.customSwitchThumbActive]} />
+                    </View>
                   </Pressable>
                 </View>
               </View>
@@ -223,6 +223,48 @@ export default function SubscriptionsScreen() {
       </ScrollView>
 
       {editorOpen && <SubscriptionEditorModal key={editingSubscription?.id ?? 'new-subscription'} initialSubscription={editingSubscription} onClose={() => setEditorOpen(false)} onSave={handleSaveSubscription} />}
+
+      <Modal
+        visible={deletingSubscription !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeletingSubscription(null)}
+        statusBarTranslucent>
+        <View style={styles.confirmBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeletingSubscription(null)} accessibilityLabel="Cancelar exclusão" />
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconBadge}>
+              <MaterialIcons name="delete-outline" size={24} color="#c0392b" />
+            </View>
+            <AppText tipo="legenda" peso="forte" style={styles.confirmEyebrow}>EXCLUIR ASSINATURA</AppText>
+            <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.confirmTitle}>
+              Remover {deletingSubscription?.provider}?
+            </AppText>
+            <AppText tipo="legenda" style={styles.confirmMessage}>
+              Os títulos exclusivos desse streaming deixarão de aparecer na Roleta e em Explorar.
+            </AppText>
+            <View style={styles.confirmActions}>
+              <Pressable
+                style={({ pressed }) => [styles.confirmDeleteButton, pressed && styles.pressed]}
+                onPress={() => {
+                  if (deletingSubscription) {
+                    removeSubscription(deletingSubscription.id);
+                    setDeletingSubscription(null);
+                  }
+                }}
+                accessibilityRole="button">
+                <AppText peso="forte" style={styles.confirmDeleteText}>Sim, remover</AppText>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.confirmCancelButton, pressed && styles.pressed]}
+                onPress={() => setDeletingSubscription(null)}
+                accessibilityRole="button">
+                <AppText peso="forte" style={styles.confirmCancelText}>Cancelar</AppText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -258,17 +300,17 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13 },
   sectionHeaderCopy: { flex: 1 },
   sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  sectionSubtitle: { color: '#7b7b78', marginTop: 2, fontSize: 12, lineHeight: 17 },
-  countBadge: { flexShrink: 0, textAlign: 'center', color: '#657078', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 12 },
+  sectionSubtitle: { color: '#5e5c57', marginTop: 2, fontSize: 13, lineHeight: 18 },
+  countBadge: { flexShrink: 0, textAlign: 'center', color: '#565d63', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 },
   subscriptionCard: { borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', padding: 14, marginBottom: 12 },
   subscriptionInactive: { opacity: 0.68 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   serviceInfo: { flex: 1 },
   serviceName: { color: '#182230', fontSize: 16, lineHeight: 21 },
-  billingText: { color: '#7b7b78', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  billingText: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
   priceArea: { alignItems: 'flex-end' },
   price: { color: '#182230', fontSize: 16, lineHeight: 21 },
-  priceCaption: { color: '#7b7b78', fontSize: 12, marginTop: 1 },
+  priceCaption: { color: '#5e5c57', fontSize: 12.5, marginTop: 1 },
   cardDivider: { height: 1, backgroundColor: '#f1ece1', marginVertical: 11 },
   cardBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   badgesRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, flex: 1 },
@@ -277,26 +319,38 @@ const styles = StyleSheet.create({
   statusPillPaused: { backgroundColor: '#f1ece1' },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusDotActive: { backgroundColor: '#2e8b57' },
-  statusDotPaused: { backgroundColor: '#8d7a61' },
-  statusTextActive: { color: '#2e8b57', fontSize: 11 },
-  statusTextPaused: { color: '#7b7b78', fontSize: 11 },
+  statusDotPaused: { backgroundColor: '#6b5943' },
+  statusTextActive: { color: '#216941', fontSize: 12 },
+  statusTextPaused: { color: '#5e5c57', fontSize: 12 },
   reminderBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#fff2d8' },
-  reminderText: { color: '#a36a21', fontSize: 11 },
-  subscriptionActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconActionBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center' },
-  customSwitchTrack: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#d8d3c9', padding: 3, justifyContent: 'center', marginLeft: 2 },
+  reminderText: { color: '#944c0d', fontSize: 12 },
+  subscriptionActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconActionBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center' },
+  switchHitArea: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingLeft: 2 },
+  customSwitchTrack: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#d8d3c9', padding: 3, justifyContent: 'center' },
   customSwitchTrackActive: { backgroundColor: '#182230' },
   customSwitchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fffdf8' },
   customSwitchThumbActive: { alignSelf: 'flex-end', backgroundColor: '#f3b43f' },
   addRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d3c9', borderStyle: 'dashed', backgroundColor: '#fffdf8', marginTop: 6 },
   addIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3b43f', marginRight: 12 },
   addCopy: { flex: 1 },
-  addTitle: { color: '#182230', fontSize: 14, lineHeight: 19 },
-  addSubtitle: { color: '#7b7b78', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  addTitle: { color: '#182230', fontSize: 14.5, lineHeight: 19 },
+  addSubtitle: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
   emptyState: { alignItems: 'center', paddingHorizontal: 26, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
   emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#f1e8d7', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   emptyTitle: { color: '#182230', fontSize: 17, lineHeight: 22 },
-  emptyDescription: { color: '#7b7b78', textAlign: 'center', fontSize: 13, lineHeight: 19, marginTop: 6 },
+  emptyDescription: { color: '#5e5c57', textAlign: 'center', fontSize: 13, lineHeight: 19, marginTop: 6 },
   emptyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 13, paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#f3b43f', marginTop: 16 },
   emptyButtonText: { color: '#182230', fontSize: 13 },
+  confirmBackdrop: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.72)' },
+  confirmCard: { width: '100%', maxWidth: 360, alignItems: 'center', borderRadius: 24, paddingHorizontal: 22, paddingTop: 24, paddingBottom: 20, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
+  confirmIconBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#fdecea', borderWidth: 1, borderColor: '#f5c6c2', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  confirmEyebrow: { color: '#c0392b', letterSpacing: 1.3, textAlign: 'center', marginBottom: 6 },
+  confirmTitle: { color: '#182230', fontSize: 21, lineHeight: 26, letterSpacing: -0.35, textAlign: 'center', marginBottom: 8 },
+  confirmMessage: { color: '#5e5c57', fontSize: 13.5, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
+  confirmActions: { width: '100%', gap: 10 },
+  confirmDeleteButton: { width: '100%', minHeight: 48, borderRadius: 14, backgroundColor: '#c0392b', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  confirmDeleteText: { color: '#fffdf8', fontSize: 14.5 },
+  confirmCancelButton: { width: '100%', minHeight: 46, borderRadius: 14, borderWidth: 1, borderColor: '#ded8cd', backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  confirmCancelText: { color: '#182230', fontSize: 14.5 },
 });

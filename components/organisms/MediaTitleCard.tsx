@@ -6,7 +6,7 @@ import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { getMetacriticScore, getTitleServices, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating, getTitleServices, MediaTitle } from '@/constants/catalog';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -48,7 +48,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
     posterPath: title.tmdbPosterPath,
     backdropPath: title.tmdbBackdropPath,
   }) !== null;
-  const metacritic = getMetacriticScore(title);
+  const averageRating = formatAverageRating(title);
 
   return (
     <View style={styles.resultCard}>
@@ -80,9 +80,14 @@ export const MediaTitleCard = memo(function MediaTitleCard({
         </AppText>
         <View style={styles.serviceLine}>
           <ServiceLogoList services={getTitleServices(title)} size={20} maxVisible={3} gap={5} overflowGap={4} />
-          <AppText tipo="legenda" peso="forte" tabular style={styles.scoreMeta}>
-            TMDB {title.imdbRating}{metacritic !== null ? ` · MC ${metacritic}` : ''}
-          </AppText>
+          {averageRating !== '—' && (
+            <View style={styles.ratingBadge} accessibilityLabel={`Nota ${averageRating} de 10`}>
+              <MaterialIcons name="star" size={12} color="#f3b43f" />
+              <AppText tipo="legenda" peso="forte" tabular style={styles.scoreMeta}>
+                {averageRating}
+              </AppText>
+            </View>
+          )}
         </View>
       </Pressable>
       <Pressable
@@ -130,10 +135,19 @@ const styles = StyleSheet.create({
   },
   resultCopy: { flex: 1, paddingHorizontal: 12, paddingVertical: 4 },
   resultTitle: { color: '#182230', fontSize: 14.5, lineHeight: 19, marginBottom: 3 },
-  resultMeta: { color: '#7b7b78', fontSize: 12, lineHeight: 17 },
-  resultGenres: { color: '#8d7a61', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  resultMeta: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17 },
+  resultGenres: { color: '#6b5943', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
   serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  scoreMeta: { color: '#657078', fontSize: 11, marginLeft: 4 },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: '#182230',
+  },
+  scoreMeta: { color: '#fffdf8', fontSize: 11, lineHeight: 14 },
   actionButton: {
     width: 38,
     height: 38,

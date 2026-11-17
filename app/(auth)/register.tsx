@@ -245,6 +245,6 @@ const styles = StyleSheet.create({
   retryText: { color: '#962318', fontSize: 11 },
   submitButton: { backgroundColor: '#182230', borderRadius: 14, marginTop: 4 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
-  loadingText: { color: '#6c6b67' },
-  link: { color: '#d77c29' },
+  loadingText: { color: '#5e5c57', fontSize: 13 },
+  link: { color: '#a3520d', fontSize: 14 },
 });

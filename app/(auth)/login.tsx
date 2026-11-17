@@ -247,9 +247,9 @@ const styles = StyleSheet.create({
   retryText: { color: '#962318', fontSize: 11 },
   submitButton: { backgroundColor: '#182230', borderRadius: 14, marginTop: 6 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
-  loadingText: { color: '#6c6b67' },
+  loadingText: { color: '#5e5c57', fontSize: 13 },
   accountPrompt: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 20 },
-  accountText: { color: '#6c6b67' },
+  accountText: { color: '#5e5c57', fontSize: 13 },
   linkButton: { paddingVertical: 4, paddingHorizontal: 2 },
-  link: { color: '#d77c29' },
+  link: { color: '#a3520d', fontSize: 14 },
 });

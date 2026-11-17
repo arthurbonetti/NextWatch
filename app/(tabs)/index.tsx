@@ -6,12 +6,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppText } from '@/components/atoms/AppText';
 import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
-import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
 import { formatAverageRating, GENRES, getTitleAverageRating, getTitleServices, MediaKind, MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
+import { useDrawHistory } from '@/contexts/DrawHistoryContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 import { fetchTitleDuration } from '@/services/tmdb';
 import { quickSortByRandom } from '@/utils/quickSort';
@@ -26,12 +27,14 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { titles, status: catalogStatus, isFetchingCatalog } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
+  const { recordDrawAction, updateDrawAction } = useDrawHistory();
   const [kind, setKind] = useState<KindFilter>('Todos');
   const [genre, setGenre] = useState('Todos os gêneros');
   const [filterVisible, setFilterVisible] = useState(false);
   const [incompleteCatalogConfirmVisible, setIncompleteCatalogConfirmVisible] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
+  const [detailsIsDrawn, setDetailsIsDrawn] = useState(false);
   const [lastDrawnId, setLastDrawnId] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [rouletteTitle, setRouletteTitle] = useState<MediaTitle | null>(null);
@@ -41,6 +44,8 @@ export default function HomeScreen() {
   const [heroTranslateY] = useState(() => new Animated.Value(12));
   const rouletteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawLock = useRef(false);
+  const drawEntryPromiseRef = useRef<Promise<string | null> | null>(null);
+  const drawHandledRef = useRef(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -77,8 +82,11 @@ export default function HomeScreen() {
   }), [availableTitles, genre, kind]);
   const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
 
-  const openDetails = (title: MediaTitle) => {
+  const openDetails = (title: MediaTitle, isDrawn = false) => {
     void fetchTitleDuration(title);
+    drawEntryPromiseRef.current = null;
+    drawHandledRef.current = false;
+    setDetailsIsDrawn(isDrawn);
     setSelectedTitle(title);
     setDetailsVisible(true);
   };
@@ -134,7 +142,7 @@ export default function HomeScreen() {
         setSpinning(false);
         setFilterVisible(false);
         drawLock.current = false;
-        openDetails(result);
+        openDetails(result, true);
       }, 220);
     };
 
@@ -273,7 +281,7 @@ export default function HomeScreen() {
             onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
             <AppText tipo="legenda" peso="forte" style={styles.link}>Gerenciar</AppText>
-            <MaterialIcons name="chevron-right" size={16} color="#d77c29" />
+            <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
           </Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceList}>
@@ -295,7 +303,7 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.emptyServiceCard, pressed && styles.pressed]}
               onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
-              <MaterialIcons name="add-circle-outline" size={20} color="#d77c29" />
+              <MaterialIcons name="add-circle-outline" size={20} color="#a3520d" />
               <AppText tipo="legenda" peso="forte" style={styles.link}>Ativar primeiro streaming</AppText>
             </Pressable>
           )}
@@ -311,7 +319,7 @@ export default function HomeScreen() {
             onPress={() => router.push('/(tabs)/tab2')}
             accessibilityRole="button">
             <AppText tipo="legenda" peso="forte" style={styles.link}>Explorar catálogo</AppText>
-            <MaterialIcons name="chevron-right" size={16} color="#d77c29" />
+            <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
           </Pressable>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
@@ -320,6 +328,10 @@ export default function HomeScreen() {
               posterPath: title.tmdbPosterPath,
               backdropPath: title.tmdbBackdropPath,
             }) !== null;
+            const titleActiveServices = getTitleServices(title).filter((service) =>
+              activeServiceNames.has(service),
+            );
+            const badgeServices = titleActiveServices.length > 0 ? titleActiveServices : getTitleServices(title);
             return (
               <Pressable
                 style={({ pressed }) => [styles.titleCard, pressed && styles.pressed]}
@@ -329,6 +341,18 @@ export default function HomeScreen() {
                 <View style={[styles.poster, { backgroundColor: title.color }]}>
                   <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
                   {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
+                  {badgeServices.length > 0 && (
+                    <View style={styles.posterServicesCorner}>
+                      <ServiceLogoList
+                        services={badgeServices}
+                        size={20}
+                        maxVisible={2}
+                        overflowSize={20}
+                        gap={3}
+                        overflowGap={3}
+                      />
+                    </View>
+                  )}
                   <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}>
                     <MaterialIcons name="star" size={12} color="#f3b43f" />
                     <AppText tipo="legenda" peso="forte" tabular style={styles.posterRatingText}>{formatAverageRating(title)}</AppText>
@@ -345,7 +369,7 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
               onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
-              <MaterialIcons name="subscriptions" size={22} color="#d77c29" />
+              <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
               <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
             </Pressable>
           )}
@@ -506,10 +530,51 @@ export default function HomeScreen() {
       <TitleDetailsModal
         title={selectedTitle}
         visible={detailsVisible}
-        onClose={() => setDetailsVisible(false)}
+        eyebrow={detailsIsDrawn ? 'SORTEADO PARA VOCÊ' : 'PARA ASSISTIR HOJE'}
+        onClose={() => {
+          if (detailsIsDrawn && selectedTitle && !drawHandledRef.current) {
+            drawHandledRef.current = true;
+            void recordDrawAction(selectedTitle, 'ignorou');
+          }
+          setDetailsVisible(false);
+        }}
+        onWatch={() => {
+          if (detailsIsDrawn && selectedTitle) {
+            drawHandledRef.current = true;
+            const existingPromise = drawEntryPromiseRef.current;
+            if (existingPromise) {
+              void existingPromise.then((entryId) => {
+                if (entryId) {
+                  void updateDrawAction(entryId, 'assistiu');
+                }
+              });
+            } else {
+              drawEntryPromiseRef.current = recordDrawAction(selectedTitle, 'assistiu');
+            }
+          }
+          setDetailsVisible(false);
+        }}
+        onSaveChange={(nextSaved) => {
+          if (!detailsIsDrawn || !selectedTitle || !nextSaved) return;
+          drawHandledRef.current = true;
+          const existingPromise = drawEntryPromiseRef.current;
+          if (!existingPromise) {
+            drawEntryPromiseRef.current = recordDrawAction(selectedTitle, 'salvou');
+          } else {
+            void existingPromise.then((entryId) => {
+              if (entryId) {
+                void updateDrawAction(entryId, 'salvou');
+              }
+            });
+          }
+        }}
         onDrawAnother={
-          eligibleTitles.length > 1
+          detailsIsDrawn && eligibleTitles.length > 1
             ? () => {
+                if (selectedTitle && !drawHandledRef.current) {
+                  drawHandledRef.current = true;
+                  void recordDrawAction(selectedTitle, 'sorteou outro');
+                }
                 setDetailsVisible(false);
                 drawTitle();
               }
@@ -532,13 +597,13 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffdf8', borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', paddingVertical: 15, paddingHorizontal: 10, marginBottom: 22 },
   statsRowSyncing: { marginBottom: 10 },
   syncNotice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 18 },
-  syncNoticeText: { color: '#8d7a61', fontSize: 12, lineHeight: 16 },
+  syncNoticeText: { color: '#6b5943', fontSize: 12.5, lineHeight: 17 },
   statBlock: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
   statNumber: { color: '#182230', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
-  statHighlight: { color: '#d77c29', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
-  statLabel: { color: '#7b7b78', fontSize: 11.5, lineHeight: 15, textAlign: 'center' },
+  statHighlight: { color: '#a3520d', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
+  statLabel: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, textAlign: 'center' },
   statDivider: { width: 1, height: 34, backgroundColor: '#e8e2d5' },
-  muted: { color: '#7b7b78' },
+  muted: { color: '#5e5c57', fontSize: 13, lineHeight: 18 },
   hero: { minHeight: 206, overflow: 'hidden', borderRadius: 22, backgroundColor: '#182230', borderWidth: 1, borderColor: '#263442', flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
   heroGlow: { position: 'absolute', width: 210, height: 210, borderRadius: 105, right: -44, top: -36, backgroundColor: '#223246' },
   heroCopy: { flex: 1, paddingVertical: 18, paddingLeft: 18, paddingRight: 10, zIndex: 1 },
@@ -556,19 +621,20 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
   sectionTitle: { color: '#182230', fontSize: 19, lineHeight: 24 },
   sectionLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 6, paddingLeft: 8 },
-  link: { color: '#d77c29' },
+  link: { color: '#a3520d', fontSize: 14, lineHeight: 19 },
   serviceList: { gap: 10, paddingBottom: 27 },
   serviceCard: { width: 178, height: 70, padding: 11, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', flexDirection: 'row', alignItems: 'center', gap: 10 },
   emptyServiceCard: { minWidth: 200, height: 70, paddingHorizontal: 16, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#ded8cd', borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', gap: 9 },
   serviceCopy: { flex: 1 },
   serviceName: { color: '#182230', fontSize: 14, lineHeight: 19, marginBottom: 1 },
-  servicePrice: { color: '#8c8a84', fontSize: 11.5, lineHeight: 15 },
+  servicePrice: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17 },
   titleList: { gap: 13, paddingBottom: 28 },
   emptyTitlesCard: { minHeight: 118, width: 260, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, padding: 14, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
   titleCard: { width: 136 },
   poster: { height: 176, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(24,34,48,0.08)', justifyContent: 'center', alignItems: 'center', gap: 10, padding: 11, marginBottom: 9, overflow: 'hidden' },
   posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(20,28,38,0.72)', borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
   posterRatingCorner: { position: 'absolute', bottom: 8, left: 8 },
+  posterServicesCorner: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(20,28,38,0.74)', borderRadius: 9, padding: 3 },
   posterRatingText: { color: '#fffdf8', fontSize: 10 },
   posterLabel: { color: 'rgba(255,255,255,0.95)', textAlign: 'center', letterSpacing: 0.8 },
   titleName: { color: '#182230', fontSize: 13, lineHeight: 18 },
@@ -579,15 +645,15 @@ const styles = StyleSheet.create({
   modalEyebrow: { color: '#e58c34', letterSpacing: 1.3, marginBottom: 6 },
   modalTitle: { color: '#182230', fontSize: 22, lineHeight: 27, letterSpacing: -0.35, maxWidth: 280 },
   closeButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
-  modalDescription: { color: '#7b7b78', fontSize: 13, lineHeight: 19, marginTop: 8, marginBottom: 19 },
-  filterLabel: { color: '#7b7b78', letterSpacing: 1, marginBottom: 9 },
+  modalDescription: { color: '#5e5c57', fontSize: 13, lineHeight: 19, marginTop: 8, marginBottom: 19 },
+  filterLabel: { color: '#5e5c57', letterSpacing: 1, marginBottom: 9 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 15 },
   chipScrollRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 15 },
   chip: { flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderWidth: 1, borderColor: '#ded8cd', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#fffdf8' },
   chipSelected: { backgroundColor: '#182230', borderColor: '#182230' },
-  chipText: { color: '#6c6b67' },
+  chipText: { color: '#5e5c57' },
   chipTextSelected: { color: '#fffdf8' },
-  resultCount: { color: '#7b7b78', textAlign: 'center', marginBottom: 10 },
+  resultCount: { color: '#5e5c57', fontSize: 12.5, textAlign: 'center', marginBottom: 10 },
   confirmButton: { minHeight: 52, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   disabledButton: { opacity: 0.5 },
   confirmButtonText: { color: '#182230' },
@@ -604,7 +670,7 @@ const styles = StyleSheet.create({
   confirmCancelText: { color: '#182230', fontSize: 14, textAlign: 'center' },
   rouletteBackdrop: { flex: 1, padding: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.82)' },
   rouletteCard: { width: '100%', maxWidth: 380, alignItems: 'center', borderRadius: 26, paddingHorizontal: 22, paddingTop: 27, paddingBottom: 23, backgroundColor: '#fffdf8' },
-  rouletteEyebrow: { color: '#d77c29', letterSpacing: 1.5, marginBottom: 19 },
+  rouletteEyebrow: { color: '#a3520d', letterSpacing: 1.5, marginBottom: 19 },
   rouletteWheel: { width: 144, height: 144, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
   wheelRing: { ...StyleSheet.absoluteFill, borderRadius: 72, borderWidth: 10, borderColor: '#f3b43f', borderRightColor: '#d77c29', borderBottomColor: '#182230', borderLeftColor: '#e58c34' },
   wheelCenter: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1e8d7' },
@@ -613,11 +679,11 @@ const styles = StyleSheet.create({
   wheelDotRight: { right: 1, top: 66, borderColor: '#182230' },
   wheelDotBottom: { bottom: 1, left: 66, borderColor: '#e58c34' },
   wheelDotLeft: { left: 1, top: 66, borderColor: '#f3b43f' },
-  rouletteCaption: { color: '#7b7b78', marginBottom: 19 },
+  rouletteCaption: { color: '#5e5c57', fontSize: 12.5, marginBottom: 19 },
   roulettePreview: { width: '100%', minHeight: 68, flexDirection: 'row', alignItems: 'center', padding: 9, borderRadius: 16, backgroundColor: '#f1eee7' },
   previewPoster: { width: 48, height: 50, borderRadius: 11, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   previewCopy: { flex: 1, paddingHorizontal: 11 },
-  previewType: { color: '#d77c29', fontSize: 9, letterSpacing: 0.8, marginBottom: 3 },
+  previewType: { color: '#a3520d', fontSize: 10, letterSpacing: 0.8, marginBottom: 3 },
   previewTitle: { color: '#182230', fontSize: 14 },
   previewRating: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 7, paddingVertical: 5, borderRadius: 9, backgroundColor: '#182230' },
   previewRatingText: { color: '#fffdf8', fontSize: 11 },

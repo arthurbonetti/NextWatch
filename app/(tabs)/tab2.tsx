@@ -1,10 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
 import { GENRES, getTitleAverageRating, getTitleServices, matchesSearchQuery, MediaKind, MediaTitle, rankTitlesBySearchRelevance } from '@/constants/catalog';
 import { FONT_FAMILIES } from '@/constants/typography';
@@ -13,12 +14,22 @@ import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
+type SortOption = 'default' | 'rating' | 'year' | 'title';
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'default', label: 'Mais populares' },
+  { value: 'rating', label: 'Maior nota' },
+  { value: 'year', label: 'Mais recentes' },
+  { value: 'title', label: 'A–Z' },
+];
+
+const COLLAPSED_GENRE_COUNT = 7;
 
 const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
-  const { titles, status, errorMessage, refreshCatalog, searchTitles } = useCatalog();
+  const { titles, refreshCatalog, searchTitles } = useCatalog();
   const { isSaved, toggleSavedTitle, refreshMyList } = useMyList();
 
   useFocusEffect(
@@ -29,10 +40,13 @@ export default function ExploreScreen() {
   const { subscriptions } = useSubscriptions();
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState<'Todos' | MediaKind>('Todos');
-  const [genreFilter, setGenreFilter] = useState('Todos');
-  const [serviceFilter, setServiceFilter] = useState('Todos');
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [showAllGenres, setShowAllGenres] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('Qualquer nota');
+  const [sortBy, setSortBy] = useState<SortOption>('default');
   const [filtersVisible, setFiltersVisible] = useState(false);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<MediaTitle[] | null>(null);
   const [remoteQuery, setRemoteQuery] = useState('');
@@ -40,6 +54,15 @@ export default function ExploreScreen() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchErrorQuery, setSearchErrorQuery] = useState('');
   const searchRequestRef = useRef(0);
+
+  const handlePullRefresh = useCallback(async () => {
+    setPullRefreshing(true);
+    try {
+      await refreshCatalog();
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [refreshCatalog]);
 
   const activeServices = useMemo(() => new Set(subscriptions.filter((item) => item.active).map((item) => item.provider)), [subscriptions]);
   const availableTitles = useMemo(() => titles.filter((title) =>
@@ -78,17 +101,70 @@ export default function ExploreScreen() {
   }, [search, searchTitles]);
 
   const genres = useMemo(
-    () => ['Todos', ...Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)]))],
+    () => Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)])),
     [titles],
   );
-  const serviceNames = useMemo(
-    () => ['Todos', ...Array.from(new Set(availableTitles.flatMap((title) => getTitleServices(title))))],
-    [availableTitles],
+  const serviceNames = useMemo(() => {
+    const availableServiceSet = new Set(availableTitles.flatMap((title) => getTitleServices(title)));
+    const activeOrdered = subscriptions
+      .filter((item) => item.active && availableServiceSet.has(item.provider))
+      .map((item) => item.provider);
+    return Array.from(new Set(activeOrdered));
+  }, [availableTitles, subscriptions]);
+
+  const effectiveSelectedServices = useMemo(
+    () => selectedServices.filter((service) => serviceNames.includes(service)),
+    [selectedServices, serviceNames],
   );
-  const activeFilterCount = Number(kindFilter !== 'Todos')
-    + Number(genreFilter !== 'Todos')
-    + Number(serviceFilter !== 'Todos')
-    + Number(ratingFilter !== 'Qualquer nota');
+  const effectiveSelectedGenres = useMemo(
+    () => selectedGenres.filter((genre) => genres.includes(genre)),
+    [genres, selectedGenres],
+  );
+
+  const visibleGenres = useMemo(() => {
+    if (showAllGenres || genres.length <= COLLAPSED_GENRE_COUNT) return genres;
+    const base = genres.slice(0, COLLAPSED_GENRE_COUNT);
+    const extrasSelected = effectiveSelectedGenres.filter((genre) => !base.includes(genre));
+    return [...base, ...extrasSelected];
+  }, [effectiveSelectedGenres, genres, showAllGenres]);
+
+  const toggleService = useCallback((service: string) => {
+    setSelectedServices((current) =>
+      current.includes(service) ? current.filter((item) => item !== service) : [...current, service],
+    );
+  }, []);
+
+  const toggleGenre = useCallback((genre: string) => {
+    setSelectedGenres((current) =>
+      current.includes(genre) ? current.filter((item) => item !== genre) : [...current, genre],
+    );
+  }, []);
+
+  const activeSheetFilterCount =
+    effectiveSelectedServices.length +
+    effectiveSelectedGenres.length +
+    Number(ratingFilter !== 'Qualquer nota') +
+    Number(sortBy !== 'default');
+  const hasActiveFilter =
+    kindFilter !== 'Todos' ||
+    effectiveSelectedGenres.length > 0 ||
+    effectiveSelectedServices.length > 0 ||
+    ratingFilter !== 'Qualquer nota' ||
+    search.trim().length > 0;
+  const hasResettableFilters =
+    kindFilter !== 'Todos' ||
+    effectiveSelectedGenres.length > 0 ||
+    effectiveSelectedServices.length > 0 ||
+    ratingFilter !== 'Qualquer nota' ||
+    sortBy !== 'default';
+
+  const clearAllFilters = useCallback(() => {
+    setKindFilter('Todos');
+    setSelectedGenres([]);
+    setSelectedServices([]);
+    setRatingFilter('Qualquer nota');
+    setSortBy('default');
+  }, []);
 
   const results = useMemo(() => {
     const rawQuery = search.trim();
@@ -113,15 +189,75 @@ export default function ExploreScreen() {
 
     const filtered = sourceTitles.filter((title) => {
       const matchesKind = kindFilter === 'Todos' || title.kind === kindFilter;
-      const matchesGenre = genreFilter === 'Todos' || title.genres.includes(genreFilter);
-      const matchesService = serviceFilter === 'Todos' || getTitleServices(title).includes(serviceFilter);
+      const matchesGenre =
+        effectiveSelectedGenres.length === 0 ||
+        effectiveSelectedGenres.every((genre) => title.genres.includes(genre));
+      const matchesService =
+        effectiveSelectedServices.length === 0 ||
+        getTitleServices(title).some((service) => effectiveSelectedServices.includes(service));
       const rating = getTitleAverageRating(title);
       const matchesRating = ratingFilter === 'Qualquer nota' || rating >= Number(ratingFilter.replace('+', ''));
       return matchesKind && matchesGenre && matchesService && matchesRating;
     });
 
+    if (sortBy === 'rating') {
+      return [...filtered].sort((a, b) => {
+        const ratingDiff = getTitleAverageRating(b) - getTitleAverageRating(a);
+        if (ratingDiff !== 0) return ratingDiff;
+        return (b.popularity ?? 0) - (a.popularity ?? 0);
+      });
+    }
+    if (sortBy === 'year') {
+      return [...filtered].sort((a, b) => {
+        const yearDiff = (b.year || 0) - (a.year || 0);
+        if (yearDiff !== 0) return yearDiff;
+        return getTitleAverageRating(b) - getTitleAverageRating(a);
+      });
+    }
+    if (sortBy === 'title') {
+      return [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+    }
+
     return rawQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, rawQuery) : filtered;
-  }, [availableTitles, genreFilter, kindFilter, ratingFilter, remoteQuery, remoteResults, search, serviceFilter]);
+  }, [availableTitles, effectiveSelectedGenres, effectiveSelectedServices, kindFilter, ratingFilter, remoteQuery, remoteResults, search, sortBy]);
+
+  const activeSortLabel = sortBy === 'default' && search.trim().length > 0
+    ? 'Relevância'
+    : SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label ?? 'Mais populares';
+
+  const activeFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; service?: string; onRemove: () => void }[] = [];
+    for (const service of effectiveSelectedServices) {
+      chips.push({
+        key: `service-${service}`,
+        label: service,
+        service,
+        onRemove: () => setSelectedServices((current) => current.filter((item) => item !== service)),
+      });
+    }
+    for (const genre of effectiveSelectedGenres) {
+      chips.push({
+        key: `genre-${genre}`,
+        label: genre,
+        onRemove: () => setSelectedGenres((current) => current.filter((item) => item !== genre)),
+      });
+    }
+    if (ratingFilter !== 'Qualquer nota') {
+      chips.push({
+        key: `rating-${ratingFilter}`,
+        label: `Nota ${ratingFilter}`,
+        onRemove: () => setRatingFilter('Qualquer nota'),
+      });
+    }
+    if (sortBy !== 'default') {
+      chips.push({
+        key: `sort-${sortBy}`,
+        label: activeSortLabel,
+        onRemove: () => setSortBy('default'),
+      });
+    }
+    return chips;
+  }, [activeSortLabel, effectiveSelectedGenres, effectiveSelectedServices, ratingFilter, sortBy]);
 
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
@@ -150,73 +286,64 @@ export default function ExploreScreen() {
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={5}
+        refreshControl={
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={() => { void handlePullRefresh(); }}
+            tintColor="#a3520d"
+            colors={['#a3520d', '#f3b43f']}
+          />
+        }
         ListHeaderComponent={
           <View>
             <View style={styles.header}>
-              <View>
-                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
-                <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
+              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
+              <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
+            </View>
+
+            <View style={styles.searchRow}>
+              <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
+                <MaterialIcons name="search" size={21} color={searchFocused ? '#a3520d' : '#8b8a84'} />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setSearchFocused(false)}
+                  placeholder="Buscar filme, série ou gênero"
+                  placeholderTextColor="#7a7973"
+                  selectionColor="#a3520d"
+                  style={styles.searchInput}
+                  returnKeyType="search"
+                  accessibilityLabel="Pesquisar títulos"
+                />
+                {search.length > 0 && (
+                  <Pressable onPress={() => setSearch('')} hitSlop={10} accessibilityLabel="Limpar busca">
+                    <MaterialIcons name="close" size={18} color="#7a7973" />
+                  </Pressable>
+                )}
               </View>
               <Pressable
                 style={({ pressed }) => [
                   styles.filterButton,
-                  filtersVisible && styles.filterButtonActive,
+                  activeSheetFilterCount > 0 && styles.filterButtonActive,
                   pressed && styles.pressed,
                 ]}
-                onPress={() => setFiltersVisible((value) => !value)}
+                onPress={() => setFiltersVisible(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Abrir filtros">
-                <MaterialIcons name="tune" size={20} color="#182230" />
-                {activeFilterCount > 0 && <View style={styles.filterCount}><AppText peso="forte" tabular style={styles.filterCountText}>{activeFilterCount}</AppText></View>}
+                accessibilityLabel={
+                  activeSheetFilterCount > 0
+                    ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
+                    : 'Abrir filtros e ordenação'
+                }>
+                <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? '#a3520d' : '#182230'} />
+                {activeSheetFilterCount > 0 && (
+                  <View style={styles.filterCount}>
+                    <AppText peso="forte" tabular style={styles.filterCountText}>
+                      {activeSheetFilterCount}
+                    </AppText>
+                  </View>
+                )}
               </Pressable>
-            </View>
-
-            <View style={styles.catalogNotice}>
-              <View style={styles.catalogNoticeCopy}>
-                <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
-                  {status === 'loading' ? 'Carregando catálogo completo…' : status === 'ready' ? 'Catálogo conectado ao TMDB' : status === 'needs-api-key' ? 'Catálogo de demonstração' : 'Falha ao atualizar catálogo'}
-                </AppText>
-                <AppText tipo="legenda" style={styles.catalogNoticeText}>
-                  {status === 'loading'
-                    ? 'Buscando todos os filmes, séries e animes nos seus serviços ativos.'
-                    : status === 'ready'
-                      ? 'Disponibilidade no Brasil · notas da comunidade TMDB'
-                      : status === 'needs-api-key'
-                        ? 'Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
-                        : errorMessage ?? 'Confira a conexão e tente novamente.'}
-                </AppText>
-              </View>
-              <Pressable
-                style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}
-                onPress={() => { void refreshCatalog(); }}
-                disabled={status === 'loading'}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel="Atualizar catálogo"
-              >
-                <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#b66a24'} />
-              </Pressable>
-            </View>
-
-            <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
-              <MaterialIcons name="search" size={21} color={searchFocused ? '#d77c29' : '#8b8a84'} />
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                placeholder="Buscar filme, série ou gênero"
-                placeholderTextColor="#9a9993"
-                selectionColor="#d77c29"
-                style={styles.searchInput}
-                returnKeyType="search"
-                accessibilityLabel="Pesquisar títulos"
-              />
-              {search.length > 0 && (
-                <Pressable onPress={() => setSearch('')} hitSlop={10} accessibilityLabel="Limpar busca">
-                  <MaterialIcons name="close" size={18} color="#8b8a84" />
-                </Pressable>
-              )}
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
@@ -229,52 +356,228 @@ export default function ExploreScreen() {
                     kindFilter === filter && styles.quickChipActive,
                     pressed && styles.pressed,
                   ]}>
-                  <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>{filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}</AppText>
+                  <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>
+                    {filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}
+                  </AppText>
                 </Pressable>
               ))}
             </ScrollView>
 
-            {filtersVisible && <View style={styles.filterPanel}>
-              <View style={styles.filterPanelHeader}>
-                <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>GÊNERO</AppText>
-                {activeFilterCount > 0 && (
+            {activeFilterChips.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsRow}>
+                {activeFilterChips.map((chip) => (
                   <Pressable
-                    hitSlop={8}
-                    onPress={() => { setKindFilter('Todos'); setGenreFilter('Todos'); setServiceFilter('Todos'); setRatingFilter('Qualquer nota'); }}>
-                    <AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar filtros</AppText>
+                    key={chip.key}
+                    onPress={chip.onRemove}
+                    style={({ pressed }) => [styles.activeFilterChip, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remover filtro ${chip.label}`}>
+                    {chip.service && <ServiceLogo name={chip.service} size={14} />}
+                    <AppText tipo="legenda" peso="forte" style={styles.activeFilterChipText}>
+                      {chip.label}
+                    </AppText>
+                    <MaterialIcons name="close" size={14} color="#a3520d" />
+                  </Pressable>
+                ))}
+                {activeFilterChips.length > 1 && (
+                  <Pressable
+                    onPress={clearAllFilters}
+                    style={({ pressed }) => [styles.clearAllChip, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Limpar todos os filtros">
+                    <AppText tipo="legenda" peso="forte" style={styles.clearAllChipText}>
+                      Limpar tudo
+                    </AppText>
+                  </Pressable>
+                )}
+              </ScrollView>
+            )}
+
+            <View style={styles.resultsHeader}>
+              <View style={styles.resultsHeaderCopy}>
+                <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>
+                  {search.trim() ? 'Resultados da busca' : 'Títulos para assistir'}
+                </AppText>
+                <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
+                  {searchLoading
+                    ? 'Pesquisando no catálogo online…'
+                    : hasActiveFilter
+                      ? `${countFormat.format(results.length)} de ${countFormat.format(availableTitles.length)} títulos`
+                      : `${countFormat.format(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
+                </AppText>
+              </View>
+            </View>
+
+            {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#a3520d" /></View>
+            <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
+            <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
+            {activeServices.size === 0 ? (
+              <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={() => router.push('/subscriptions')}>
+                <AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText>
+              </Pressable>
+            ) : hasResettableFilters ? (
+              <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={clearAllFilters}>
+                <AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Limpar filtros</AppText>
+              </Pressable>
+            ) : null}
+          </View>
+        }
+      />
+
+      <Modal
+        visible={filtersVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFiltersVisible(false)}
+        statusBarTranslucent>
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFiltersVisible(false)} accessibilityLabel="Fechar filtros" />
+          <View style={[styles.sheetCard, { paddingBottom: Math.max(24, insets.bottom + 14) }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View>
+                <AppText tipo="legenda" peso="forte" style={styles.sheetEyebrow}>REFINAR CATÁLOGO</AppText>
+                <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.sheetTitle}>
+                  Filtros e ordenação
+                </AppText>
+              </View>
+              <View style={styles.sheetHeaderActions}>
+                {hasResettableFilters && (
+                  <Pressable
+                    hitSlop={6}
+                    onPress={clearAllFilters}
+                    style={({ pressed }) => [styles.clearHeaderBtn, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Limpar filtros">
+                    <AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar</AppText>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => setFiltersVisible(false)}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.sheetCloseButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Fechar">
+                  <MaterialIcons name="close" size={20} color="#182230" />
+                </Pressable>
+              </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator style={styles.sheetScroll} contentContainerStyle={styles.sheetScrollContent}>
+              <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>ORDENAÇÃO</AppText>
+              <View style={styles.filterChips}>
+                {SORT_OPTIONS.map((option) => {
+                  const selected = sortBy === option.value;
+                  const optionLabel = option.value === 'default' && search.trim().length > 0 ? 'Relevância' : option.label;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setSortBy(option.value)}
+                      style={({ pressed }) => [
+                        styles.filterChip,
+                        selected && styles.filterChipActive,
+                        pressed && styles.pressed,
+                      ]}>
+                      <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
+                        {optionLabel}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {serviceNames.length > 1 && (
+                <>
+                  <View style={styles.sectionLabelRow}>
+                    <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
+                    <AppText tipo="legenda" style={styles.sectionHint}>Múltipla escolha</AppText>
+                  </View>
+                  <View style={styles.filterChips}>
+                    <Pressable
+                      onPress={() => setSelectedServices([])}
+                      style={({ pressed }) => [
+                        styles.filterChip,
+                        effectiveSelectedServices.length === 0 && styles.filterChipActive,
+                        pressed && styles.pressed,
+                      ]}>
+                      <AppText tipo="legenda" peso="forte" style={effectiveSelectedServices.length === 0 ? styles.filterChipTextActive : styles.filterChipText}>
+                        Meus streamings
+                      </AppText>
+                    </Pressable>
+                    {serviceNames.map((service) => {
+                      const selected = effectiveSelectedServices.includes(service);
+                      return (
+                        <Pressable
+                          key={service}
+                          onPress={() => toggleService(service)}
+                          style={({ pressed }) => [
+                            styles.filterChip,
+                            selected && styles.filterChipActive,
+                            pressed && styles.pressed,
+                          ]}>
+                          <View style={styles.chipInner}>
+                            <ServiceLogo name={service} size={15} />
+                            <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
+                              {service}
+                            </AppText>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              <View style={styles.sectionLabelRow}>
+                <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>GÊNERO</AppText>
+                <AppText tipo="legenda" style={styles.sectionHint}>Combina selecionados</AppText>
+              </View>
+              <View style={styles.filterChips}>
+                <Pressable
+                  onPress={() => setSelectedGenres([])}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    effectiveSelectedGenres.length === 0 && styles.filterChipActive,
+                    pressed && styles.pressed,
+                  ]}>
+                  <AppText tipo="legenda" peso="forte" style={effectiveSelectedGenres.length === 0 ? styles.filterChipTextActive : styles.filterChipText}>
+                    Todos
+                  </AppText>
+                </Pressable>
+                {visibleGenres.map((genre) => {
+                  const selected = effectiveSelectedGenres.includes(genre);
+                  return (
+                    <Pressable
+                      key={genre}
+                      onPress={() => toggleGenre(genre)}
+                      style={({ pressed }) => [
+                        styles.filterChip,
+                        selected && styles.filterChipActive,
+                        pressed && styles.pressed,
+                      ]}>
+                      <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
+                        {genre}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+                {genres.length > COLLAPSED_GENRE_COUNT && (
+                  <Pressable
+                    onPress={() => setShowAllGenres((prev) => !prev)}
+                    style={({ pressed }) => [styles.expandGenresChip, pressed && styles.pressed]}>
+                    <AppText tipo="legenda" peso="forte" style={styles.expandGenresText}>
+                      {showAllGenres ? 'Menos' : `Mais (+${genres.length - COLLAPSED_GENRE_COUNT})`}
+                    </AppText>
                   </Pressable>
                 )}
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-                {genres.map((genre) => (
-                  <Pressable
-                    key={genre}
-                    onPress={() => setGenreFilter(genre)}
-                    style={({ pressed }) => [
-                      styles.filterChip,
-                      genreFilter === genre && styles.filterChipActive,
-                      pressed && styles.pressed,
-                    ]}>
-                    <AppText tipo="legenda" peso="forte" style={genreFilter === genre ? styles.filterChipTextActive : styles.filterChipText}>{genre}</AppText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-              <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
-                {serviceNames.map((service) => (
-                  <Pressable
-                    key={service}
-                    onPress={() => setServiceFilter(service)}
-                    style={({ pressed }) => [
-                      styles.filterChip,
-                      serviceFilter === service && styles.filterChipActive,
-                      pressed && styles.pressed,
-                    ]}>
-                    <AppText tipo="legenda" peso="forte" style={serviceFilter === service ? styles.filterChipTextActive : styles.filterChipText}>{service}</AppText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-              <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA</AppText>
+
+              <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA MÍNIMA</AppText>
               <View style={styles.filterChips}>
                 {(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => (
                   <Pressable
@@ -285,42 +588,43 @@ export default function ExploreScreen() {
                       ratingFilter === rating && styles.filterChipActive,
                       pressed && styles.pressed,
                     ]}>
-                    <AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>{rating}</AppText>
+                    <AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>
+                      {rating}
+                    </AppText>
                   </Pressable>
                 ))}
               </View>
-            </View>}
+            </ScrollView>
 
-            <View style={styles.resultsHeader}>
-              <View>
-                <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>{search.trim() ? 'Resultados da busca' : 'Títulos para assistir'}</AppText>
-                <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
-                  {searchLoading
-                    ? 'Pesquisando no catálogo online…'
-                    : status === 'ready'
-                    ? `${countFormat.format(results.length)} de ${countFormat.format(availableTitles.length)} títulos disponíveis`
-                    : `${countFormat.format(results.length)} ${results.length === 1 ? 'título' : 'títulos'} · seus streamings ativos`}
+            <Pressable
+              disabled={results.length === 0}
+              style={({ pressed }) => [
+                styles.applyButton,
+                results.length === 0 && styles.applyButtonDisabled,
+                pressed && results.length > 0 && styles.pressed,
+              ]}
+              onPress={() => setFiltersVisible(false)}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: results.length === 0 }}>
+              <AppText peso="forte" style={[styles.applyButtonText, results.length === 0 && styles.applyButtonTextDisabled]}>
+                {results.length === 0
+                  ? 'Nenhum título encontrado'
+                  : `Ver ${countFormat.format(results.length)} ${results.length === 1 ? 'título' : 'títulos'}`}
+              </AppText>
+            </Pressable>
+            {results.length === 0 && hasResettableFilters && (
+              <Pressable
+                style={({ pressed }) => [styles.secondaryResetButton, pressed && styles.pressed]}
+                onPress={clearAllFilters}
+                accessibilityRole="button">
+                <AppText tipo="legenda" peso="forte" style={styles.secondaryResetText}>
+                  Limpar filtros
                 </AppText>
-              </View>
-              <View style={styles.sortBadge}>
-                <MaterialIcons name="auto-awesome" size={13} color="#d77c29" />
-                <AppText tipo="legenda" peso="forte" style={styles.sortBadgeText}>
-                  {search.trim() ? 'Relevância' : 'Catálogo BR'}
-                </AppText>
-              </View>
-            </View>
-            {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+              </Pressable>
+            )}
           </View>
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#d77c29" /></View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
-            <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
-            {activeServices.size === 0 && <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={() => router.push('/subscriptions')}><AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText></Pressable>}
-          </View>
-        }
-      />
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -329,47 +633,84 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
   container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  header: { marginBottom: 16 },
   eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
   title: { color: '#182230', fontSize: 25, lineHeight: 30 },
-  filterButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
-  filterButtonActive: { borderColor: '#182230', backgroundColor: '#f1e8d7' },
-  filterCount: { position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e58c34' },
-  filterCountText: { color: '#fff', fontSize: 10, lineHeight: 14 },
-  searchBox: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginBottom: 14 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, overflow: 'visible' },
+  searchBox: { flex: 1, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
   searchBoxFocused: { borderColor: '#182230' },
   searchInput: { flex: 1, color: '#182230', fontFamily: FONT_FAMILIES.sans.regular, fontSize: 16, lineHeight: 22, paddingVertical: 10 },
-  catalogNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderRadius: 14, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 14 },
-  catalogNoticeCopy: { flex: 1 },
-  catalogNoticeTitle: { color: '#8b5827', fontSize: 13, lineHeight: 18, marginBottom: 2 },
-  catalogNoticeText: { color: '#706555', fontSize: 12, lineHeight: 17 },
-  refreshButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#fffdf8' },
-  quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 17 },
-  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 11, paddingVertical: 8, backgroundColor: '#fffdf8' },
+  filterButton: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
+  filterButtonActive: { borderColor: '#a3520d', backgroundColor: '#fff2d8' },
+  filterCount: { position: 'absolute', top: -6, right: -6, zIndex: 2, minWidth: 21, height: 21, paddingHorizontal: 5, borderRadius: 10.5, borderWidth: 2, borderColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center', backgroundColor: '#a3520d' },
+  filterCountText: { color: '#fffdf8', fontSize: 10.5, lineHeight: 13 },
+  quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 12 },
+  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fffdf8' },
   quickChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  quickText: { color: '#6c6b67', fontSize: 12 },
-  quickTextActive: { color: '#fffdf8', fontSize: 12 },
-  filterPanel: { padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e5dac3', backgroundColor: '#f1e8d7', marginBottom: 16 },
-  filterPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  filterLabel: { color: '#7b7b78', fontSize: 11, letterSpacing: 1, marginBottom: 8 },
-  clearFilters: { color: '#d77c29', fontSize: 12, marginBottom: 8 },
-  secondFilterLabel: { marginTop: 12 },
+  chipInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  quickText: { color: '#5e5c57', fontSize: 13 },
+  quickTextActive: { color: '#fffdf8', fontSize: 13 },
+  activeChipsRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 14 },
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5dac3',
+    backgroundColor: '#f1e8d7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  activeFilterChipText: { color: '#182230', fontSize: 12.5 },
+  clearAllChip: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5dac3',
+    backgroundColor: '#fffdf8',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  clearAllChipText: { color: '#a3520d', fontSize: 12.5 },
+  sectionLabelRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 15, marginBottom: 8 },
+  filterLabel: { color: '#5e5c57', fontSize: 12, letterSpacing: 1, marginBottom: 8 },
+  secondFilterLabel: { marginTop: 15 },
+  sectionHint: { color: '#5e5c57', fontSize: 12 },
+  clearFilters: { color: '#a3520d', fontSize: 13 },
   filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fffdf8' },
+  filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: '#fffdf8' },
   filterChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  filterChipText: { color: '#6c6b67', fontSize: 12 },
-  filterChipTextActive: { color: '#fffdf8', fontSize: 12 },
-  resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3, marginBottom: 12 },
+  filterChipText: { color: '#5e5c57', fontSize: 13 },
+  filterChipTextActive: { color: '#fffdf8', fontSize: 13 },
+  expandGenresChip: { borderWidth: 1, borderColor: '#e5dac3', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: '#f1e8d7' },
+  expandGenresText: { color: '#a3520d', fontSize: 13 },
+  resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 12 },
+  resultsHeaderCopy: { flex: 1 },
   resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  resultsSubtitle: { color: '#7b7b78', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  sortBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#f1e8d7' },
-  sortBadgeText: { color: '#8b5827', fontSize: 12 },
+  resultsSubtitle: { color: '#5e5c57', fontSize: 13, lineHeight: 18, marginTop: 2 },
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,34,48,0.26)' },
+  sheetCard: { backgroundColor: '#fffdf8', borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1, borderBottomWidth: 0, borderColor: '#ded8cd', paddingHorizontal: 22, paddingTop: 12, maxHeight: '82%' },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#d8d3c9', alignSelf: 'center', marginBottom: 12 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sheetEyebrow: { color: '#e58c34', letterSpacing: 1.3, marginBottom: 3 },
+  sheetTitle: { color: '#182230', fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
+  sheetHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  clearHeaderBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 12, backgroundColor: '#f1eee7' },
+  sheetCloseButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
+  sheetScroll: { marginBottom: 14 },
+  sheetScrollContent: { paddingBottom: 6 },
+  applyButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', alignItems: 'center', justifyContent: 'center' },
+  applyButtonDisabled: { backgroundColor: '#e8e2d5' },
+  applyButtonText: { color: '#182230', fontSize: 14.5 },
+  applyButtonTextDisabled: { color: '#5e5c57' },
+  secondaryResetButton: { minHeight: 40, marginTop: 8, alignItems: 'center', justifyContent: 'center' },
+  secondaryResetText: { color: '#a3520d', fontSize: 13.5 },
   searchError: { color: '#c0392b', marginBottom: 8 },
   savedButtonActive: { backgroundColor: '#fff2d8', borderWidth: 1, borderColor: '#e58c34' },
   emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginTop: 10 },
   emptyIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1e8d7', marginBottom: 11 },
   emptyTitle: { color: '#182230', fontSize: 16 },
-  emptyText: { color: '#7b7b78', fontSize: 12, textAlign: 'center', marginTop: 5, lineHeight: 18 },
+  emptyText: { color: '#5e5c57', fontSize: 13, textAlign: 'center', marginTop: 5, lineHeight: 19 },
   emptyAction: { borderRadius: 12, backgroundColor: '#f3b43f', paddingHorizontal: 16, paddingVertical: 10, marginTop: 14 },
-  emptyActionText: { color: '#182230', fontSize: 12 },
+  emptyActionText: { color: '#182230', fontSize: 13 },
 });

@@ -16,6 +16,7 @@ import 'react-native-reanimated';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CatalogProvider } from '@/contexts/CatalogContext';
+import { DrawHistoryProvider } from '@/contexts/DrawHistoryContext';
 import { MyListProvider } from '@/contexts/MyListContext';
 import { SubscriptionsProvider } from '@/contexts/SubscriptionsContext';
 
@@ -59,14 +60,17 @@ export default function RootLayout() {
         <SubscriptionsProvider>
           <CatalogProvider>
             <MyListProvider>
-              <Stack>
-                <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
-                <Stack.Screen name="my-list" options={{ headerShown: false }} />
-                <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
-              </Stack>
+              <DrawHistoryProvider>
+                <Stack>
+                  <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+                  <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
+                  <Stack.Screen name="my-list" options={{ headerShown: false }} />
+                  <Stack.Screen name="draw-history" options={{ headerShown: false }} />
+                  <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
+                </Stack>
+              </DrawHistoryProvider>
             </MyListProvider>
           </CatalogProvider>
         </SubscriptionsProvider>

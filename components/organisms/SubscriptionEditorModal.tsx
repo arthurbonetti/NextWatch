@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -35,6 +35,31 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
   const [alertDays, setAlertDays] = useState<1 | 3 | 7>(initialSubscription?.alertDays ?? 3);
   const [focusedField, setFocusedField] = useState<'price' | 'day' | null>(null);
   const [error, setError] = useState('');
+  const providersScrollRef = useRef<ScrollView>(null);
+  const providersViewportWidthRef = useRef(0);
+  const providerLayoutsRef = useRef<Record<string, { x: number; width: number }>>({});
+  const hasInitialScrolledRef = useRef(false);
+
+  const scrollToProvider = useCallback((providerName: string, animated: boolean) => {
+    const layout = providerLayoutsRef.current[providerName];
+    const scrollView = providersScrollRef.current;
+    if (!layout || !scrollView) return;
+    const viewportWidth = providersViewportWidthRef.current;
+    const targetX = viewportWidth > 0
+      ? Math.max(0, layout.x - (viewportWidth - layout.width) / 2)
+      : Math.max(0, layout.x - 16);
+    scrollView.scrollTo({ x: targetX, animated });
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!hasInitialScrolledRef.current) {
+        scrollToProvider(provider, false);
+        hasInitialScrolledRef.current = true;
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [provider, scrollToProvider]);
 
   const save = () => {
     const parsedPrice = Number(monthlyPrice.replace(',', '.'));
@@ -87,20 +112,50 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
           </View>
 
           <AppText tipo="legenda" peso="forte" style={styles.label}>SERVIÇO DE STREAMING</AppText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.providers}>
-            {SUBSCRIPTION_PROVIDERS.map((item: SubscriptionProvider) => (
-              <Pressable
-                key={item.name}
-                onPress={() => setProvider(item.name)}
-                style={({ pressed }) => [
-                  styles.providerChip,
-                  provider === item.name && styles.providerChipSelected,
-                  pressed && styles.pressed,
-                ]}>
-                <ServiceLogo name={item.name} size={24} />
-                <AppText tipo="legenda" peso="forte" style={styles.providerName}>{item.name}</AppText>
-              </Pressable>
-            ))}
+          <ScrollView
+            ref={providersScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.providers}
+            onLayout={(event) => {
+              providersViewportWidthRef.current = event.nativeEvent.layout.width;
+              if (!hasInitialScrolledRef.current && providerLayoutsRef.current[provider]) {
+                hasInitialScrolledRef.current = true;
+                scrollToProvider(provider, false);
+              }
+            }}>
+            {SUBSCRIPTION_PROVIDERS.map((item: SubscriptionProvider) => {
+              const selected = provider === item.name;
+              return (
+                <Pressable
+                  key={item.name}
+                  onLayout={(event) => {
+                    const { x, width } = event.nativeEvent.layout;
+                    providerLayoutsRef.current[item.name] = { x, width };
+                    if (selected && !hasInitialScrolledRef.current && providersViewportWidthRef.current > 0) {
+                      hasInitialScrolledRef.current = true;
+                      scrollToProvider(item.name, false);
+                    }
+                  }}
+                  onPress={() => {
+                    setProvider(item.name);
+                    scrollToProvider(item.name, true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.providerChip,
+                    selected && styles.providerChipSelected,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}>
+                  <ServiceLogo name={item.name} size={24} />
+                  <AppText tipo="legenda" peso="forte" style={[styles.providerName, selected && styles.providerNameSelected]}>
+                    {item.name}
+                  </AppText>
+                  {selected && <MaterialIcons name="check-circle" size={15} color="#f3b43f" />}
+                </Pressable>
+              );
+            })}
           </ScrollView>
 
           <View style={styles.fieldsRow}>
@@ -198,8 +253,9 @@ const styles = StyleSheet.create({
   label: { color: '#7b7b78', letterSpacing: 0.8, marginBottom: 10 },
   providers: { gap: 8, paddingBottom: 22 },
   providerChip: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, backgroundColor: '#fffdf8', paddingHorizontal: 11, paddingVertical: 9 },
-  providerChipSelected: { borderColor: '#e58c34', backgroundColor: '#fff2d8' },
-  providerName: { color: '#182230', fontSize: 12 },
+  providerChipSelected: { borderColor: '#182230', backgroundColor: '#182230' },
+  providerName: { color: '#182230', fontSize: 12.5 },
+  providerNameSelected: { color: '#fffdf8' },
   fieldsRow: { flexDirection: 'row', gap: 12, marginBottom: 18 },
   priceField: { flex: 1.15 },
   dayField: { flex: 0.85 },

@@ -12,11 +12,22 @@ import { useMyList } from '@/contexts/MyListContext';
 type Props = {
   title: MediaTitle | null;
   visible: boolean;
+  eyebrow?: string;
   onClose: () => void;
+  onWatch?: () => void;
+  onSaveChange?: (saved: boolean) => void;
   onDrawAnother?: () => void;
 };
 
-export function TitleDetailsModal({ title, visible, onClose, onDrawAnother }: Props) {
+export function TitleDetailsModal({
+  title,
+  visible,
+  eyebrow = 'SORTEADO PARA VOCÊ',
+  onClose,
+  onWatch,
+  onSaveChange,
+  onDrawAnother,
+}: Props) {
   const [scrollEnabled, setScrollEnabled] = useState(false);
   const { isSaved, toggleSavedTitle } = useMyList();
 
@@ -52,11 +63,15 @@ export function TitleDetailsModal({ title, visible, onClose, onDrawAnother }: Pr
             contentContainerStyle={styles.detailsContent}
             scrollEnabled={scrollEnabled}
             showsVerticalScrollIndicator={false}>
-            <TitleDetailsBody title={title} eyebrow="SORTEADO PARA VOCÊ" onScrollEnabledChange={setScrollEnabled} />
+            <TitleDetailsBody title={title} eyebrow={eyebrow} onScrollEnabledChange={setScrollEnabled} />
             <View style={styles.actionsRow}>
               <Pressable
                 style={({ pressed }) => [styles.saveButton, saved && styles.saveButtonActive, pressed && styles.pressed]}
-                onPress={() => toggleSavedTitle(title)}
+                onPress={() => {
+                  const nextSaved = !saved;
+                  toggleSavedTitle(title);
+                  onSaveChange?.(nextSaved);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}>
                 <BookmarkIcon
@@ -68,7 +83,10 @@ export function TitleDetailsModal({ title, visible, onClose, onDrawAnother }: Pr
                   badgeBorderColor="#182230"
                 />
               </Pressable>
-              <Pressable style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]} onPress={onClose} accessibilityRole="button">
+              <Pressable
+                style={({ pressed }) => [styles.doneButton, pressed && styles.pressed]}
+                onPress={onWatch ?? onClose}
+                accessibilityRole="button">
                 <AppText peso="forte" style={styles.doneButtonText}>Assistir este título</AppText>
                 <MaterialIcons name="check" size={19} color="#182230" />
               </Pressable>
@@ -78,7 +96,7 @@ export function TitleDetailsModal({ title, visible, onClose, onDrawAnother }: Pr
                 style={({ pressed }) => [styles.redrawButton, pressed && styles.pressed]}
                 onPress={onDrawAnother}
                 accessibilityRole="button">
-                <MaterialIcons name="casino" size={16} color="#d77c29" />
+                <MaterialIcons name="casino" size={17} color="#a3520d" />
                 <AppText tipo="legenda" peso="forte" style={styles.redrawText}>Sortear outro</AppText>
               </Pressable>
             )}
@@ -105,5 +123,5 @@ const styles = StyleSheet.create({
   doneButton: { flex: 1, minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   doneButtonText: { color: '#182230' },
   redrawButton: { minHeight: 38, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  redrawText: { color: '#d77c29', fontSize: 13 },
+  redrawText: { color: '#a3520d', fontSize: 14 },
 });
