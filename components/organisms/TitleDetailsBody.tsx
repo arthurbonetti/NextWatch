@@ -183,7 +183,9 @@ export function TitleDetailsBody({
             </AppText>
           )}
           <AppText tipo="legenda" style={styles.ratingTooltipText}>
-            {`• ★ ${averageRating}: média combinada exibida nas listas e filtros.`}
+            {metacritic !== null
+              ? `• ★ ${averageRating}: média combinada exibida nas listas e filtros.`
+              : `• ★ ${averageRating}: nota exibida nas listas e filtros.`}
           </AppText>
         </View>
       )}

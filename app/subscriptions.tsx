@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SwitchToggle } from '@/components/atoms/SwitchToggle';
 import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
@@ -49,163 +50,175 @@ export default function SubscriptionsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <BackButton fallbackHref="/(tabs)/tab3" />
-          <View style={styles.headerCopy}>
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.title}>Assinaturas</AppText>
-          </View>
-          <Pressable
-            style={({ pressed }) => [styles.headerActionBtn, pressed && styles.pressed]}
-            onPress={addSubscription}
-            accessibilityRole="button"
-            accessibilityLabel="Adicionar assinatura">
-            <MaterialIcons name="add" size={18} color="#182230" />
-            <AppText tipo="legenda" peso="forte" style={styles.headerActionText}>Novo</AppText>
-          </Pressable>
-        </View>
-
-        <View style={styles.totalCard}>
-          <View style={styles.totalGlow} />
-          <View style={styles.totalTopline}>
-            <View style={styles.totalIcon}><MaterialIcons name="account-balance-wallet" size={20} color="#f3b43f" /></View>
-            <AppText tipo="legenda" peso="forte" style={styles.totalLabel}>GASTO MENSAL ATIVO</AppText>
-            <View style={styles.activeBadge}>
-              <View style={styles.activeDot} />
-              <AppText tipo="legenda" peso="forte" tabular style={styles.activeText}>
-                {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'ativa' : 'ativas'}
-              </AppText>
+        <FadeInBlock delay={0}>
+          <View style={styles.header}>
+            <BackButton fallbackHref="/(tabs)/tab3" />
+            <View style={styles.headerCopy}>
+              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
+              <AppText tipo="titulo" peso="forte" style={styles.title}>Assinaturas</AppText>
             </View>
-          </View>
-          <AppText tipo="destaque" familia="sans" peso="forte" tabular style={styles.totalValue}>
-            <AppText tipo="subtitulo" familia="sans" peso="semiforte" style={styles.totalCurrency}>R$ </AppText>
-            {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </AppText>
-          <View style={styles.totalFooter}>
-            <AppText tipo="legenda" tabular style={styles.totalHint}>{formatCurrency(monthlyTotal * 12)} por ano</AppText>
             <Pressable
-              onPress={() => setShowAnnualCost((value) => !value)}
-              style={({ pressed }) => [styles.costLink, pressed && styles.pressed]}
-              accessibilityRole="button">
-              <AppText tipo="legenda" peso="forte" style={styles.costLinkText}>{showAnnualCost ? 'Ocultar resumo' : 'Ver projeção'}</AppText>
-              <MaterialIcons name={showAnnualCost ? 'expand-less' : 'expand-more'} size={16} color="#f3b43f" />
+              style={({ pressed }) => [styles.headerActionBtn, pressed && styles.pressed]}
+              onPress={addSubscription}
+              accessibilityRole="button"
+              accessibilityLabel="Adicionar assinatura">
+              <MaterialIcons name="add" size={18} color="#182230" />
+              <AppText tipo="legenda" peso="forte" style={styles.headerActionText}>Novo</AppText>
             </Pressable>
           </View>
-          {showAnnualCost && (
-            <View style={styles.annualBreakdown}>
-              <View style={styles.breakdownRow}>
-                <AppText tipo="legenda" style={styles.annualText}>Média por streaming ativo</AppText>
-                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{formatCurrency(averagePerService)}</AppText>
-              </View>
-              <View style={styles.breakdownRow}>
-                <AppText tipo="legenda" style={styles.annualText}>Projeção em 6 meses</AppText>
-                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{formatCurrency(monthlyTotal * 6)}</AppText>
+        </FadeInBlock>
+
+        <FadeInBlock delay={35}>
+          <View style={styles.totalCard}>
+            <View style={styles.totalGlow} />
+            <View style={styles.totalTopline}>
+              <View style={styles.totalIcon}><MaterialIcons name="account-balance-wallet" size={20} color="#f3b43f" /></View>
+              <AppText tipo="legenda" peso="forte" style={styles.totalLabel}>GASTO MENSAL ATIVO</AppText>
+              <View style={styles.activeBadge}>
+                <View style={styles.activeDot} />
+                <AppText tipo="legenda" peso="forte" tabular style={styles.activeText}>
+                  {activeSubscriptions.length} {activeSubscriptions.length === 1 ? 'ativa' : 'ativas'}
+                </AppText>
               </View>
             </View>
-          )}
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderCopy}>
-            <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus serviços</AppText>
-            <AppText tipo="legenda" style={styles.sectionSubtitle}>Planos ativos e pausados no seu painel</AppText>
+            <AppText tipo="destaque" familia="sans" peso="forte" tabular style={styles.totalValue}>
+              <AppText tipo="subtitulo" familia="sans" peso="semiforte" style={styles.totalCurrency}>R$ </AppText>
+              {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </AppText>
+            <View style={styles.totalFooter}>
+              <AppText tipo="legenda" tabular style={styles.totalHint}>{formatCurrency(monthlyTotal * 12)} por ano</AppText>
+              <Pressable
+                onPress={() => setShowAnnualCost((value) => !value)}
+                style={({ pressed }) => [styles.costLink, pressed && styles.pressed]}
+                accessibilityRole="button">
+                <AppText tipo="legenda" peso="forte" style={styles.costLinkText}>{showAnnualCost ? 'Ocultar resumo' : 'Ver projeção'}</AppText>
+                <MaterialIcons name={showAnnualCost ? 'expand-less' : 'expand-more'} size={16} color="#f3b43f" />
+              </Pressable>
+            </View>
+            {showAnnualCost && (
+              <View style={styles.annualBreakdown}>
+                <View style={styles.breakdownRow}>
+                  <AppText tipo="legenda" style={styles.annualText}>Média por streaming ativo</AppText>
+                  <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{formatCurrency(averagePerService)}</AppText>
+                </View>
+                <View style={styles.breakdownRow}>
+                  <AppText tipo="legenda" style={styles.annualText}>Projeção em 6 meses</AppText>
+                  <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{formatCurrency(monthlyTotal * 6)}</AppText>
+                </View>
+              </View>
+            )}
           </View>
-          <AppText tipo="legenda" peso="forte" tabular numberOfLines={1} style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
-        </View>
+        </FadeInBlock>
+
+        <FadeInBlock delay={70}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderCopy}>
+              <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus serviços</AppText>
+              <AppText tipo="legenda" style={styles.sectionSubtitle}>Planos ativos e pausados no seu painel</AppText>
+            </View>
+            <AppText tipo="legenda" peso="forte" tabular numberOfLines={1} style={styles.countBadge}>{subscriptions.length} {subscriptions.length === 1 ? 'serviço' : 'serviços'}</AppText>
+          </View>
+        </FadeInBlock>
 
         {subscriptions.length === 0 ? (
-          <EmptyStateCard
-            icon="subscriptions"
-            iconColor="#d77c29"
-            title="Nenhuma assinatura cadastrada"
-            description="Adicione os streamings que você assina para acompanhar gastos e liberar o catálogo na Roleta."
-            actionLabel="Adicionar primeiro serviço"
-            actionIcon="add"
-            onAction={addSubscription}
-          />
-        ) : subscriptions.map((subscription) => {
+          <FadeInBlock delay={140}>
+            <EmptyStateCard
+              icon="subscriptions"
+              iconColor="#d77c29"
+              title="Nenhuma assinatura cadastrada"
+              description="Adicione os streamings que você assina para acompanhar gastos e liberar o catálogo na Roleta."
+              actionLabel="Adicionar primeiro serviço"
+              actionIcon="add"
+              onAction={addSubscription}
+            />
+          </FadeInBlock>
+        ) : subscriptions.map((subscription, index) => {
           return (
-            <View key={subscription.id} style={[styles.subscriptionCard, !subscription.active && styles.subscriptionInactive]}>
-              <Pressable
-                style={({ pressed }) => [styles.cardTopRow, pressed && styles.pressed]}
-                onPress={() => editSubscription(subscription)}
-                accessibilityRole="button"
-                accessibilityLabel={`Editar ${subscription.provider}`}>
-                <ServiceLogo name={subscription.provider} size={44} />
-                <View style={styles.serviceInfo}>
-                  <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>
-                    {subscription.provider}
-                  </AppText>
-                  <AppText tipo="legenda" tabular style={styles.billingText} numberOfLines={1}>
-                    Vence todo dia {subscription.billingDay}
-                  </AppText>
-                </View>
-                <View style={styles.priceArea}>
-                  <AppText peso="forte" tabular style={styles.price}>{formatCurrency(subscription.monthlyPrice)}</AppText>
-                  <AppText tipo="legenda" style={styles.priceCaption}>por mês</AppText>
-                </View>
-              </Pressable>
-
-              <View style={styles.cardDivider} />
-
-              <View style={styles.cardBottomRow}>
-                <View style={styles.badgesRow}>
-                  <View style={[styles.statusPill, subscription.active ? styles.statusPillActive : styles.statusPillPaused]}>
-                    <View style={[styles.statusDot, subscription.active ? styles.statusDotActive : styles.statusDotPaused]} />
-                    <AppText tipo="legenda" peso="forte" style={subscription.active ? styles.statusTextActive : styles.statusTextPaused}>
-                      {subscription.active ? 'Ativa' : 'Pausada'}
+            <FadeInBlock key={subscription.id} delay={Math.min(index + 3, 8) * 30}>
+              <View style={[styles.subscriptionCard, !subscription.active && styles.subscriptionInactive]}>
+                <Pressable
+                  style={({ pressed }) => [styles.cardTopRow, pressed && styles.pressed]}
+                  onPress={() => editSubscription(subscription)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Editar ${subscription.provider}`}>
+                  <ServiceLogo name={subscription.provider} size={44} />
+                  <View style={styles.serviceInfo}>
+                    <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>
+                      {subscription.provider}
+                    </AppText>
+                    <AppText tipo="legenda" tabular style={styles.billingText} numberOfLines={1}>
+                      Vence todo dia {subscription.billingDay}
                     </AppText>
                   </View>
+                  <View style={styles.priceArea}>
+                    <AppText peso="forte" tabular style={styles.price}>{formatCurrency(subscription.monthlyPrice)}</AppText>
+                    <AppText tipo="legenda" style={styles.priceCaption}>por mês</AppText>
+                  </View>
+                </Pressable>
 
-                  {subscription.active && subscription.renewalAlert && (
-                    <View style={styles.reminderBadge}>
-                      <MaterialIcons name="notifications-none" size={14} color="#944c0d" />
-                      <AppText tipo="legenda" peso="forte" tabular style={styles.reminderText} numberOfLines={1}>
-                        Aviso {subscription.alertDays} {subscription.alertDays === 1 ? 'dia' : 'dias'} antes
+                <View style={styles.cardDivider} />
+
+                <View style={styles.cardBottomRow}>
+                  <View style={styles.badgesRow}>
+                    <View style={[styles.statusPill, subscription.active ? styles.statusPillActive : styles.statusPillPaused]}>
+                      <View style={[styles.statusDot, subscription.active ? styles.statusDotActive : styles.statusDotPaused]} />
+                      <AppText tipo="legenda" peso="forte" style={subscription.active ? styles.statusTextActive : styles.statusTextPaused}>
+                        {subscription.active ? 'Ativa' : 'Pausada'}
                       </AppText>
                     </View>
-                  )}
-                </View>
 
-                <View style={styles.subscriptionActions}>
-                  <Pressable
-                    style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
-                    onPress={() => editSubscription(subscription)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Editar ${subscription.provider}`}>
-                    <MaterialIcons name="edit" size={18} color="#5e5c57" />
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
-                    onPress={() => setDeletingSubscription(subscription)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remover ${subscription.provider}`}>
-                    <MaterialIcons name="delete-outline" size={19} color="#c0392b" />
-                  </Pressable>
-                  <SwitchToggle
-                    value={subscription.active}
-                    onToggle={() => toggleSubscription(subscription.id)}
-                    accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
-                    style={styles.switchHitArea}
-                  />
+                    {subscription.active && subscription.renewalAlert && (
+                      <View style={styles.reminderBadge}>
+                        <MaterialIcons name="notifications-none" size={14} color="#944c0d" />
+                        <AppText tipo="legenda" peso="forte" tabular style={styles.reminderText} numberOfLines={1}>
+                          Aviso {subscription.alertDays} {subscription.alertDays === 1 ? 'dia' : 'dias'} antes
+                        </AppText>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.subscriptionActions}>
+                    <Pressable
+                      style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
+                      onPress={() => editSubscription(subscription)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar ${subscription.provider}`}>
+                      <MaterialIcons name="edit" size={18} color="#5e5c57" />
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
+                      onPress={() => setDeletingSubscription(subscription)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remover ${subscription.provider}`}>
+                      <MaterialIcons name="delete-outline" size={19} color="#c0392b" />
+                    </Pressable>
+                    <SwitchToggle
+                      value={subscription.active}
+                      onToggle={() => toggleSubscription(subscription.id)}
+                      accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
+                      style={styles.switchHitArea}
+                    />
+                  </View>
                 </View>
               </View>
-            </View>
+            </FadeInBlock>
           );
         })}
 
         {subscriptions.length > 0 && (
-          <Pressable
-            style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
-            onPress={addSubscription}
-            accessibilityRole="button">
-            <View style={styles.addIcon}><MaterialIcons name="add" size={22} color="#182230" /></View>
-            <View style={styles.addCopy}>
-              <AppText peso="forte" style={styles.addTitle}>Adicionar outro streaming</AppText>
-              <AppText tipo="legenda" style={styles.addSubtitle}>Netflix, Disney+, Max, Prime Video e mais</AppText>
-            </View>
-            <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
-          </Pressable>
+          <FadeInBlock delay={140}>
+            <Pressable
+              style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
+              onPress={addSubscription}
+              accessibilityRole="button">
+              <View style={styles.addIcon}><MaterialIcons name="add" size={22} color="#182230" /></View>
+              <View style={styles.addCopy}>
+                <AppText peso="forte" style={styles.addTitle}>Adicionar outro streaming</AppText>
+                <AppText tipo="legenda" style={styles.addSubtitle}>Netflix, Disney+, Max, Prime Video e mais</AppText>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
+            </Pressable>
+          </FadeInBlock>
         )}
       </ScrollView>
 

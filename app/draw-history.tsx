@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
@@ -54,87 +55,92 @@ export default function DrawHistoryScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <BackButton fallbackHref="/(tabs)/tab3" />
-          <View style={styles.headerCopy}>
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>HISTÓRICO</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.title}>Sorteios</AppText>
-          </View>
-          {history.length > 0 && (
-            <Pressable
-              style={({ pressed }) => [styles.clearButton, pressed && styles.pressed]}
-              onPress={() => setClearConfirmOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Limpar histórico de sorteios">
-              <AppText tipo="legenda" peso="forte" style={styles.clearButtonText}>Limpar</AppText>
-            </Pressable>
-          )}
-        </View>
-
-        {history.length > 0 && (
-          <>
-            <View style={styles.summaryRow}>
-              <AppText tipo="legenda" tabular style={styles.summaryText}>
-                {formatCount(history.length)} {history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}
-              </AppText>
+        <FadeInBlock delay={0}>
+          <View style={styles.header}>
+            <BackButton fallbackHref="/(tabs)/tab3" />
+            <View style={styles.headerCopy}>
+              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>HISTÓRICO</AppText>
+              <AppText tipo="titulo" peso="forte" style={styles.title}>Sorteios</AppText>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-              {(
-                [
-                  { id: 'all', label: `Todos (${history.length})` },
-                  { id: 'assistiu', label: `Assistidos (${counts.assistiu})` },
-                  { id: 'salvou', label: `Salvos (${counts.salvou})` },
-                  { id: 'sorteou outro', label: `Sorteou outro (${counts['sorteou outro']})` },
-                  { id: 'ignorou', label: `Ignorou (${counts.ignorou})` },
-                ] as const
-              ).map((chip) => {
-                const selected = filter === chip.id;
-                return (
-                  <Pressable
-                    key={chip.id}
-                    onPress={() => setFilter(chip.id)}
-                    style={({ pressed }) => [
-                      styles.filterChip,
-                      selected && styles.filterChipActive,
-                      pressed && styles.pressed,
-                    ]}>
-                    <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
-                      {chip.label}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </>
-        )}
+            {history.length > 0 && (
+              <Pressable
+                style={({ pressed }) => [styles.clearButton, pressed && styles.pressed]}
+                onPress={() => setClearConfirmOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Limpar histórico de sorteios">
+                <AppText tipo="legenda" peso="forte" style={styles.clearButtonText}>Limpar</AppText>
+              </Pressable>
+            )}
+          </View>
+
+          {history.length > 0 && (
+            <>
+              <View style={styles.summaryRow}>
+                <AppText tipo="legenda" tabular style={styles.summaryText}>
+                  {formatCount(history.length)} {history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}
+                </AppText>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {(
+                  [
+                    { id: 'all', label: `Todos (${history.length})` },
+                    { id: 'assistiu', label: `Assistidos (${counts.assistiu})` },
+                    { id: 'salvou', label: `Salvos (${counts.salvou})` },
+                    { id: 'sorteou outro', label: `Sorteou outro (${counts['sorteou outro']})` },
+                    { id: 'ignorou', label: `Ignorou (${counts.ignorou})` },
+                  ] as const
+                ).map((chip) => {
+                  const selected = filter === chip.id;
+                  return (
+                    <Pressable
+                      key={chip.id}
+                      onPress={() => setFilter(chip.id)}
+                      style={({ pressed }) => [
+                        styles.filterChip,
+                        selected && styles.filterChipActive,
+                        pressed && styles.pressed,
+                      ]}>
+                      <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
+                        {chip.label}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </>
+          )}
+        </FadeInBlock>
 
         {filteredHistory.length > 0 ? (
           <View style={styles.list}>
-            {filteredHistory.map((entry) => {
+            {filteredHistory.map((entry, index) => {
               const resolved = findTitle(entry.tmdbId) ?? findSavedTitle(entry.tmdbId);
               return (
-                <DrawHistoryCard
-                  key={entry.id}
-                  entry={entry}
-                  resolvedTitle={resolved}
-                  onPress={resolved ? () => router.push({ pathname: '/title/[id]', params: { id: resolved.id } }) : undefined}
-                />
+                <FadeInBlock key={entry.id} delay={Math.min(index + 1, 7) * 30}>
+                  <DrawHistoryCard
+                    entry={entry}
+                    resolvedTitle={resolved}
+                    onPress={resolved ? () => router.push({ pathname: '/title/[id]', params: { id: resolved.id } }) : undefined}
+                  />
+                </FadeInBlock>
               );
             })}
           </View>
         ) : storageReady ? (
-          <EmptyStateCard
-            icon="casino"
-            title={history.length === 0 ? 'Nenhum sorteio registrado' : 'Nada com esse filtro'}
-            description={
-              history.length === 0
-                ? 'Gire a Roleta na tela inicial para registrar os títulos que você assistiu, salvou ou pulou.'
-                : 'Escolha outro filtro acima para ver os demais registros.'
-            }
-            actionLabel={history.length === 0 ? 'Ir para a Roleta' : undefined}
-            actionIcon={history.length === 0 ? 'casino' : undefined}
-            onAction={history.length === 0 ? () => router.replace('/(tabs)') : undefined}
-          />
+          <FadeInBlock delay={40}>
+            <EmptyStateCard
+              icon="casino"
+              title={history.length === 0 ? 'Nenhum sorteio registrado' : 'Nada com esse filtro'}
+              description={
+                history.length === 0
+                  ? 'Gire a Roleta na tela inicial para registrar os títulos que você assistiu, salvou ou pulou.'
+                  : 'Escolha outro filtro acima para ver os demais registros.'
+              }
+              actionLabel={history.length === 0 ? 'Ir para a Roleta' : undefined}
+              actionIcon={history.length === 0 ? 'casino' : undefined}
+              onAction={history.length === 0 ? () => router.replace('/(tabs)') : undefined}
+            />
+          </FadeInBlock>
         ) : null}
       </ScrollView>
 

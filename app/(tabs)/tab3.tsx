@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,154 +58,164 @@ export default function ProfileTabScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
-        <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>MEU PERFIL</AppText>
+        <FadeInBlock delay={0}>
+          <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>MEU PERFIL</AppText>
 
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <AppText peso="forte" style={styles.avatarText}>{initials}</AppText>
-          </View>
-          <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{user?.name ?? 'Usuário'}</AppText>
-          <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
-        </View>
-
-        <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Resumo da sua conta</AppText>
-        <View style={styles.stats}>
-          <View style={styles.stat}>
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{activeSubscriptions.length}</AppText>
-            <AppText tipo="legenda" style={styles.muted}>ativas</AppText>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{watchedCount}</AppText>
-            <AppText tipo="legenda" style={styles.muted}>assistidos</AppText>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>
-              <AppText tipo="legenda" peso="semiforte" style={styles.currencyPrefix}>R$ </AppText>
-              {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </AppText>
-            <AppText tipo="legenda" style={styles.muted}>por mês</AppText>
-          </View>
-        </View>
-
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          onPress={() => router.push('/my-list')}
-          accessibilityRole="button">
-          <MaterialIcons name="bookmark" size={22} color="#a3520d" />
-          <AppText peso="forte" style={styles.rowText}>Minha Lista</AppText>
-          <AppText tipo="legenda" peso="forte" tabular style={styles.rowCount}>
-            {savedTitles.length}
-          </AppText>
-          <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          onPress={() => router.push('/subscriptions')}
-          accessibilityRole="button">
-          <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
-          <AppText peso="forte" style={styles.rowText}>Gerenciar assinaturas</AppText>
-          <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
-        </Pressable>
-
-        <View style={styles.historySection}>
-          <View style={styles.historyHeader}>
-            <View style={styles.historyHeaderCopy}>
-              <AppText tipo="subtitulo" peso="forte" style={styles.historyTitle}>Histórico de sorteios</AppText>
-              <AppText tipo="legenda" style={styles.muted}>
-                {history.length === 0
-                  ? 'Seus últimos sorteios na Roleta'
-                  : `${formatCount(history.length)} ${history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}`}
-              </AppText>
+          <View style={styles.profileCard}>
+            <View style={styles.avatar}>
+              <AppText peso="forte" style={styles.avatarText}>{initials}</AppText>
             </View>
-            {history.length > 0 && (
-              <Pressable
-                style={({ pressed }) => [styles.seeAllLinkBtn, pressed && styles.pressed]}
-                onPress={() => router.push('/draw-history')}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel="Ver todo o histórico de sorteios">
-                <AppText tipo="legenda" peso="forte" style={styles.seeAllText}>Ver tudo</AppText>
-                <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
-              </Pressable>
+            <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{user?.name ?? 'Usuário'}</AppText>
+            <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
+          </View>
+        </FadeInBlock>
+
+        <FadeInBlock delay={35}>
+          <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Resumo da sua conta</AppText>
+          <View style={styles.stats}>
+            <View style={styles.stat}>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{activeSubscriptions.length}</AppText>
+              <AppText tipo="legenda" style={styles.muted}>ativas</AppText>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.stat}>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{watchedCount}</AppText>
+              <AppText tipo="legenda" style={styles.muted}>assistidos</AppText>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.stat}>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>
+                <AppText tipo="legenda" peso="semiforte" style={styles.currencyPrefix}>R$ </AppText>
+                {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </AppText>
+              <AppText tipo="legenda" style={styles.muted}>por mês</AppText>
+            </View>
+          </View>
+        </FadeInBlock>
+
+        <FadeInBlock delay={70}>
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            onPress={() => router.push('/my-list')}
+            accessibilityRole="button">
+            <MaterialIcons name="bookmark" size={22} color="#a3520d" />
+            <AppText peso="forte" style={styles.rowText}>Minha Lista</AppText>
+            <AppText tipo="legenda" peso="forte" tabular style={styles.rowCount}>
+              {savedTitles.length}
+            </AppText>
+            <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            onPress={() => router.push('/subscriptions')}
+            accessibilityRole="button">
+            <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
+            <AppText peso="forte" style={styles.rowText}>Gerenciar assinaturas</AppText>
+            <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
+          </Pressable>
+        </FadeInBlock>
+
+        <FadeInBlock delay={105}>
+          <View style={styles.historySection}>
+            <View style={styles.historyHeader}>
+              <View style={styles.historyHeaderCopy}>
+                <AppText tipo="subtitulo" peso="forte" style={styles.historyTitle}>Histórico de sorteios</AppText>
+                <AppText tipo="legenda" style={styles.muted}>
+                  {history.length === 0
+                    ? 'Seus últimos sorteios na Roleta'
+                    : `${formatCount(history.length)} ${history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}`}
+                </AppText>
+              </View>
+              {history.length > 0 && (
+                <Pressable
+                  style={({ pressed }) => [styles.seeAllLinkBtn, pressed && styles.pressed]}
+                  onPress={() => router.push('/draw-history')}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver todo o histórico de sorteios">
+                  <AppText tipo="legenda" peso="forte" style={styles.seeAllText}>Ver tudo</AppText>
+                  <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
+                </Pressable>
+              )}
+            </View>
+
+            {previewHistory.length > 0 ? (
+              <View style={styles.historyList}>
+                {previewHistory.map((entry) => {
+                  const resolved = findTitle(entry.tmdbId) ?? findSavedTitle(entry.tmdbId);
+                  return (
+                    <DrawHistoryCard
+                      key={entry.id}
+                      entry={entry}
+                      resolvedTitle={resolved}
+                      onPress={resolved ? () => router.push({ pathname: '/title/[id]', params: { id: resolved.id } }) : undefined}
+                    />
+                  );
+                })}
+              </View>
+            ) : (
+              <EmptyStateCard
+                compact
+                icon="casino"
+                title="Nenhum sorteio registrado"
+                description="Gire a Roleta na tela inicial para registrar o que você assistiu, salvou ou pulou."
+                actionLabel="Ir para a Roleta"
+                onAction={() => router.push('/(tabs)')}
+              />
             )}
           </View>
+        </FadeInBlock>
 
-          {previewHistory.length > 0 ? (
-            <View style={styles.historyList}>
-              {previewHistory.map((entry) => {
-                const resolved = findTitle(entry.tmdbId) ?? findSavedTitle(entry.tmdbId);
-                return (
-                  <DrawHistoryCard
-                    key={entry.id}
-                    entry={entry}
-                    resolvedTitle={resolved}
-                    onPress={resolved ? () => router.push({ pathname: '/title/[id]', params: { id: resolved.id } }) : undefined}
-                  />
-                );
-              })}
+        <FadeInBlock delay={140}>
+          <View style={styles.catalogNotice}>
+            <View style={styles.catalogNoticeCopy}>
+              <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
+                {status === 'loading'
+                  ? 'Carregando catálogo completo…'
+                  : status === 'ready'
+                    ? 'Catálogo conectado ao TMDB'
+                    : status === 'needs-api-key'
+                      ? 'Catálogo de demonstração'
+                      : 'Falha ao atualizar catálogo'}
+              </AppText>
+              <AppText tipo="legenda" style={styles.catalogNoticeText}>
+                {status === 'loading'
+                  ? 'Buscando filmes, séries e animes nos seus serviços ativos.'
+                  : status === 'ready'
+                    ? `${formatCount(titles.length)} títulos sincronizados · disponibilidade no Brasil`
+                    : status === 'needs-api-key'
+                      ? 'Configure o segredo TMDB_API_TOKEN na Edge Function tmdb-proxy do Supabase para carregar títulos automaticamente.'
+                      : errorMessage ?? 'Confira a conexão e tente novamente.'}
+              </AppText>
             </View>
-          ) : (
-            <EmptyStateCard
-              compact
-              icon="casino"
-              title="Nenhum sorteio registrado"
-              description="Gire a Roleta na tela inicial para registrar o que você assistiu, salvou ou pulou."
-              actionLabel="Ir para a Roleta"
-              onAction={() => router.push('/(tabs)')}
-            />
-          )}
-        </View>
-
-        <View style={styles.catalogNotice}>
-          <View style={styles.catalogNoticeCopy}>
-            <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
-              {status === 'loading'
-                ? 'Carregando catálogo completo…'
-                : status === 'ready'
-                  ? 'Catálogo conectado ao TMDB'
-                  : status === 'needs-api-key'
-                    ? 'Catálogo de demonstração'
-                    : 'Falha ao atualizar catálogo'}
-            </AppText>
-            <AppText tipo="legenda" style={styles.catalogNoticeText}>
-              {status === 'loading'
-                ? 'Buscando filmes, séries e animes nos seus serviços ativos.'
-                : status === 'ready'
-                  ? `${formatCount(titles.length)} títulos sincronizados · disponibilidade no Brasil`
-                  : status === 'needs-api-key'
-                    ? 'Configure o segredo TMDB_API_TOKEN na Edge Function tmdb-proxy do Supabase para carregar títulos automaticamente.'
-                    : errorMessage ?? 'Confira a conexão e tente novamente.'}
-            </AppText>
+            <Pressable
+              style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}
+              onPress={() => { void refreshCatalog(); }}
+              disabled={status === 'loading'}
+              accessibilityRole="button"
+              accessibilityLabel="Atualizar catálogo">
+              <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#a3520d'} />
+            </Pressable>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}
-            onPress={() => { void refreshCatalog(); }}
-            disabled={status === 'loading'}
-            accessibilityRole="button"
-            accessibilityLabel="Atualizar catálogo">
-            <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#a3520d'} />
-          </Pressable>
-        </View>
 
-        <View style={styles.accountDangerSection}>
-          <View style={styles.sectionDivider} />
-          <Pressable
-            style={({ pressed }) => [styles.logoutCard, pressed && styles.pressed]}
-            onPress={() => { void handleSignOut(); }}
-            accessibilityRole="button">
-            <View style={styles.logoutIconBox}>
-              <MaterialIcons name="logout" size={20} color="#c0392b" />
-            </View>
-            <AppText peso="forte" style={styles.logoutText}>Sair da conta</AppText>
-            <MaterialIcons name="chevron-right" size={22} color="#c0392b" />
-          </Pressable>
-        </View>
+          <View style={styles.accountDangerSection}>
+            <View style={styles.sectionDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.logoutCard, pressed && styles.pressed]}
+              onPress={() => { void handleSignOut(); }}
+              accessibilityRole="button">
+              <View style={styles.logoutIconBox}>
+                <MaterialIcons name="logout" size={20} color="#c0392b" />
+              </View>
+              <AppText peso="forte" style={styles.logoutText}>Sair da conta</AppText>
+              <MaterialIcons name="chevron-right" size={22} color="#c0392b" />
+            </Pressable>
+          </View>
 
-        <AppText tipo="legenda" style={styles.credits}>
-          Pôsteres e metadados: The Movie Database (TMDB). Este produto utiliza a API do TMDB, mas não é endossado ou certificado pelo TMDB.
-        </AppText>
+          <AppText tipo="legenda" style={styles.credits}>
+            Pôsteres e metadados: The Movie Database (TMDB). Este produto utiliza a API do TMDB, mas não é endossado ou certificado pelo TMDB.
+          </AppText>
+        </FadeInBlock>
       </ScrollView>
     </SafeAreaView>
   );

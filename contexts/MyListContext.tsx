@@ -75,7 +75,11 @@ function parseStoredTitles(raw: string | null): MediaTitle[] {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isMediaTitle) : [];
+    return Array.isArray(parsed)
+      ? parsed
+          .filter(isMediaTitle)
+          .map((item) => (item.catalogSource === 'tmdb' ? { ...item, metacriticScore: null } : item))
+      : [];
   } catch {
     return [];
   }
@@ -147,9 +151,12 @@ function mapRowToMediaTitle(row: Partial<DbMyListRow> | null | undefined): Media
       ? { services: row.services.filter((service): service is string => typeof service === 'string') }
       : {}),
     imdbRating: String(row.imdb_rating ?? ''),
-    metacriticScore: typeof row.metacritic_score === 'number' && Number.isFinite(row.metacritic_score)
-      ? Math.round(row.metacritic_score)
-      : null,
+    metacriticScore:
+      row.catalog_source !== 'tmdb' &&
+      typeof row.metacritic_score === 'number' &&
+      Number.isFinite(row.metacritic_score)
+        ? Math.round(row.metacritic_score)
+        : null,
     synopsis: String(row.synopsis ?? ''),
     color: sanitizeHexColor(row.color) ?? '#596b7c',
     icon: row.icon as MediaTitle['icon'],

@@ -178,10 +178,6 @@ export function getMetacriticScore(title: MediaTitle): number | null {
   if (typeof title.metacriticScore === 'number' && title.metacriticScore > 0) {
     return title.metacriticScore;
   }
-  const tmdb = Number(title.imdbRating.replace(',', '.'));
-  if (!Number.isNaN(tmdb) && tmdb > 0) {
-    return Math.min(98, Math.max(20, Math.round(tmdb * 10)));
-  }
   return null;
 }
 

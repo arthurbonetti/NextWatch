@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { MediaTitle } from '@/constants/catalog';
@@ -56,42 +57,48 @@ export default function TitleDetailsScreen() {
         contentContainerStyle={styles.container}
         scrollEnabled={scrollEnabled}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.topbar}>
-          <BackButton fallbackHref="/(tabs)/tab2" />
-          <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText>
+        <FadeInBlock delay={0}>
+          <View style={styles.topbar}>
+            <BackButton fallbackHref="/(tabs)/tab2" />
+            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText>
+            <Pressable
+              onPress={handleToggleSaved}
+              hitSlop={6}
+              style={({ pressed }) => [styles.iconButton, saved && styles.iconButtonSaved, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}>
+              <BookmarkIcon saved={saved} itemKey={title.id} size={22} color="#e58c34" />
+            </Pressable>
+          </View>
+        </FadeInBlock>
+        <FadeInBlock delay={35}>
+          <View style={[styles.poster, { backgroundColor: title.color }]}>
+            <TitleArtwork
+              id={title.id}
+              variant="backdrop"
+              posterPath={title.tmdbPosterPath}
+              backdropPath={title.tmdbBackdropPath}
+              fallback={
+                <>
+                  <MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" />
+                  <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>
+                </>
+              }
+            />
+          </View>
+        </FadeInBlock>
+        <FadeInBlock delay={70}>
+          <TitleDetailsBody title={title} pillBackgroundColor="#fffdf8" onScrollEnabledChange={setScrollEnabled} />
           <Pressable
+            style={({ pressed }) => [styles.primaryButton, saved && styles.primaryButtonSaved, pressed && styles.pressed]}
             onPress={handleToggleSaved}
-            hitSlop={6}
-            style={({ pressed }) => [styles.iconButton, saved && styles.iconButtonSaved, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}>
-            <BookmarkIcon saved={saved} itemKey={title.id} size={22} color="#e58c34" />
+            accessibilityRole="button">
+            <MaterialIcons name={saved ? 'check' : 'bookmark-add'} size={19} color={saved ? '#f3b43f' : '#182230'} />
+            <AppText peso="forte" style={[styles.primaryText, saved && styles.primaryTextSaved]}>
+              {saved ? 'Salvo na minha lista' : 'Salvar na minha lista'}
+            </AppText>
           </Pressable>
-        </View>
-        <View style={[styles.poster, { backgroundColor: title.color }]}>
-          <TitleArtwork
-            id={title.id}
-            variant="backdrop"
-            posterPath={title.tmdbPosterPath}
-            backdropPath={title.tmdbBackdropPath}
-            fallback={
-              <>
-                <MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" />
-                <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>
-              </>
-            }
-          />
-        </View>
-        <TitleDetailsBody title={title} pillBackgroundColor="#fffdf8" onScrollEnabledChange={setScrollEnabled} />
-        <Pressable
-          style={({ pressed }) => [styles.primaryButton, saved && styles.primaryButtonSaved, pressed && styles.pressed]}
-          onPress={handleToggleSaved}
-          accessibilityRole="button">
-          <MaterialIcons name={saved ? 'check' : 'bookmark-add'} size={19} color={saved ? '#f3b43f' : '#182230'} />
-          <AppText peso="forte" style={[styles.primaryText, saved && styles.primaryTextSaved]}>
-            {saved ? 'Salvo na minha lista' : 'Salvar na minha lista'}
-          </AppText>
-        </Pressable>
+        </FadeInBlock>
       </ScrollView>
     </SafeAreaView>
   );

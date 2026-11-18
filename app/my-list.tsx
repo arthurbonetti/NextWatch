@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
 import { MediaTitle } from '@/constants/catalog';
@@ -31,42 +32,47 @@ export default function MyListScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <BackButton fallbackHref="/(tabs)/tab3" />
-          <View style={styles.headerCopy}>
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SUA COLEÇÃO</AppText>
-            <AppText tipo="titulo" peso="forte" style={styles.title}>Minha Lista</AppText>
+        <FadeInBlock delay={0}>
+          <View style={styles.header}>
+            <BackButton fallbackHref="/(tabs)/tab3" />
+            <View style={styles.headerCopy}>
+              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SUA COLEÇÃO</AppText>
+              <AppText tipo="titulo" peso="forte" style={styles.title}>Minha Lista</AppText>
+            </View>
+            <AppText tipo="legenda" peso="forte" tabular style={styles.countBadge}>
+              {savedTitles.length} {savedTitles.length === 1 ? 'obra' : 'obras'}
+            </AppText>
           </View>
-          <AppText tipo="legenda" peso="forte" tabular style={styles.countBadge}>
-            {savedTitles.length} {savedTitles.length === 1 ? 'obra' : 'obras'}
-          </AppText>
-        </View>
+        </FadeInBlock>
 
         {savedTitles.length > 0 ? (
           <View>
-            {savedTitles.map((title) => (
-              <MediaTitleCard
-                key={title.id}
-                title={title}
-                onOpen={() => openTitle(title)}
-                actionIcon="bookmark"
-                actionLabel={`Remover ${title.title} da minha lista`}
-                onAction={() => removeFromMyList(title.id)}
-                actionButtonStyle={styles.savedBadgeButton}
-                actionIconColor="#e58c34"
-              />
+            {savedTitles.map((title, index) => (
+              <FadeInBlock key={title.id} delay={Math.min(index + 1, 7) * 30}>
+                <MediaTitleCard
+                  title={title}
+                  onOpen={() => openTitle(title)}
+                  actionIcon="bookmark"
+                  actionLabel={`Remover ${title.title} da minha lista`}
+                  onAction={() => removeFromMyList(title.id)}
+                  actionButtonStyle={styles.savedBadgeButton}
+                  actionIconColor="#e58c34"
+                />
+              </FadeInBlock>
             ))}
           </View>
         ) : storageReady ? (
-          <EmptyStateCard
-            icon="bookmark-border"
-            iconColor="#d77c29"
-            title="Sua lista está vazia"
-            description={'Toque em "Salvar na minha lista" nos detalhes de qualquer filme, série ou anime para guardá-lo aqui.'}
-            actionLabel="Explorar títulos"
-            actionIcon="search"
-            onAction={() => router.push('/(tabs)/tab2')}
-          />
+          <FadeInBlock delay={40}>
+            <EmptyStateCard
+              icon="bookmark-border"
+              iconColor="#d77c29"
+              title="Sua lista está vazia"
+              description={'Toque em "Salvar na minha lista" nos detalhes de qualquer filme, série ou anime para guardá-lo aqui.'}
+              actionLabel="Explorar títulos"
+              actionIcon="search"
+              onAction={() => router.push('/(tabs)/tab2')}
+            />
+          </FadeInBlock>
         ) : null}
       </ScrollView>
     </SafeAreaView>

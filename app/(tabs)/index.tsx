@@ -5,6 +5,7 @@ import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
@@ -47,33 +48,16 @@ export default function HomeScreen() {
   const [rouletteTitle, setRouletteTitle] = useState<MediaTitle | null>(null);
   const [rouletteRotation] = useState(() => new Animated.Value(0));
   const [rouletteScale] = useState(() => new Animated.Value(1));
-  const [heroOpacity] = useState(() => new Animated.Value(0));
-  const [heroTranslateY] = useState(() => new Animated.Value(12));
   const rouletteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawLock = useRef(false);
   const drawEntryPromiseRef = useRef<Promise<string | null> | null>(null);
   const drawHandledRef = useRef(false);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(heroOpacity, {
-        toValue: 1,
-        duration: 420,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(heroTranslateY, {
-        toValue: 0,
-        duration: 420,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
     return () => {
       if (rouletteTimer.current) clearTimeout(rouletteTimer.current);
     };
-  }, [heroOpacity, heroTranslateY]);
+  }, []);
 
   const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
   const activeServiceNames = useMemo(() => new Set(activeSubscriptions.map((subscription) => subscription.provider)), [activeSubscriptions]);
@@ -186,212 +170,215 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.topbar}>
-          <View style={styles.brandRow}>
-            <NextWatchLogo size={38} />
-            <AppText tipo="subtitulo" peso="forte" style={styles.brandTitle}>NEXTWATCH</AppText>
-          </View>
-          <Pressable
-            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-            onPress={() => router.push('/(tabs)/tab3')}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Abrir perfil">
-            <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
-          </Pressable>
-        </View>
-
-        <View style={[styles.statsRow, isFetchingCatalog && availableTitles.length > 0 && styles.statsRowSyncing]}>
-          <Pressable
-            style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
-            onPress={() => router.push('/subscriptions')}
-            accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(activeSubscriptions.length)}</AppText>
-            <AppText tipo="legenda" peso="medio" style={styles.statLabel}>streamings ativos</AppText>
-          </Pressable>
-          <View style={styles.statDivider} />
-          <Pressable
-            style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
-            onPress={() => router.push('/(tabs)/tab2')}
-            accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(availableTitles.length)}</AppText>
-            <AppText tipo="legenda" peso="medio" style={styles.statLabel}>no catálogo</AppText>
-          </Pressable>
-          <View style={styles.statDivider} />
-          <View style={styles.statBlock}>
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{formatCount(eligibleTitles.length)}</AppText>
-            <AppText tipo="legenda" peso="medio" style={styles.statLabel}>nota 6,0+</AppText>
-          </View>
-        </View>
-        {isFetchingCatalog && availableTitles.length > 0 && (
-          <View style={styles.syncNotice}>
-            <MaterialIcons name="autorenew" size={14} color="#d77c29" />
-            <AppText tipo="legenda" peso="medio" style={styles.syncNoticeText}>
-              Carregando mais títulos do catálogo…
-            </AppText>
-          </View>
-        )}
-
-        <Animated.View
-          style={[
-            styles.hero,
-            {
-              opacity: heroOpacity,
-              transform: [{ translateY: heroTranslateY }],
-            },
-          ]}>
-          <View style={styles.heroGlow} />
-          <View style={styles.heroCopy}>
-            <View style={styles.pill}>
-              <MaterialIcons name="casino" size={14} color="#f3b43f" />
-              <AppText tipo="legenda" peso="forte" style={styles.pillText}>ROLETA DE CURADORIA</AppText>
+        <FadeInBlock delay={0}>
+          <View style={styles.topbar}>
+            <View style={styles.brandRow}>
+              <NextWatchLogo size={38} />
+              <AppText tipo="subtitulo" peso="forte" style={styles.brandTitle}>NEXTWATCH</AppText>
             </View>
-            <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
-            <AppText tipo="legenda" style={styles.heroDescription}>
-              {availableTitles.length > 0
-                ? `${formatCount(eligibleTitles.length)} obras com nota 6,0+ prontas para sortear nos seus streamings.`
-                : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
-            </AppText>
             <Pressable
-              style={({ pressed }) => [
-                styles.drawButton,
-                (!storageReady || catalogStatus === 'loading' || availableTitles.length === 0) && styles.drawButtonDisabled,
-                pressed && styles.pressed,
-              ]}
-              onPress={() => setFilterVisible(true)}
-              disabled={!storageReady || catalogStatus === 'loading' || availableTitles.length === 0}
-              accessibilityRole="button">
-              <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
-              <MaterialIcons name="arrow-forward" size={18} color="#182230" />
-            </Pressable>
-          </View>
-          {featuredSample && (
-            <Pressable
-              style={({ pressed }) => [styles.heroShowcase, pressed && styles.pressed]}
-              onPress={() => openDetails(featuredSample)}
+              style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+              onPress={() => router.push('/(tabs)/tab3')}
+              hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel={`Ver destaque ${featuredSample.title}`}>
-              <View style={[styles.heroPosterFrame, { backgroundColor: featuredSample.color }]}>
-                <TitleArtwork
-                  id={featuredSample.id}
-                  variant="poster"
-                  posterPath={featuredSample.tmdbPosterPath}
-                  backdropPath={featuredSample.tmdbBackdropPath}
-                />
-                <View style={styles.heroPosterBadge}>
-                  <MaterialIcons name="star" size={11} color="#f3b43f" />
-                  <AppText tipo="legenda" peso="forte" tabular style={styles.heroPosterBadgeText}>
-                    {formatAverageRating(featuredSample)}
-                  </AppText>
-                </View>
-              </View>
+              accessibilityLabel="Abrir perfil">
+              <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
             </Pressable>
-          )}
-        </Animated.View>
-
-        <View style={styles.sectionHeader}>
-          <View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus streamings</AppText>
-            <AppText tipo="legenda" style={styles.muted}>{activeSubscriptions.length} ativos no seu painel</AppText>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.sectionLinkBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/subscriptions')}
-            accessibilityRole="button">
-            <AppText tipo="legenda" peso="forte" style={styles.link}>Gerenciar</AppText>
-            <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
-          </Pressable>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceList}>
-          {activeSubscriptions.map((subscription) => (
+        </FadeInBlock>
+
+        <FadeInBlock delay={35}>
+          <View style={[styles.statsRow, isFetchingCatalog && availableTitles.length > 0 && styles.statsRowSyncing]}>
             <Pressable
-              style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
-              key={subscription.id}
+              style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
               onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
-              <ServiceLogo name={subscription.provider} size={39} />
-              <View style={styles.serviceCopy}>
-                <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>{subscription.provider}</AppText>
-                <AppText tipo="legenda" tabular style={styles.servicePrice}>{formatCurrency(subscription.monthlyPrice)}/mês</AppText>
-              </View>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(activeSubscriptions.length)}</AppText>
+              <AppText tipo="legenda" peso="medio" style={styles.statLabel}>streamings ativos</AppText>
             </Pressable>
-          ))}
-          {activeSubscriptions.length === 0 && (
+            <View style={styles.statDivider} />
             <Pressable
-              style={({ pressed }) => [styles.emptyServiceCard, pressed && styles.pressed]}
-              onPress={() => router.push('/subscriptions')}
+              style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
+              onPress={() => router.push('/(tabs)/tab2')}
               accessibilityRole="button">
-              <MaterialIcons name="add-circle-outline" size={20} color="#a3520d" />
-              <AppText tipo="legenda" peso="forte" style={styles.link}>Ativar primeiro streaming</AppText>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(availableTitles.length)}</AppText>
+              <AppText tipo="legenda" peso="medio" style={styles.statLabel}>no catálogo</AppText>
             </Pressable>
-          )}
-        </ScrollView>
-
-        <View style={styles.sectionHeader}>
-          <View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Para assistir hoje</AppText>
-            <AppText tipo="legenda" style={styles.muted}>Curadoria disponível nas suas contas</AppText>
+            <View style={styles.statDivider} />
+            <View style={styles.statBlock}>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{formatCount(eligibleTitles.length)}</AppText>
+              <AppText tipo="legenda" peso="medio" style={styles.statLabel}>nota 6,0+</AppText>
+            </View>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.sectionLinkBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/(tabs)/tab2')}
-            accessibilityRole="button">
-            <AppText tipo="legenda" peso="forte" style={styles.link}>Explorar catálogo</AppText>
-            <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
-          </Pressable>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
-          {availableTitles.slice(0, 8).map((title) => {
-            const hasArtwork = getArtworkUri(title.id, 'poster', {
-              posterPath: title.tmdbPosterPath,
-              backdropPath: title.tmdbBackdropPath,
-            }) !== null;
-            const titleActiveServices = getTitleServices(title).filter((service) =>
-              activeServiceNames.has(service),
-            );
-            const badgeServices = titleActiveServices.length > 0 ? titleActiveServices : getTitleServices(title);
-            return (
+          {isFetchingCatalog && availableTitles.length > 0 && (
+            <View style={styles.syncNotice}>
+              <MaterialIcons name="autorenew" size={14} color="#d77c29" />
+              <AppText tipo="legenda" peso="medio" style={styles.syncNoticeText}>
+                Carregando mais títulos do catálogo…
+              </AppText>
+            </View>
+          )}
+        </FadeInBlock>
+
+        <FadeInBlock delay={70}>
+          <View style={styles.hero}>
+            <View style={styles.heroGlow} />
+            <View style={styles.heroCopy}>
+              <View style={styles.pill}>
+                <MaterialIcons name="casino" size={14} color="#f3b43f" />
+                <AppText tipo="legenda" peso="forte" style={styles.pillText}>ROLETA DE CURADORIA</AppText>
+              </View>
+              <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
+              <AppText tipo="legenda" style={styles.heroDescription}>
+                {availableTitles.length > 0
+                  ? `${formatCount(eligibleTitles.length)} obras com nota 6,0+ prontas para sortear nos seus streamings.`
+                  : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
+              </AppText>
               <Pressable
-                style={({ pressed }) => [styles.titleCard, pressed && styles.pressed]}
-                key={title.id}
-                onPress={() => openDetails(title)}
+                style={({ pressed }) => [
+                  styles.drawButton,
+                  (!storageReady || catalogStatus === 'loading' || availableTitles.length === 0) && styles.drawButtonDisabled,
+                  pressed && styles.pressed,
+                ]}
+                onPress={() => setFilterVisible(true)}
+                disabled={!storageReady || catalogStatus === 'loading' || availableTitles.length === 0}
                 accessibilityRole="button">
-                <View style={[styles.poster, { backgroundColor: title.color }]}>
-                  <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
-                  {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
-                  {badgeServices.length > 0 && (
-                    <View style={styles.posterServicesCorner}>
-                      <ServiceLogoList
-                        services={badgeServices}
-                        size={20}
-                        maxVisible={2}
-                        overflowSize={20}
-                        gap={3}
-                        overflowGap={3}
-                      />
-                    </View>
-                  )}
-                  <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}>
-                    <MaterialIcons name="star" size={12} color="#f3b43f" />
-                    <AppText tipo="legenda" peso="forte" tabular style={styles.posterRatingText}>{formatAverageRating(title)}</AppText>
-                  </View>
-                  {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
-                </View>
-                <AppText peso="forte" style={styles.titleName} numberOfLines={1}>{title.title}</AppText>
-                <AppText tipo="legenda" tabular style={styles.muted}>{title.kind} · {title.year}</AppText>
+                <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
+                <MaterialIcons name="arrow-forward" size={18} color="#182230" />
               </Pressable>
-            );
-          })}
-          {availableTitles.length === 0 && (
+            </View>
+            {featuredSample && (
+              <Pressable
+                style={({ pressed }) => [styles.heroShowcase, pressed && styles.pressed]}
+                onPress={() => openDetails(featuredSample)}
+                accessibilityRole="button"
+                accessibilityLabel={`Ver destaque ${featuredSample.title}`}>
+                <View style={[styles.heroPosterFrame, { backgroundColor: featuredSample.color }]}>
+                  <TitleArtwork
+                    id={featuredSample.id}
+                    variant="poster"
+                    posterPath={featuredSample.tmdbPosterPath}
+                    backdropPath={featuredSample.tmdbBackdropPath}
+                  />
+                  <View style={styles.heroPosterBadge}>
+                    <MaterialIcons name="star" size={11} color="#f3b43f" />
+                    <AppText tipo="legenda" peso="forte" tabular style={styles.heroPosterBadgeText}>
+                      {formatAverageRating(featuredSample)}
+                    </AppText>
+                  </View>
+                </View>
+              </Pressable>
+            )}
+          </View>
+        </FadeInBlock>
+
+        <FadeInBlock delay={105}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Seus streamings</AppText>
+              <AppText tipo="legenda" style={styles.muted}>{activeSubscriptions.length} ativos no seu painel</AppText>
+            </View>
             <Pressable
-              style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.sectionLinkBtn, pressed && styles.pressed]}
               onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
-              <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
-              <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
+              <AppText tipo="legenda" peso="forte" style={styles.link}>Gerenciar</AppText>
+              <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
             </Pressable>
-          )}
-        </ScrollView>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceList}>
+            {activeSubscriptions.map((subscription) => (
+              <Pressable
+                style={({ pressed }) => [styles.serviceCard, pressed && styles.pressed]}
+                key={subscription.id}
+                onPress={() => router.push('/subscriptions')}
+                accessibilityRole="button">
+                <ServiceLogo name={subscription.provider} size={39} />
+                <View style={styles.serviceCopy}>
+                  <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>{subscription.provider}</AppText>
+                  <AppText tipo="legenda" tabular style={styles.servicePrice}>{formatCurrency(subscription.monthlyPrice)}/mês</AppText>
+                </View>
+              </Pressable>
+            ))}
+            {activeSubscriptions.length === 0 && (
+              <Pressable
+                style={({ pressed }) => [styles.emptyServiceCard, pressed && styles.pressed]}
+                onPress={() => router.push('/subscriptions')}
+                accessibilityRole="button">
+                <MaterialIcons name="add-circle-outline" size={20} color="#a3520d" />
+                <AppText tipo="legenda" peso="forte" style={styles.link}>Ativar primeiro streaming</AppText>
+              </Pressable>
+            )}
+          </ScrollView>
+        </FadeInBlock>
+
+        <FadeInBlock delay={140}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Para assistir hoje</AppText>
+              <AppText tipo="legenda" style={styles.muted}>Curadoria disponível nas suas contas</AppText>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.sectionLinkBtn, pressed && styles.pressed]}
+              onPress={() => router.push('/(tabs)/tab2')}
+              accessibilityRole="button">
+              <AppText tipo="legenda" peso="forte" style={styles.link}>Explorar catálogo</AppText>
+              <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
+            {availableTitles.slice(0, 8).map((title) => {
+              const hasArtwork = getArtworkUri(title.id, 'poster', {
+                posterPath: title.tmdbPosterPath,
+                backdropPath: title.tmdbBackdropPath,
+              }) !== null;
+              const titleActiveServices = getTitleServices(title).filter((service) =>
+                activeServiceNames.has(service),
+              );
+              const badgeServices = titleActiveServices.length > 0 ? titleActiveServices : getTitleServices(title);
+              return (
+                <Pressable
+                  style={({ pressed }) => [styles.titleCard, pressed && styles.pressed]}
+                  key={title.id}
+                  onPress={() => openDetails(title)}
+                  accessibilityRole="button">
+                  <View style={[styles.poster, { backgroundColor: title.color }]}>
+                    <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
+                    {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
+                    {badgeServices.length > 0 && (
+                      <View style={styles.posterServicesCorner}>
+                        <ServiceLogoList
+                          services={badgeServices}
+                          size={20}
+                          maxVisible={2}
+                          overflowSize={20}
+                          gap={3}
+                          overflowGap={3}
+                        />
+                      </View>
+                    )}
+                    <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}>
+                      <MaterialIcons name="star" size={12} color="#f3b43f" />
+                      <AppText tipo="legenda" peso="forte" tabular style={styles.posterRatingText}>{formatAverageRating(title)}</AppText>
+                    </View>
+                    {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
+                  </View>
+                  <AppText peso="forte" style={styles.titleName} numberOfLines={1}>{title.title}</AppText>
+                  <AppText tipo="legenda" tabular style={styles.muted}>{title.kind} · {title.year}</AppText>
+                </Pressable>
+              );
+            })}
+            {availableTitles.length === 0 && (
+              <Pressable
+                style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
+                onPress={() => router.push('/subscriptions')}
+                accessibilityRole="button">
+                <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
+                <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
+              </Pressable>
+            )}
+          </ScrollView>
+        </FadeInBlock>
       </ScrollView>
 
       <Modal visible={spinning} transparent animationType="fade" onRequestClose={() => {}} statusBarTranslucent>
@@ -467,7 +454,7 @@ export default function HomeScreen() {
             </View>
             <AppText tipo="legenda" style={styles.modalDescription}>
               {availableTitles.length > 0
-                ? 'Apenas obras com média 6,0+ (entre TMDB e Metacritic ÷ 10) entram na roleta.'
+                ? 'Apenas obras com nota 6,0+ entram na roleta.'
                 : 'Você ainda não tem títulos nos serviços ativos. Adicione ou ative uma assinatura para sortear.'}
             </AppText>
             <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>TIPO</AppText>

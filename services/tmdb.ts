@@ -510,14 +510,6 @@ function findProviderIds(activeNames: string[], providers: TmdbProvider[]) {
   ));
 }
 
-function computeMetacriticScore(item: TmdbMediaResult): number | null {
-  const rating = item.vote_average ?? 0;
-  if (rating <= 0) return null;
-  const base = Math.round(rating * 10);
-  const delta = ((item.id * 17) % 13) - 6; // Variação crítica entre -6 e +6 pontos na escala 0-100
-  return Math.min(98, Math.max(15, base + delta));
-}
-
 const resolvedDurationCache = new Map<string, string>();
 const pendingDurationCache = new Map<string, Promise<string>>();
 const tvMazeSeasonsCache = new Map<string, number | null>();
@@ -859,7 +851,7 @@ function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: stri
     service: resolvedServices[0]!,
     services: resolvedServices,
     imdbRating: rating > 0 ? rating.toFixed(1).replace('.', ',') : '—',
-    metacriticScore: computeMetacriticScore(item),
+    metacriticScore: null,
     synopsis: item.overview?.trim() || 'Sinopse indisponível no TMDB.',
     color: COVER_COLORS[item.id % COVER_COLORS.length] ?? COVER_COLORS[0]!,
     icon,

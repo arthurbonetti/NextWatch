@@ -5,6 +5,7 @@ import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Tex
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
@@ -270,18 +271,20 @@ export default function ExploreScreen() {
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
   const renderTitleItem = useCallback(
-    ({ item }: { item: MediaTitle }) => {
+    ({ item, index }: { item: MediaTitle; index: number }) => {
       const saved = isSaved(item.id);
       return (
-        <MediaTitleCard
-          title={item}
-          onOpen={() => openTitle(item)}
-          actionIcon={saved ? 'bookmark' : 'bookmark-add'}
-          actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
-          onAction={() => toggleSavedTitle(item)}
-          actionButtonStyle={saved ? styles.savedButtonActive : undefined}
-          actionIconColor={saved ? '#e58c34' : '#657078'}
-        />
+        <FadeInBlock delay={Math.min(index, 6) * 30}>
+          <MediaTitleCard
+            title={item}
+            onOpen={() => openTitle(item)}
+            actionIcon={saved ? 'bookmark' : 'bookmark-add'}
+            actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
+            onAction={() => toggleSavedTitle(item)}
+            actionButtonStyle={saved ? styles.savedButtonActive : undefined}
+            actionIconColor={saved ? '#e58c34' : '#657078'}
+          />
+        </FadeInBlock>
       );
     },
     [isSaved, openTitle, toggleSavedTitle],
@@ -309,130 +312,136 @@ export default function ExploreScreen() {
         }
         ListHeaderComponent={
           <View>
-            <View style={styles.header}>
-              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
-              <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
-            </View>
-
-            <View style={styles.searchRow}>
-              <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
-                <MaterialIcons name="search" size={21} color={searchFocused ? '#a3520d' : '#8b8a84'} />
-                <TextInput
-                  value={search}
-                  onChangeText={handleSearchChange}
-                  onFocus={() => setSearchFocused(true)}
-                  onBlur={() => setSearchFocused(false)}
-                  placeholder="Buscar filme, série ou gênero"
-                  placeholderTextColor="#7a7973"
-                  selectionColor="#a3520d"
-                  style={styles.searchInput}
-                  returnKeyType="search"
-                  accessibilityLabel="Pesquisar títulos"
-                />
-                {search.length > 0 && (
-                  <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
-                    <MaterialIcons name="close" size={18} color="#7a7973" />
-                  </Pressable>
-                )}
+            <FadeInBlock delay={0}>
+              <View style={styles.header}>
+                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
+                <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
               </View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.filterButton,
-                  activeSheetFilterCount > 0 && styles.filterButtonActive,
-                  pressed && styles.pressed,
-                ]}
-                onPress={() => setFiltersVisible(true)}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  activeSheetFilterCount > 0
-                    ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
-                    : 'Abrir filtros e ordenação'
-                }>
-                <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? '#a3520d' : '#182230'} />
-                {activeSheetFilterCount > 0 && (
-                  <View style={styles.filterCount}>
-                    <AppText peso="forte" tabular style={styles.filterCountText}>
-                      {activeSheetFilterCount}
-                    </AppText>
-                  </View>
-                )}
-              </Pressable>
-            </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
-              {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
+              <View style={styles.searchRow}>
+                <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
+                  <MaterialIcons name="search" size={21} color={searchFocused ? '#a3520d' : '#8b8a84'} />
+                  <TextInput
+                    value={search}
+                    onChangeText={handleSearchChange}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => setSearchFocused(false)}
+                    placeholder="Buscar filme, série ou gênero"
+                    placeholderTextColor="#7a7973"
+                    selectionColor="#a3520d"
+                    style={styles.searchInput}
+                    returnKeyType="search"
+                    accessibilityLabel="Pesquisar títulos"
+                  />
+                  {search.length > 0 && (
+                    <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
+                      <MaterialIcons name="close" size={18} color="#7a7973" />
+                    </Pressable>
+                  )}
+                </View>
                 <Pressable
-                  key={filter}
-                  onPress={() => setKindFilter(filter)}
                   style={({ pressed }) => [
-                    styles.quickChip,
-                    kindFilter === filter && styles.quickChipActive,
+                    styles.filterButton,
+                    activeSheetFilterCount > 0 && styles.filterButtonActive,
                     pressed && styles.pressed,
-                  ]}>
-                  <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>
-                    {filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}
-                  </AppText>
+                  ]}
+                  onPress={() => setFiltersVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    activeSheetFilterCount > 0
+                      ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
+                      : 'Abrir filtros e ordenação'
+                  }>
+                  <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? '#a3520d' : '#182230'} />
+                  {activeSheetFilterCount > 0 && (
+                    <View style={styles.filterCount}>
+                      <AppText peso="forte" tabular style={styles.filterCountText}>
+                        {activeSheetFilterCount}
+                      </AppText>
+                    </View>
+                  )}
                 </Pressable>
-              ))}
-            </ScrollView>
+              </View>
+            </FadeInBlock>
 
-            {activeFilterChips.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsRow}>
-                {activeFilterChips.map((chip) => (
+            <FadeInBlock delay={35}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
+                {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
                   <Pressable
-                    key={chip.key}
-                    onPress={chip.onRemove}
-                    style={({ pressed }) => [styles.activeFilterChip, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remover filtro ${chip.label}`}>
-                    {chip.service && <ServiceLogo name={chip.service} size={14} />}
-                    <AppText tipo="legenda" peso="forte" style={styles.activeFilterChipText}>
-                      {chip.label}
+                    key={filter}
+                    onPress={() => setKindFilter(filter)}
+                    style={({ pressed }) => [
+                      styles.quickChip,
+                      kindFilter === filter && styles.quickChipActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>
+                      {filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}
                     </AppText>
-                    <MaterialIcons name="close" size={14} color="#a3520d" />
                   </Pressable>
                 ))}
-                {activeFilterChips.length > 1 && (
-                  <Pressable
-                    onPress={clearAllFilters}
-                    style={({ pressed }) => [styles.clearAllChip, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Limpar todos os filtros">
-                    <AppText tipo="legenda" peso="forte" style={styles.clearAllChipText}>
-                      Limpar tudo
-                    </AppText>
-                  </Pressable>
-                )}
               </ScrollView>
-            )}
 
-            <View style={styles.resultsHeader}>
-              <View style={styles.resultsHeaderCopy}>
-                <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>
-                  {search.trim() ? 'Resultados da busca' : 'Títulos para assistir'}
-                </AppText>
-                <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
-                  {searchLoading
-                    ? 'Pesquisando no catálogo online…'
-                    : hasActiveFilter
-                      ? `${formatCount(results.length)} de ${formatCount(availableTitles.length)} títulos`
-                      : `${formatCount(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
-                </AppText>
+              {activeFilterChips.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsRow}>
+                  {activeFilterChips.map((chip) => (
+                    <Pressable
+                      key={chip.key}
+                      onPress={chip.onRemove}
+                      style={({ pressed }) => [styles.activeFilterChip, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remover filtro ${chip.label}`}>
+                      {chip.service && <ServiceLogo name={chip.service} size={14} />}
+                      <AppText tipo="legenda" peso="forte" style={styles.activeFilterChipText}>
+                        {chip.label}
+                      </AppText>
+                      <MaterialIcons name="close" size={14} color="#a3520d" />
+                    </Pressable>
+                  ))}
+                  {activeFilterChips.length > 1 && (
+                    <Pressable
+                      onPress={clearAllFilters}
+                      style={({ pressed }) => [styles.clearAllChip, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Limpar todos os filtros">
+                      <AppText tipo="legenda" peso="forte" style={styles.clearAllChipText}>
+                        Limpar tudo
+                      </AppText>
+                    </Pressable>
+                  )}
+                </ScrollView>
+              )}
+
+              <View style={styles.resultsHeader}>
+                <View style={styles.resultsHeaderCopy}>
+                  <AppText tipo="subtitulo" peso="forte" style={styles.resultsTitle}>
+                    {search.trim() ? 'Resultados da busca' : 'Títulos para assistir'}
+                  </AppText>
+                  <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
+                    {searchLoading
+                      ? 'Pesquisando no catálogo online…'
+                      : hasActiveFilter
+                        ? `${formatCount(results.length)} de ${formatCount(availableTitles.length)} títulos`
+                        : `${formatCount(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
+                  </AppText>
+                </View>
               </View>
-            </View>
 
-            {searchError && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+              {searchError && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+            </FadeInBlock>
           </View>
         }
         ListEmptyComponent={
-          <EmptyStateCard
-            icon={activeServices.size > 0 ? 'search-off' : 'subscriptions'}
-            title={activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}
-            description={activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}
-            actionLabel={activeServices.size === 0 ? 'Gerenciar assinaturas' : hasResettableFilters ? 'Limpar filtros' : undefined}
-            onAction={activeServices.size === 0 ? () => router.push('/subscriptions') : hasResettableFilters ? clearAllFilters : undefined}
-            style={styles.emptyState}
-          />
+          <FadeInBlock delay={60}>
+            <EmptyStateCard
+              icon={activeServices.size > 0 ? 'search-off' : 'subscriptions'}
+              title={activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}
+              description={activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}
+              actionLabel={activeServices.size === 0 ? 'Gerenciar assinaturas' : hasResettableFilters ? 'Limpar filtros' : undefined}
+              onAction={activeServices.size === 0 ? () => router.push('/subscriptions') : hasResettableFilters ? clearAllFilters : undefined}
+              style={styles.emptyState}
+            />
+          </FadeInBlock>
         }
       />
 
