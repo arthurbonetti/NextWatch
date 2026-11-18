@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ComponentProps, memo, useEffect, useState } from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
@@ -57,13 +58,15 @@ export const MediaTitleCard = memo(function MediaTitleCard({
         onPress={onOpen}
         accessibilityRole="button"
         accessibilityLabel={`Abrir ${title.title}`}>
-        <TitleArtwork
-          id={title.id}
-          variant="poster"
-          posterPath={title.tmdbPosterPath}
-          backdropPath={title.tmdbBackdropPath}
-          fallback={<MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
-        />
+        <Animated.View sharedTransitionTag={`title-poster-${title.id}`} style={StyleSheet.absoluteFill}>
+          <TitleArtwork
+            id={title.id}
+            variant="poster"
+            posterPath={title.tmdbPosterPath}
+            backdropPath={title.tmdbBackdropPath}
+            fallback={<MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
+          />
+        </Animated.View>
       </Pressable>
       <Pressable
         style={({ pressed }) => [styles.resultCopy, pressed && styles.pressed]}

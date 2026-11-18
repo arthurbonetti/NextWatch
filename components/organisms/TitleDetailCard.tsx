@@ -479,6 +479,7 @@ export function TitleDetailCard({
         <View style={styles.bodyPadding}>
           <View style={styles.headerOverlapRow}>
             <Animated.View
+              sharedTransitionTag={`title-poster-${title.id}`}
               style={[
                 styles.posterOverlap,
                 { backgroundColor: title.color, borderColor: THEME.colors.bgCard },

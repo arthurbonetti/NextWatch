@@ -93,9 +93,13 @@ type TmdbExternalIds = {
 
 type TmdbMediaDetails = {
   runtime?: number | null;
+  episode_run_time?: number[] | null;
+  last_episode_to_air?: { runtime?: number | null } | null;
+  status?: string | null;
+  vote_count?: number | null;
   number_of_seasons?: number | null;
   number_of_episodes?: number | null;
-  seasons?: TmdbSeasonSummary[] | null;
+  seasons?: (TmdbSeasonSummary & { vote_average?: number | null; poster_path?: string | null })[] | null;
   genres?: { id: number; name?: string }[] | null;
   original_language?: string | null;
   origin_country?: string[] | null;
@@ -103,6 +107,30 @@ type TmdbMediaDetails = {
     results?: TmdbEpisodeGroupSummary[];
   } | null;
   external_ids?: TmdbExternalIds | null;
+  videos?: TmdbVideosResponse | null;
+  credits?: {
+    cast?: {
+      id: number;
+      name?: string | null;
+      character?: string | null;
+      profile_path?: string | null;
+    }[];
+  } | null;
+  recommendations?: { results?: TmdbMediaResult[] } | null;
+  similar?: { results?: TmdbMediaResult[] } | null;
+  release_dates?: {
+    results?: {
+      iso_3166_1?: string;
+      release_dates?: { certification?: string | null }[];
+    }[];
+  } | null;
+  content_ratings?: {
+    results?: {
+      iso_3166_1?: string;
+      rating?: string | null;
+    }[];
+  } | null;
+  'watch/providers'?: TmdbTitleWatchProvidersResponse | null;
 };
 
 type TvMazeSeason = {
@@ -917,6 +945,292 @@ export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | 
     });
 
   pendingTrailerCache.set(title.id, promise);
+  return promise;
+}
+
+export type CastMember = {
+  id: number;
+  name: string;
+  character: string;
+  profilePath: string | null;
+};
+
+export type SeasonSummary = {
+  seasonNumber: number;
+  name: string;
+  episodeCount: number;
+  voteAverage: number | null;
+  airDate: string | null;
+  posterPath: string | null;
+};
+
+export type EpisodeSummary = {
+  episodeNumber: number;
+  name: string;
+  runtime: number | null;
+  airDate: string | null;
+  voteAverage: number | null;
+};
+
+export type RichTitleDetails = {
+  duration: string;
+  episodeDuration: string | null;
+  statusLabel: string | null;
+  certification: string | null;
+  voteCount: number | null;
+  trailerUrl: string | null;
+  providers: string[] | null;
+  cast: CastMember[];
+  seasons: SeasonSummary[];
+  similarTitles: MediaTitle[];
+};
+
+const richDetailsCache = new Map<string, RichTitleDetails>();
+const pendingRichDetailsCache = new Map<string, Promise<RichTitleDetails | null>>();
+const seasonEpisodesCache = new Map<string, EpisodeSummary[]>();
+const pendingSeasonEpisodesCache = new Map<string, Promise<EpisodeSummary[]>>();
+const relatedTitlesById = new Map<string, MediaTitle>();
+
+const TMDB_STATUS_LABELS: Record<string, string> = {
+  'Returning Series': 'Em exibição',
+  Ended: 'Finalizada',
+  Canceled: 'Cancelada',
+  'In Production': 'Em produção',
+  Planned: 'Planejada',
+  Pilot: 'Piloto',
+  Released: 'Lançado',
+};
+
+function normalizeBrCertification(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase() === 'livre') return 'L';
+  return trimmed.slice(0, 6);
+}
+
+function extractBrCertification(endpoint: MediaEndpoint, details: TmdbMediaDetails): string | null {
+  if (endpoint === 'movie') {
+    const brEntry = details.release_dates?.results?.find((entry) => entry.iso_3166_1 === 'BR');
+    const cert = brEntry?.release_dates?.find((item) => Boolean(item.certification?.trim()))?.certification;
+    return normalizeBrCertification(cert);
+  }
+  const brRating = details.content_ratings?.results?.find((entry) => entry.iso_3166_1 === 'BR')?.rating;
+  return normalizeBrCertification(brRating);
+}
+
+function extractProvidersFromDetails(details: TmdbMediaDetails): string[] | null {
+  const br = details['watch/providers']?.results?.BR;
+  if (!br) return null;
+  const rawProviders = [...(br.flatrate ?? []), ...(br.free ?? []), ...(br.ads ?? [])];
+  const matchedNames: string[] = [];
+  for (const provider of rawProviders) {
+    const canonical = matchCanonicalProviderName(provider.provider_name);
+    if (canonical && !matchedNames.includes(canonical)) {
+      matchedNames.push(canonical);
+    }
+  }
+  return matchedNames;
+}
+
+export function findCachedRelatedTitle(id: string): MediaTitle | undefined {
+  return relatedTitlesById.get(id);
+}
+
+export function getCachedRichTitleDetails(titleId: string): RichTitleDetails | null {
+  return richDetailsCache.get(titleId) ?? null;
+}
+
+export async function fetchRichTitleDetails(title: MediaTitle): Promise<RichTitleDetails | null> {
+  const cached = richDetailsCache.get(title.id);
+  if (cached) return cached;
+
+  const target = resolveTmdbEndpointAndId(title.id);
+  if (!target || !hasCatalogBackend() || upstreamUnavailable) {
+    return null;
+  }
+
+  const pending = pendingRichDetailsCache.get(title.id);
+  if (pending) return pending;
+
+  const promise = getValidAccessToken()
+    .then(async (validToken) => {
+      if (!validToken) return null;
+
+      const append =
+        target.endpoint === 'tv'
+          ? 'videos,credits,recommendations,similar,content_ratings,watch/providers,episode_groups,external_ids'
+          : 'videos,credits,recommendations,similar,release_dates,watch/providers';
+
+      const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+        language: 'pt-BR',
+        append_to_response: append,
+      });
+
+      let duration = title.duration;
+      if (target.endpoint === 'movie') {
+        if (details.runtime && details.runtime > 0) {
+          duration = formatMovieRuntime(details.runtime);
+        }
+      } else {
+        duration = await resolveTvDuration(title, target.tmdbId, details);
+      }
+      if (duration) {
+        resolvedDurationCache.set(title.id, duration);
+      }
+
+      const rawEpRuntime =
+        details.episode_run_time?.find((val) => typeof val === 'number' && val > 0) ??
+        (details.last_episode_to_air?.runtime && details.last_episode_to_air.runtime > 0
+          ? details.last_episode_to_air.runtime
+          : null);
+      const episodeDuration = rawEpRuntime ? `${rawEpRuntime}min/ep` : null;
+
+      let videoKey = pickYoutubeTrailerKey(details.videos?.results);
+      let trailerUrl = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
+      if (trailerUrl) {
+        resolvedTrailerCache.set(title.id, trailerUrl);
+      } else {
+        trailerUrl = await fetchTitleTrailerUrl(title);
+      }
+
+      const cast: CastMember[] = (details.credits?.cast ?? [])
+        .filter((member) => Boolean(member.name?.trim()))
+        .slice(0, 14)
+        .map((member) => ({
+          id: member.id,
+          name: member.name!.trim(),
+          character: member.character?.trim() || '',
+          profilePath: sanitizeTmdbPath(member.profile_path),
+        }));
+
+      const seasons: SeasonSummary[] =
+        target.endpoint === 'tv'
+          ? (details.seasons ?? [])
+              .filter(
+                (season) =>
+                  typeof season.season_number === 'number' &&
+                  season.season_number > 0 &&
+                  (season.episode_count ?? 0) > 0,
+              )
+              .sort((a, b) => (a.season_number ?? 0) - (b.season_number ?? 0))
+              .map((season) => ({
+                seasonNumber: season.season_number!,
+                name: season.name?.trim() || `Temporada ${season.season_number}`,
+                episodeCount: season.episode_count ?? 0,
+                voteAverage:
+                  typeof season.vote_average === 'number' && season.vote_average > 0
+                    ? Number(season.vote_average.toFixed(1))
+                    : null,
+                airDate: season.air_date ?? null,
+                posterPath: sanitizeTmdbPath(season.poster_path),
+              }))
+          : [];
+
+      const rawRelated = [
+        ...(details.recommendations?.results ?? []),
+        ...(details.similar?.results ?? []),
+      ];
+      const seenRelatedIds = new Set<number>([Number(target.tmdbId)]);
+      const similarTitles: MediaTitle[] = [];
+      for (const item of rawRelated) {
+        if (!item?.id || seenRelatedIds.has(item.id)) continue;
+        seenRelatedIds.add(item.id);
+        const mapped = mapMedia(item, target.endpoint, []);
+        relatedTitlesById.set(mapped.id, mapped);
+        similarTitles.push(mapped);
+        if (similarTitles.length >= 14) break;
+      }
+
+      if (target.endpoint === 'tv' && seasons.length > 0) {
+        duration = `${seasons.length} ${seasons.length === 1 ? 'temporada' : 'temporadas'}`;
+        resolvedDurationCache.set(title.id, duration);
+      }
+
+      const rich: RichTitleDetails = {
+        duration,
+        episodeDuration,
+        statusLabel: details.status ? (TMDB_STATUS_LABELS[details.status] ?? null) : null,
+        certification: extractBrCertification(target.endpoint, details),
+        voteCount:
+          typeof details.vote_count === 'number' && details.vote_count > 0 ? details.vote_count : null,
+        trailerUrl,
+        providers: extractProvidersFromDetails(details),
+        cast,
+        seasons,
+        similarTitles,
+      };
+
+      richDetailsCache.set(title.id, rich);
+      return rich;
+    })
+    .catch(() => null)
+    .finally(() => {
+      pendingRichDetailsCache.delete(title.id);
+    });
+
+  pendingRichDetailsCache.set(title.id, promise);
+  return promise;
+}
+
+type TmdbSeasonDetailsResponse = {
+  episodes?: {
+    episode_number?: number | null;
+    name?: string | null;
+    runtime?: number | null;
+    air_date?: string | null;
+    vote_average?: number | null;
+  }[];
+};
+
+export function getCachedTvSeasonEpisodes(titleId: string, seasonNumber: number): EpisodeSummary[] | null {
+  return seasonEpisodesCache.get(`${titleId}:s${seasonNumber}`) ?? null;
+}
+
+export async function fetchTvSeasonEpisodes(
+  titleId: string,
+  seasonNumber: number,
+): Promise<EpisodeSummary[]> {
+  const cacheKey = `${titleId}:s${seasonNumber}`;
+  const cached = seasonEpisodesCache.get(cacheKey);
+  if (cached) return cached;
+
+  const target = resolveTmdbEndpointAndId(titleId);
+  if (!target || target.endpoint !== 'tv' || !hasCatalogBackend() || upstreamUnavailable) {
+    return [];
+  }
+
+  const pending = pendingSeasonEpisodesCache.get(cacheKey);
+  if (pending) return pending;
+
+  const promise = getValidAccessToken()
+    .then(async (validToken) => {
+      if (!validToken) return [];
+      const res = await request<TmdbSeasonDetailsResponse>(
+        `/tv/${target.tmdbId}/season/${seasonNumber}`,
+        { language: 'pt-BR' },
+      );
+      const episodes: EpisodeSummary[] = (res.episodes ?? [])
+        .filter((ep) => typeof ep.episode_number === 'number' && ep.episode_number > 0)
+        .map((ep) => ({
+          episodeNumber: ep.episode_number!,
+          name: ep.name?.trim() || `Episódio ${ep.episode_number}`,
+          runtime: typeof ep.runtime === 'number' && ep.runtime > 0 ? ep.runtime : null,
+          airDate: ep.air_date ?? null,
+          voteAverage:
+            typeof ep.vote_average === 'number' && ep.vote_average > 0
+              ? Number(ep.vote_average.toFixed(1))
+              : null,
+        }));
+      seasonEpisodesCache.set(cacheKey, episodes);
+      return episodes;
+    })
+    .catch(() => [])
+    .finally(() => {
+      pendingSeasonEpisodesCache.delete(cacheKey);
+    });
+
+  pendingSeasonEpisodesCache.set(cacheKey, promise);
   return promise;
 }
 

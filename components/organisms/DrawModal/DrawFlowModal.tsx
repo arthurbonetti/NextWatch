@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
@@ -40,6 +40,7 @@ type DrawFlowModalProps = {
   onToggleService: (provider: string) => void;
   onToggleHideWatched: (nextValue: boolean) => void;
   onResetFilters: () => void;
+  autoSpinNonce?: number;
 };
 
 /**
@@ -64,6 +65,7 @@ export function DrawFlowModal({
   onToggleService,
   onToggleHideWatched,
   onResetFilters,
+  autoSpinNonce,
 }: DrawFlowModalProps) {
   const reducedMotion = useReducedMotion();
   const { height: windowHeight } = useWindowDimensions();
@@ -77,6 +79,7 @@ export function DrawFlowModal({
 
   const drawEntryPromiseRef = useRef<Promise<string | null> | null>(null);
   const drawHandledRef = useRef(false);
+  const handledAutoSpinNonceRef = useRef<number>(0);
 
   const defaultSheetHeight = Math.min(Math.round(windowHeight * 0.78), 660);
   const expandedSheetHeight = Math.min(Math.round(windowHeight * 0.92), 780);
@@ -144,6 +147,18 @@ export function DrawFlowModal({
       setPhase('sorteando');
     }
   }, [eligibleTitles, lastDrawnId, reducedMotion]);
+
+  useEffect(() => {
+    if (!visible || !autoSpinNonce || autoSpinNonce <= 0) return;
+    if (handledAutoSpinNonceRef.current === autoSpinNonce) return;
+    if (eligibleTitles.length === 0) return;
+
+    handledAutoSpinNonceRef.current = autoSpinNonce;
+    const frame = requestAnimationFrame(() => {
+      startDraw();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoSpinNonce, eligibleTitles.length, startDraw, visible]);
 
   const handleDrawPress = useCallback(() => {
     if (eligibleTitles.length === 0) return;

@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ComponentProps, memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
@@ -43,7 +44,9 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
       onPress={onPress}
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={`${displayTitle}, ${actionMeta.label}`}>
-      <View style={[styles.poster, { backgroundColor: cardColor }]}>
+      <Animated.View
+        sharedTransitionTag={`title-poster-${entry.tmdbId}`}
+        style={[styles.poster, { backgroundColor: cardColor }]}>
         <TitleArtwork
           id={entry.tmdbId}
           variant="poster"
@@ -51,7 +54,7 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
           backdropPath={backdropPath}
           fallback={<MaterialIcons name={resolvedTitle?.icon ?? 'movie'} size={18} color="rgba(255,255,255,0.9)" />}
         />
-      </View>
+      </Animated.View>
       <View style={styles.copy}>
         <AppText peso="forte" style={styles.title} numberOfLines={1}>
           {displayTitle}

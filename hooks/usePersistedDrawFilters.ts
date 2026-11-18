@@ -146,6 +146,17 @@ export function usePersistedDrawFilters(userId: string | null, activeServiceName
     updateFilters(() => DEFAULT_FILTERS);
   }, [updateFilters]);
 
+  const applyPreset = useCallback(
+    (preset: { kind?: DrawKindFilter; genres?: string[] }) => {
+      updateFilters((prev) => ({
+        ...prev,
+        kind: preset.kind ?? prev.kind,
+        selectedGenres: preset.genres ? Array.from(new Set(preset.genres)) : prev.selectedGenres,
+      }));
+    },
+    [updateFilters],
+  );
+
   const activeFilters = state.key === storageKey ? state.filters : DEFAULT_FILTERS;
   const enabledServices = useMemo(() => {
     const disabledSet = new Set(activeFilters.disabledServices);
@@ -162,5 +173,6 @@ export function usePersistedDrawFilters(userId: string | null, activeServiceName
     toggleService,
     setHideWatched,
     resetFilters,
+    applyPreset,
   };
 }

@@ -1,31 +1,178 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, Share, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeIn,
+  interpolateColor,
+  LinearTransition,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
-import { BackButton } from '@/components/atoms/BackButton';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
-import { FadeInBlock } from '@/components/atoms/FadeInBlock';
-import { TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
-import { MediaTitle } from '@/constants/catalog';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { RatingInfoSheet } from '@/components/organisms/RatingInfoSheet';
+import { CastCarousel } from '@/components/organisms/TitleDetails/CastCarousel';
+import { SeriesSeasonsSection } from '@/components/organisms/TitleDetails/SeriesSeasonsSection';
+import { SimilarTitlesCarousel } from '@/components/organisms/TitleDetails/SimilarTitlesCarousel';
+import { StreamingAvailabilitySection } from '@/components/organisms/TitleDetails/StreamingAvailabilitySection';
+import { TitleDetailsSkeleton } from '@/components/organisms/TitleDetails/TitleDetailsSkeleton';
+import { TitleHero } from '@/components/organisms/TitleDetails/TitleHero';
+import {
+  formatAverageRating,
+  getGenreIcon,
+  getMetacriticScore,
+  getTitleServices,
+  MediaTitle,
+} from '@/constants/catalog';
+import { openStreamingService } from '@/constants/subscriptions';
+import { resolveTitleAccentColor, THEME, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useMyList } from '@/contexts/MyListContext';
+import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { useSeriesProgress } from '@/hooks/useSeriesProgress';
+import {
+  fetchRichTitleDetails,
+  findCachedRelatedTitle,
+  getCachedRichTitleDetails,
+  getCachedTitleDuration,
+  RichTitleDetails,
+} from '@/services/tmdb';
+import { formatCount } from '@/utils/format';
+import { triggerLightImpactHaptic, triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
+
+const SYNOPSIS_PREVIEW_LIMIT = 280;
 
 export default function TitleDetailsScreen() {
-  const { user, authReady } = useAuth();
+  const { user, token, authReady } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
   const { status, findTitle } = useCatalog();
   const { isSaved, toggleSavedTitle, findSavedTitle, storageReady } = useMyList();
+  const { subscriptions } = useSubscriptions();
+
   const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
   const [savedSnapshot, setSavedSnapshot] = useState<MediaTitle | null>(null);
-  const liveTitle = normalizedId ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId)) : undefined;
+
+  const liveTitle = normalizedId
+    ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId) ?? findCachedRelatedTitle(normalizedId))
+    : undefined;
   const title = liveTitle ?? (savedSnapshot?.id === normalizedId ? savedSnapshot : undefined);
   const saved = title ? isSaved(title.id) : false;
-  const [scrollEnabled, setScrollEnabled] = useState(false);
+
+  const [richState, setRichState] = useState<{ id: string; details: RichTitleDetails | null }>({
+    id: '',
+    details: null,
+  });
+  const [synopsisExpanded, setSynopsisExpanded] = useState(false);
+  const [ratingInfoVisible, setRatingInfoVisible] = useState(false);
+  const [streamingDrawerOpen, setStreamingDrawerOpen] = useState(false);
+  const drawNonceRef = useRef(0);
+
+  const seriesProgress = useSeriesProgress(user?.id ?? null, title?.id ?? '', token);
+
+  const scrollY = useSharedValue(0);
+  const saveProgress = useSharedValue(saved ? 1 : 0);
+  const drawerChevronRotation = useSharedValue(0);
+
+  const cachedRichDetails = title ? getCachedRichTitleDetails(title.id) : null;
+  const richDetails =
+    cachedRichDetails ?? (title && richState.id === title.id ? richState.details : null);
+  const loadingRichDetails = Boolean(title && !richDetails);
+
+  useEffect(() => {
+    if (!title) return;
+    if (getCachedRichTitleDetails(title.id)) return;
+
+    let cancelled = false;
+    void fetchRichTitleDetails(title).then((details) => {
+      if (cancelled) return;
+      setRichState({ id: title.id, details });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [title]);
+
+  useEffect(() => {
+    saveProgress.set(
+      reducedMotion
+        ? saved
+          ? 1
+          : 0
+        : withTiming(saved ? 1 : 0, { duration: 180, easing: Easing.out(Easing.cubic) }),
+    );
+  }, [reducedMotion, saveProgress, saved]);
+
+  useEffect(() => {
+    drawerChevronRotation.set(
+      reducedMotion
+        ? streamingDrawerOpen
+          ? 90
+          : 0
+        : withTiming(streamingDrawerOpen ? 90 : 0, { duration: 150 }),
+    );
+  }, [drawerChevronRotation, reducedMotion, streamingDrawerOpen]);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.set(event.contentOffset.y);
+    },
+  });
+
+  const saveButtonAnimatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      saveProgress.get(),
+      [0, 1],
+      [THEME.colors.bgSubtle, THEME.colors.navy],
+    ),
+    borderColor: interpolateColor(
+      saveProgress.get(),
+      [0, 1],
+      [THEME.colors.borderMedium, THEME.colors.navy],
+    ),
+  }));
+
+  const drawerChevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${drawerChevronRotation.get()}deg` }],
+  }));
+
+  const activeProviderNames = useMemo(
+    () => new Set(subscriptions.filter((sub) => sub.active).map((sub) => sub.provider)),
+    [subscriptions],
+  );
+
+  const allServices = useMemo(() => {
+    if (!title) return [];
+    const base = getTitleServices(title);
+    const enriched = richDetails?.providers ?? [];
+    const merged = [...base];
+    for (const provider of enriched) {
+      if (!merged.includes(provider)) {
+        merged.push(provider);
+      }
+    }
+    return merged;
+  }, [richDetails?.providers, title]);
+
+  const subscribedServices = useMemo(
+    () => allServices.filter((service) => activeProviderNames.has(service)),
+    [activeProviderNames, allServices],
+  );
+
+  const watchOptions = subscribedServices.length > 0 ? subscribedServices : allServices;
 
   if (!authReady) return null;
   if (!user) return <Redirect href="/(auth)/login" />;
@@ -34,91 +181,798 @@ export default function TitleDetailsScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.notFound}>
-          <MaterialIcons name="movie-filter" size={40} color="#d77c29" />
+          <MaterialIcons name="movie-filter" size={40} color={THEME.colors.accentDeep} />
           <AppText tipo="subtitulo" peso="forte" style={styles.notFoundTitle}>
             {status === 'loading' || !storageReady ? 'Carregando título…' : 'Título não encontrado'}
           </AppText>
-          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/tab2'))}>
-            <AppText peso="forte" style={styles.link}>Voltar</AppText>
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/tab2'))}
+            accessibilityRole="button">
+            <AppText peso="forte" style={styles.link}>
+              Voltar
+            </AppText>
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
 
+  const accentColor = resolveTitleAccentColor(title.color);
+  const cachedDuration = getCachedTitleDuration(title);
+  const rawDuration = richDetails?.duration ?? cachedDuration ?? title.duration;
+  const safeDuration =
+    rawDuration && rawDuration !== 'Duração não informada' && rawDuration !== title.kind
+      ? rawDuration
+      : title.kind === 'Filme'
+        ? 'Filme'
+        : '1 temporada';
+
+  const metacritic = getMetacriticScore(title);
+  const voteCount = richDetails?.voteCount ?? title.voteCount ?? null;
+  const formattedVotes = typeof voteCount === 'number' && voteCount > 0 ? formatCount(voteCount) : null;
+  const synopsisText = title.synopsis.trim() || 'Sinopse indisponível para este título no momento.';
+  const isLongSynopsis = synopsisText.length > SYNOPSIS_PREVIEW_LIMIT;
+  const isSerialTitle = title.kind === 'Série' || title.kind === 'Anime';
+  // shortcut: reuses season 0 / ep 1 in user_series_progress for movies; split into its own column only if partial movie timestamps are ever added
+  const movieWatched = !isSerialTitle && seriesProgress.isEpisodeWatched(0, 1);
+  const hasMultipleWatchOptions = watchOptions.length > 1;
+  const primaryWatchService = watchOptions[0] ?? null;
+
   const handleToggleSaved = () => {
+    const nextSaved = !saved;
+    if (nextSaved) {
+      triggerLightImpactHaptic();
+    } else {
+      triggerSelectionHaptic();
+    }
     setSavedSnapshot(title);
     toggleSavedTitle(title);
   };
 
+  const handleShare = () => {
+    triggerSelectionHaptic();
+    const ratingText = formatAverageRating(title);
+    void Share.share({
+      message: `Estou pensando em assistir ${title.title} (${title.year}) — ${ratingText}★ no NextWatch!`,
+      title: title.title,
+    }).catch(() => {});
+  };
+
+  const handleWatchTrailer = () => {
+    if (!richDetails?.trailerUrl) return;
+    triggerSelectionHaptic();
+    void Linking.openURL(richDetails.trailerUrl).catch(() => {});
+  };
+
+  const handleOpenService = (serviceName: string) => {
+    triggerSuccessHaptic();
+    setStreamingDrawerOpen(false);
+    void openStreamingService(serviceName, title.title);
+  };
+
+  const handlePrimaryWatchPress = () => {
+    if (hasMultipleWatchOptions) {
+      triggerSelectionHaptic();
+      setStreamingDrawerOpen((prev) => !prev);
+      return;
+    }
+    if (primaryWatchService) {
+      handleOpenService(primaryWatchService);
+      return;
+    }
+    const query = encodeURIComponent(`onde assistir ${title.title} ${title.year}`);
+    void Linking.openURL(`https://www.google.com/search?q=${query}`).catch(() => {});
+  };
+
+  const handlePressGenre = (genre: string) => {
+    triggerSelectionHaptic();
+    drawNonceRef.current += 1;
+    router.navigate({
+      pathname: '/(tabs)',
+      params: {
+        drawGenre: genre,
+        drawKind: title.kind,
+        drawNonce: `${title.id}-${drawNonceRef.current}`,
+      },
+    });
+  };
+
+  const handleDrawSimilar = () => {
+    triggerSelectionHaptic();
+    drawNonceRef.current += 1;
+    const primaryGenre = title.genres[0];
+    router.navigate({
+      pathname: '/(tabs)',
+      params: {
+        ...(primaryGenre ? { drawGenre: primaryGenre } : {}),
+        drawKind: title.kind,
+        autoSpin: '1',
+        drawNonce: `${title.id}-sim-${drawNonceRef.current}`,
+      },
+    });
+  };
+
+  const handleSelectSimilar = (item: MediaTitle) => {
+    triggerSelectionHaptic();
+    router.push(`/title/${item.id}`);
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        scrollEnabled={scrollEnabled}
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
+      <Animated.ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 112 + Math.max(insets.bottom, THEME.spacing.md) },
+        ]}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
-        <FadeInBlock delay={0}>
-          <View style={styles.topbar}>
-            <BackButton fallbackHref="/(tabs)/tab2" />
-            <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText>
+        <TitleHero
+          title={title}
+          durationLabel={safeDuration}
+          episodeDuration={richDetails?.episodeDuration}
+          statusLabel={richDetails?.statusLabel}
+          certification={richDetails?.certification}
+          trailerUrl={richDetails?.trailerUrl}
+          accentColor={accentColor}
+          scrollY={scrollY}
+          topInset={insets.top}
+          onShare={handleShare}
+          onWatchTrailer={handleWatchTrailer}
+        />
+
+        <View style={styles.body}>
+          <View style={styles.ratingRow}>
+            <Pressable
+              onPress={() => {
+                triggerSelectionHaptic();
+                setRatingInfoVisible(true);
+              }}
+              style={({ pressed }) => [styles.ratingBadge, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Nota ${formatAverageRating(title)}${formattedVotes ? `, ${formattedVotes} votos` : ''}. Toque para ver fontes.`}>
+              <MaterialIcons name="star" size={16} color={THEME.colors.gold} />
+              <AppText peso="forte" tabular style={styles.ratingValue}>
+                {formatAverageRating(title)}
+              </AppText>
+              <AppText tipo="legenda" peso="forte" style={styles.ratingSource}>
+                {title.ratingSource ?? 'TMDB'}
+              </AppText>
+              {formattedVotes && (
+                <AppText tipo="legenda" tabular style={styles.votesInlineText}>
+                  · {formattedVotes} votos
+                </AppText>
+              )}
+              <MaterialIcons
+                name="info-outline"
+                size={15}
+                color={THEME.colors.textOnNavyMuted}
+                style={styles.ratingInfoIcon}
+              />
+            </Pressable>
+
+            {metacritic !== null && (
+              <Pressable
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  setRatingInfoVisible(true);
+                }}
+                style={({ pressed }) => [
+                  styles.metacriticBadge,
+                  metacritic >= 61
+                    ? styles.mcGreen
+                    : metacritic >= 40
+                      ? styles.mcYellow
+                      : styles.mcRed,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Metacritic ${metacritic} de 100`}>
+                <AppText peso="forte" tabular style={styles.metacriticScore}>
+                  {metacritic}
+                </AppText>
+                <AppText tipo="legenda" peso="forte" style={styles.metacriticLabel}>
+                  MC
+                </AppText>
+              </Pressable>
+            )}
+          </View>
+
+          {title.genres.length > 0 && (
+            <View style={styles.genresWrap}>
+              {title.genres.map((genre) => (
+                <Pressable
+                  key={genre}
+                  onPress={() => handlePressGenre(genre)}
+                  style={({ pressed }) => [
+                    styles.genreChip,
+                    {
+                      borderColor: withAlpha(accentColor, 0.34),
+                      backgroundColor: THEME.colors.bgCard,
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Sortear títulos do gênero ${genre}`}>
+                  <MaterialIcons
+                    name={getGenreIcon(genre)}
+                    size={14}
+                    color={THEME.colors.accentText}
+                  />
+                  <AppText tipo="legenda" peso="forte" style={styles.genreChipText}>
+                    {genre}
+                  </AppText>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <Animated.View
+            layout={reducedMotion ? undefined : LinearTransition.duration(200)}
+            style={styles.synopsisSection}>
+            <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>
+              Sinopse
+            </AppText>
+
+            <View style={styles.synopsisBox}>
+              <AppText
+                tipo="texto"
+                style={styles.synopsisText}
+                numberOfLines={isLongSynopsis && !synopsisExpanded ? 4 : undefined}>
+                {synopsisText}
+              </AppText>
+              {isLongSynopsis && !synopsisExpanded && (
+                <LinearGradient
+                  colors={[
+                    THEME.colors.canvasFadeTransparent,
+                    THEME.colors.canvasFadeMid,
+                    THEME.colors.bgCanvas,
+                  ]}
+                  locations={[0, 0.55, 1]}
+                  style={styles.synopsisFade}
+                  pointerEvents="none"
+                />
+              )}
+            </View>
+
+            {isLongSynopsis && (
+              <Pressable
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  setSynopsisExpanded((prev) => !prev);
+                }}
+                style={({ pressed }) => [styles.expandButton, pressed && styles.pressed]}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={synopsisExpanded ? 'Mostrar menos da sinopse' : 'Mostrar mais da sinopse'}>
+                <AppText tipo="legenda" peso="forte" style={styles.expandButtonText}>
+                  {synopsisExpanded ? 'Mostrar menos' : 'Mostrar mais'}
+                </AppText>
+                <MaterialIcons
+                  name={synopsisExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                  size={17}
+                  color={THEME.colors.accentText}
+                />
+              </Pressable>
+            )}
+          </Animated.View>
+
+          <StreamingAvailabilitySection
+            services={allServices}
+            subscriptions={subscriptions}
+            accentColor={accentColor}
+            onPressService={handleOpenService}
+          />
+
+          {!isSerialTitle && (
+            <View style={styles.movieProgressSection}>
+              <View style={styles.movieProgressHeader}>
+                <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>
+                  Progresso
+                </AppText>
+                <AppText tipo="legenda" peso="forte" style={styles.movieProgressPercent}>
+                  {movieWatched ? '100%' : '0%'}
+                </AppText>
+              </View>
+
+              <View
+                style={[
+                  styles.movieProgressCard,
+                  movieWatched && { borderColor: withAlpha(THEME.colors.successText, 0.42) },
+                ]}>
+                <View style={styles.movieProgressTrack}>
+                  <View
+                    style={[
+                      styles.movieProgressFill,
+                      {
+                        width: movieWatched ? '100%' : '0%',
+                        backgroundColor: movieWatched ? THEME.colors.successText : accentColor,
+                      },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.movieProgressRow}>
+                  <AppText tipo="legenda" style={styles.movieProgressHint}>
+                    {movieWatched
+                      ? 'Você já assistiu a este filme.'
+                      : 'Ainda não marcado como assistido.'}
+                  </AppText>
+                  <Pressable
+                    onPress={() => {
+                      if (movieWatched) {
+                        triggerSelectionHaptic();
+                      } else {
+                        triggerSuccessHaptic();
+                      }
+                      seriesProgress.toggleEpisode(0, 1);
+                    }}
+                    style={({ pressed }) => [
+                      styles.movieMarkButton,
+                      movieWatched
+                        ? styles.movieMarkButtonDone
+                        : {
+                            backgroundColor: withAlpha(accentColor, 0.14),
+                            borderColor: withAlpha(accentColor, 0.35),
+                          },
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ checked: movieWatched }}
+                    accessibilityLabel={
+                      movieWatched
+                        ? `Desmarcar ${title.title} como assistido`
+                        : `Marcar ${title.title} como assistido`
+                    }>
+                    <MaterialIcons
+                      name={movieWatched ? 'check-circle' : 'radio-button-unchecked'}
+                      size={16}
+                      color={movieWatched ? THEME.colors.successText : THEME.colors.textPrimary}
+                    />
+                    <AppText
+                      tipo="legenda"
+                      peso="forte"
+                      style={[
+                        styles.movieMarkText,
+                        movieWatched && styles.movieMarkTextDone,
+                      ]}>
+                      {movieWatched ? 'Assistido' : 'Marcar'}
+                    </AppText>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {loadingRichDetails ? (
+            <TitleDetailsSkeleton />
+          ) : (
+            <>
+              {isSerialTitle && richDetails && richDetails.seasons.length > 0 && (
+                <SeriesSeasonsSection
+                  titleId={title.id}
+                  seasons={richDetails.seasons}
+                  accentColor={accentColor}
+                  totalWatchedEpisodes={seriesProgress.totalWatchedEpisodes}
+                  isEpisodeWatched={seriesProgress.isEpisodeWatched}
+                  getSeasonWatchedCount={seriesProgress.getSeasonWatchedCount}
+                  isSeasonCompleted={seriesProgress.isSeasonCompleted}
+                  onToggleEpisode={seriesProgress.toggleEpisode}
+                  onToggleSeason={seriesProgress.toggleSeason}
+                />
+              )}
+
+              {richDetails && richDetails.cast.length > 0 && (
+                <CastCarousel cast={richDetails.cast} />
+              )}
+
+              <SimilarTitlesCarousel
+                titles={richDetails?.similarTitles ?? []}
+                accentColor={accentColor}
+                onSelectTitle={handleSelectSimilar}
+                onDrawSimilar={handleDrawSimilar}
+              />
+            </>
+          )}
+        </View>
+      </Animated.ScrollView>
+
+      <View
+        style={[
+          styles.fixedFooter,
+          { paddingBottom: Math.max(insets.bottom, THEME.spacing.md) },
+        ]}>
+        {streamingDrawerOpen && hasMultipleWatchOptions && (
+          <Animated.View
+            entering={reducedMotion ? undefined : FadeIn.duration(160)}
+            style={styles.streamingDrawer}>
+            <AppText tipo="legenda" peso="forte" style={styles.drawerTitle}>
+              Escolha onde abrir
+            </AppText>
+            <View style={styles.drawerButtonsRow}>
+              {watchOptions.map((serviceName) => (
+                <Pressable
+                  key={serviceName}
+                  onPress={() => handleOpenService(serviceName)}
+                  style={({ pressed }) => [styles.drawerServiceChip, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Assistir no ${serviceName}`}>
+                  <ServiceLogo name={serviceName} size={22} />
+                  <AppText tipo="legenda" peso="forte" style={styles.drawerServiceName}>
+                    {serviceName}
+                  </AppText>
+                  <MaterialIcons name="open-in-new" size={13} color={THEME.colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          </Animated.View>
+        )}
+
+        <View style={styles.footerActionsRow}>
+          <Animated.View style={[styles.saveButtonShell, saveButtonAnimatedStyle]}>
             <Pressable
               onPress={handleToggleSaved}
-              hitSlop={6}
-              style={({ pressed }) => [styles.iconButton, saved && styles.iconButtonSaved, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.saveButtonInner, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel={saved ? 'Remover da lista' : 'Salvar na lista'}>
-              <BookmarkIcon saved={saved} itemKey={title.id} size={22} color="#e58c34" />
+              accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}>
+              <BookmarkIcon
+                saved={saved}
+                itemKey={title.id}
+                size={20}
+                color={THEME.colors.gold}
+                inactiveColor={THEME.colors.textPrimary}
+                badgeColor={THEME.colors.gold}
+                badgeBorderColor={THEME.colors.navy}
+              />
+              <AppText
+                tipo="legenda"
+                peso="forte"
+                style={[styles.saveButtonText, saved && styles.saveButtonTextActive]}
+                numberOfLines={1}>
+                {saved ? 'Na sua lista' : 'Salvar'}
+              </AppText>
             </Pressable>
-          </View>
-        </FadeInBlock>
-        <FadeInBlock delay={35}>
-          <View style={[styles.poster, { backgroundColor: title.color }]}>
-            <TitleArtwork
-              id={title.id}
-              variant="backdrop"
-              posterPath={title.tmdbPosterPath}
-              backdropPath={title.tmdbBackdropPath}
-              fallback={
-                <>
-                  <MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" />
-                  <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>
-                </>
-              }
-            />
-          </View>
-        </FadeInBlock>
-        <FadeInBlock delay={70}>
-          <TitleDetailsBody title={title} pillBackgroundColor="#fffdf8" onScrollEnabledChange={setScrollEnabled} />
+          </Animated.View>
+
           <Pressable
-            style={({ pressed }) => [styles.primaryButton, saved && styles.primaryButtonSaved, pressed && styles.pressed]}
-            onPress={handleToggleSaved}
-            accessibilityRole="button">
-            <MaterialIcons name={saved ? 'check' : 'bookmark-add'} size={19} color={saved ? '#f3b43f' : '#182230'} />
-            <AppText peso="forte" style={[styles.primaryText, saved && styles.primaryTextSaved]}>
-              {saved ? 'Salvo na minha lista' : 'Salvar na minha lista'}
+            onPress={handlePrimaryWatchPress}
+            style={({ pressed }) => [
+              styles.watchPrimaryButton,
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={
+              hasMultipleWatchOptions
+                ? 'Assistir em um dos seus streamings'
+                : primaryWatchService
+                  ? `Assistir no ${primaryWatchService}`
+                  : 'Buscar onde assistir'
+            }>
+            {!hasMultipleWatchOptions && primaryWatchService ? (
+              <ServiceLogo name={primaryWatchService} size={22} />
+            ) : (
+              <MaterialIcons name="play-circle-filled" size={21} color={THEME.colors.navy} />
+            )}
+            <AppText tipo="texto" peso="forte" style={styles.watchPrimaryText} numberOfLines={1}>
+              {hasMultipleWatchOptions
+                ? 'Assistir em streaming'
+                : primaryWatchService
+                  ? `Assistir no ${primaryWatchService}`
+                  : 'Buscar onde assistir'}
             </AppText>
+            {hasMultipleWatchOptions ? (
+              <Animated.View style={drawerChevronStyle}>
+                <MaterialIcons name="chevron-right" size={20} color={THEME.colors.navy} />
+              </Animated.View>
+            ) : (
+              <MaterialIcons name="open-in-new" size={16} color={THEME.colors.navy} />
+            )}
           </Pressable>
-        </FadeInBlock>
-      </ScrollView>
+        </View>
+      </View>
+
+      <RatingInfoSheet
+        visible={ratingInfoVisible}
+        title={title}
+        voteCount={voteCount}
+        onClose={() => setRatingInfoVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 },
-  pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5 },
-  iconButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center' },
-  iconButtonSaved: { borderColor: '#e58c34', backgroundColor: '#fff2d8' },
-  poster: { height: 195, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(24,34,48,0.08)', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 20, marginBottom: 14, overflow: 'hidden' },
-  posterLabel: { color: '#fffdf8', letterSpacing: 1.2, textAlign: 'center' },
-  notFoundTitle: { color: '#182230', textAlign: 'center' },
-  primaryButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  primaryButtonSaved: { backgroundColor: '#182230' },
-  primaryText: { color: '#182230' },
-  primaryTextSaved: { color: '#fffdf8' },
-  notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  link: { color: '#a3520d', fontSize: 14 },
+  safeArea: {
+    flex: 1,
+    backgroundColor: THEME.colors.bgCanvas,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
+  body: {
+    paddingHorizontal: THEME.spacing.lg,
+    paddingTop: THEME.spacing.md,
+    gap: THEME.spacing.lg,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: THEME.spacing.sm,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: THEME.colors.navy,
+    borderRadius: THEME.radius.sm,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  ratingValue: {
+    color: THEME.colors.textOnNavy,
+    fontSize: 15,
+  },
+  ratingSource: {
+    color: THEME.colors.gold,
+    fontSize: 11,
+    letterSpacing: 0.4,
+  },
+  votesInlineText: {
+    color: THEME.colors.textOnNavyMuted,
+    fontSize: 12,
+  },
+  ratingInfoIcon: {
+    marginLeft: 2,
+  },
+  metacriticBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: THEME.radius.sm,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+  },
+  mcGreen: {
+    backgroundColor: THEME.colors.mcGreen,
+  },
+  mcYellow: {
+    backgroundColor: THEME.colors.mcYellow,
+  },
+  mcRed: {
+    backgroundColor: THEME.colors.mcRed,
+  },
+  metacriticScore: {
+    color: THEME.colors.textOnNavy,
+    fontSize: 14,
+  },
+  metacriticLabel: {
+    color: THEME.colors.textOnNavy,
+    fontSize: 10,
+    opacity: 0.9,
+  },
+  genresWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: THEME.spacing.sm,
+  },
+  genreChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: THEME.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  genreChipText: {
+    color: THEME.colors.textPrimary,
+    fontSize: 12.5,
+  },
+  synopsisSection: {
+    gap: THEME.spacing.xs,
+  },
+  sectionTitle: {
+    color: THEME.colors.textPrimary,
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  synopsisBox: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  synopsisText: {
+    color: THEME.colors.textStrongBody,
+    fontSize: 15,
+    lineHeight: 23,
+  },
+  synopsisFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 30,
+  },
+  expandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 3,
+    paddingVertical: 4,
+  },
+  expandButtonText: {
+    color: THEME.colors.accentText,
+    fontSize: 13,
+  },
+  movieProgressSection: {
+    gap: THEME.spacing.sm,
+  },
+  movieProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: THEME.spacing.sm,
+  },
+  movieProgressPercent: {
+    color: THEME.colors.textSecondary,
+    fontSize: 12.5,
+  },
+  movieProgressCard: {
+    backgroundColor: THEME.colors.bgCard,
+    borderRadius: THEME.radius.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.borderLight,
+    padding: THEME.spacing.md,
+    gap: THEME.spacing.sm,
+  },
+  movieProgressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: THEME.colors.bgSubtle,
+    overflow: 'hidden',
+  },
+  movieProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  movieProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: THEME.spacing.sm,
+  },
+  movieProgressHint: {
+    flex: 1,
+    color: THEME.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  movieMarkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: THEME.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  movieMarkButtonDone: {
+    backgroundColor: THEME.colors.bgSuccess,
+    borderColor: THEME.colors.borderSuccess,
+  },
+  movieMarkText: {
+    color: THEME.colors.textPrimary,
+    fontSize: 12,
+  },
+  movieMarkTextDone: {
+    color: THEME.colors.successText,
+  },
+  fixedFooter: {
+    borderTopWidth: 1,
+    borderTopColor: THEME.colors.borderLight,
+    backgroundColor: THEME.colors.bgCard,
+    paddingHorizontal: THEME.spacing.lg,
+    paddingTop: THEME.spacing.sm,
+    gap: THEME.spacing.sm,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
+  streamingDrawer: {
+    backgroundColor: THEME.colors.bgSubtle,
+    borderRadius: THEME.radius.md,
+    borderWidth: 1,
+    borderColor: THEME.colors.borderLight,
+    padding: THEME.spacing.sm,
+    gap: THEME.spacing.xs,
+  },
+  drawerTitle: {
+    color: THEME.colors.textSecondary,
+    fontSize: 11.5,
+  },
+  drawerButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: THEME.spacing.xs,
+  },
+  drawerServiceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: THEME.colors.bgCard,
+    borderRadius: THEME.radius.sm,
+    borderWidth: 1,
+    borderColor: THEME.colors.borderMedium,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  drawerServiceName: {
+    color: THEME.colors.textPrimary,
+    fontSize: 12.5,
+  },
+  footerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: THEME.spacing.sm,
+  },
+  saveButtonShell: {
+    borderRadius: THEME.radius.md,
+    borderWidth: 1,
+    minHeight: 48,
+  },
+  saveButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: THEME.spacing.md,
+    minHeight: 48,
+  },
+  saveButtonText: {
+    color: THEME.colors.textPrimary,
+    fontSize: 13.5,
+  },
+  saveButtonTextActive: {
+    color: THEME.colors.textOnNavy,
+  },
+  watchPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: THEME.radius.md,
+    backgroundColor: THEME.colors.gold,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: THEME.spacing.md,
+  },
+  watchPrimaryText: {
+    color: THEME.colors.navy,
+    fontSize: 14.5,
+    flexShrink: 1,
+  },
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.985 }],
+  },
+  notFound: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+  },
+  notFoundTitle: {
+    color: THEME.colors.textPrimary,
+    textAlign: 'center',
+  },
+  link: {
+    color: THEME.colors.accentText,
+    fontSize: 14,
+  },
 });

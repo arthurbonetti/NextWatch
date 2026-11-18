@@ -13,23 +13,26 @@ import { useCatalog } from '@/contexts/CatalogContext';
 import { useDrawHistory } from '@/contexts/DrawHistoryContext';
 import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { formatCount } from '@/utils/format';
 
 const PREVIEW_HISTORY_LIMIT = 3;
 
 export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
+  const { user, token, signOut } = useAuth();
   const { subscriptions } = useSubscriptions();
   const { savedTitles, findSavedTitle, refreshMyList } = useMyList();
   const { titles, status, errorMessage, findTitle, refreshCatalog } = useCatalog();
   const { history, refreshDrawHistory } = useDrawHistory();
+  const { progressTitleIds, refreshProgressIds } = useWatchedProgressIds(user?.id ?? null, token);
 
   useFocusEffect(
     useCallback(() => {
       void refreshMyList({ minIntervalMs: 3000 });
       void refreshDrawHistory({ minIntervalMs: 3000 });
-    }, [refreshDrawHistory, refreshMyList]),
+      void refreshProgressIds();
+    }, [refreshDrawHistory, refreshMyList, refreshProgressIds]),
   );
 
   const activeSubscriptions = useMemo(
@@ -40,10 +43,15 @@ export default function ProfileTabScreen() {
     () => activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0),
     [activeSubscriptions],
   );
-  const watchedCount = useMemo(
-    () => history.filter((entry) => entry.acao === 'assistiu').length,
-    [history],
-  );
+  const watchedCount = useMemo(() => {
+    const ids = new Set(
+      history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId),
+    );
+    for (const id of progressTitleIds) {
+      ids.add(id);
+    }
+    return ids.size;
+  }, [history, progressTitleIds]);
   const previewHistory = useMemo(
     () => history.slice(0, PREVIEW_HISTORY_LIMIT),
     [history],

@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,19 +22,35 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useDrawHistory } from '@/contexts/DrawHistoryContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
-import { usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
+import { DrawKindFilter, usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
+import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { fetchTitleDuration } from '@/services/tmdb';
 import { formatCount, formatCurrency } from '@/utils/format';
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const insets = useSafeAreaInsets();
   const { titles, status: catalogStatus, isFetchingCatalog } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
   const { history } = useDrawHistory();
+  const { progressTitleIds, refreshProgressIds } = useWatchedProgressIds(user?.id ?? null, token);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProgressIds();
+    }, [refreshProgressIds]),
+  );
   const [drawModalVisible, setDrawModalVisible] = useState(false);
+  const [autoSpinNonce, setAutoSpinNonce] = useState(0);
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
+  const { drawGenre, drawKind, autoSpin, drawNonce } = useLocalSearchParams<{
+    drawGenre?: string;
+    drawKind?: string;
+    autoSpin?: string;
+    drawNonce?: string;
+  }>();
+  const handledDrawNonceRef = useRef<string | null>(null);
 
   const activeSubscriptions = useMemo(
     () => subscriptions.filter((subscription) => subscription.active),
@@ -55,7 +71,29 @@ export default function HomeScreen() {
     toggleService,
     setHideWatched,
     resetFilters,
+    applyPreset,
   } = usePersistedDrawFilters(user?.id ?? null, activeServiceNames);
+
+  useEffect(() => {
+    if (!drawNonce || handledDrawNonceRef.current === drawNonce) return;
+    handledDrawNonceRef.current = drawNonce;
+
+    const validKinds: DrawKindFilter[] = ['Todos', 'Filme', 'Série', 'Anime'];
+    const parsedKind = validKinds.includes(drawKind as DrawKindFilter)
+      ? (drawKind as DrawKindFilter)
+      : 'Todos';
+    const genres = drawGenre ? [drawGenre] : [];
+    const shouldAutoSpin = autoSpin === '1';
+
+    const frame = requestAnimationFrame(() => {
+      applyPreset({ kind: parsedKind, genres });
+      setDrawModalVisible(true);
+      if (shouldAutoSpin) {
+        setAutoSpinNonce((prev) => prev + 1);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [applyPreset, autoSpin, drawGenre, drawKind, drawNonce]);
 
   const availableTitles = useMemo(
     () => titles.filter((title) => getTitleServices(title).some((service) => activeServiceSet.has(service))),
@@ -69,10 +107,15 @@ export default function HomeScreen() {
 
   const availableGenres = useMemo(() => getDrawGenres(eligibleTitles), [eligibleTitles]);
 
-  const watchedTitleIds = useMemo(
-    () => new Set(history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId)),
-    [history],
-  );
+  const watchedTitleIds = useMemo(() => {
+    const ids = new Set(
+      history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId),
+    );
+    for (const id of progressTitleIds) {
+      ids.add(id);
+    }
+    return ids;
+  }, [history, progressTitleIds]);
 
   const enabledServiceSet = useMemo(() => new Set(enabledServices), [enabledServices]);
 
@@ -331,6 +374,7 @@ export default function HomeScreen() {
         onToggleService={toggleService}
         onToggleHideWatched={setHideWatched}
         onResetFilters={resetFilters}
+        autoSpinNonce={autoSpinNonce}
       />
 
       <TitleDetailsModal
