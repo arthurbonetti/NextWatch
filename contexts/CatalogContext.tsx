@@ -23,12 +23,12 @@ const CatalogContext = createContext<CatalogContextValue | null>(null);
 
 export function CatalogProvider({ children }: PropsWithChildren) {
   const { subscriptions, storageReady } = useSubscriptions();
-  const providerNames = subscriptions
+  const providerKey = subscriptions
     .filter((subscription) => subscription.active)
-    .map((subscription) => subscription.provider);
-  const providerKey = providerNames.slice().sort().join('|');
-  const currentProviderKeyRef = useRef(providerKey);
-  currentProviderKeyRef.current = providerKey;
+    .map((subscription) => subscription.provider)
+    .sort()
+    .join('|');
+  const activeProvidersRef = useRef<string[]>([]);
   const [remoteTitles, setRemoteTitles] = useState<MediaTitle[] | null>(null);
   const [remoteProviderKey, setRemoteProviderKey] = useState('');
   const [status, setStatus] = useState<CatalogStatus>('loading');
@@ -38,6 +38,11 @@ export function CatalogProvider({ children }: PropsWithChildren) {
   const [searchedTitles, setSearchedTitles] = useState<MediaTitle[]>([]);
   const requestVersionRef = useRef(0);
   const searchCacheRef = useRef(new Map<string, MediaTitle[]>());
+
+  useEffect(() => {
+    activeProvidersRef.current = providerKey ? providerKey.split('|') : [];
+    searchCacheRef.current.clear();
+  }, [providerKey]);
 
   const refreshCatalog = useCallback(async () => {
     if (!storageReady) return;
@@ -52,8 +57,7 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     setStatus('loading');
     setIsFetchingCatalog(true);
     setErrorMessage(null);
-    const shouldAbort = () =>
-      requestVersionRef.current !== requestVersion || currentProviderKeyRef.current !== providerKey;
+    const shouldAbort = () => requestVersionRef.current !== requestVersion;
 
     try {
       await fetchAllCatalogForProviders(
@@ -86,8 +90,7 @@ export function CatalogProvider({ children }: PropsWithChildren) {
       return cachedResults;
     }
 
-    const activeProviders = currentProviderKeyRef.current ? currentProviderKeyRef.current.split('|') : [];
-    const results = await searchCatalogTitles(normalizedQuery, activeProviders);
+    const results = await searchCatalogTitles(normalizedQuery, activeProvidersRef.current);
     if (searchCacheRef.current.size >= MAX_SEARCH_CACHE_ENTRIES) {
       const oldestKey = searchCacheRef.current.keys().next().value;
       if (oldestKey !== undefined) {

@@ -64,47 +64,40 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setStatus((current) => (current === 'error' ? 'idle' : current));
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const runAuthAction = useCallback(async (action: () => Promise<Awaited<ReturnType<typeof loginWithCredentials>>>, fallbackMessage: string) => {
     setStatus('loading');
     setErrorMessage(null);
 
     try {
-      const session = await loginWithCredentials({ email, password });
+      const session = await action();
       setUser(session.user);
       setToken(session.accessToken);
       setStatus('success');
       return true;
     } catch (error) {
       setStatus('error');
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível autenticar. Verifique sua conexão e tente novamente.',
-      );
+      setErrorMessage(error instanceof Error ? error.message : fallbackMessage);
       return false;
     }
   }, []);
 
-  const signUp = useCallback(async (name: string, email: string, password: string): Promise<boolean> => {
-    setStatus('loading');
-    setErrorMessage(null);
+  const signIn = useCallback(
+    (email: string, password: string) =>
+      runAuthAction(
+        () => loginWithCredentials({ email, password }),
+        'Não foi possível autenticar. Verifique sua conexão e tente novamente.',
+      ),
+    [runAuthAction],
+  );
 
-    try {
-      const session = await registerAccount({ name, email, password });
-      setUser(session.user);
-      setToken(session.accessToken);
-      setStatus('success');
-      return true;
-    } catch (error) {
-      setStatus('error');
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível criar sua conta. Tente novamente.',
-      );
-      return false;
-    }
-  }, []);
+  const signUp = useCallback(
+    (name: string, email: string, password: string) =>
+      runAuthAction(
+        () => registerAccount({ name, email, password }),
+        'Não foi possível criar sua conta. Tente novamente.',
+      ),
+    [runAuthAction],
+  );
 
   const signOut = useCallback(async () => {
     await clearAuthSession();

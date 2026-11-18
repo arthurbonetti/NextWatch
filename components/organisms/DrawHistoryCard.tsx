@@ -3,18 +3,12 @@ import { ComponentProps, memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
-import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
+import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
 import { DrawAction, DrawHistoryEntry } from '@/contexts/DrawHistoryContext';
+import { formatShortDateTime } from '@/utils/format';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
-
-const dateTimeFormat = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 const ACTION_META: Record<DrawAction, { label: string; icon: MaterialIconName; bg: string; color: string }> = {
   assistiu: { label: 'Assistiu', icon: 'check-circle', bg: '#e5efe7', color: '#216941' },
@@ -22,12 +16,6 @@ const ACTION_META: Record<DrawAction, { label: string; icon: MaterialIconName; b
   'sorteou outro': { label: 'Sorteou outro', icon: 'casino', bg: '#f1e8d7', color: '#8b5827' },
   ignorou: { label: 'Ignorou', icon: 'close', bg: '#f1eee7', color: '#5e5c57' },
 };
-
-function formatDrawDate(isoDate: string): string {
-  const parsed = new Date(isoDate);
-  if (Number.isNaN(parsed.getTime())) return 'Data indisponível';
-  return dateTimeFormat.format(parsed);
-}
 
 type DrawHistoryCardProps = {
   entry: DrawHistoryEntry;
@@ -46,7 +34,6 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
   const posterPath = resolvedTitle?.tmdbPosterPath ?? entry.tmdbPosterPath;
   const backdropPath = resolvedTitle?.tmdbBackdropPath;
   const cardColor = resolvedTitle?.color ?? entry.color ?? '#263b50';
-  const hasArtwork = getArtworkUri(entry.tmdbId, 'poster', { posterPath, backdropPath }) !== null;
   const actionMeta = ACTION_META[entry.acao];
 
   return (
@@ -62,10 +49,8 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
           variant="poster"
           posterPath={posterPath}
           backdropPath={backdropPath}
+          fallback={<MaterialIcons name={resolvedTitle?.icon ?? 'movie'} size={18} color="rgba(255,255,255,0.9)" />}
         />
-        {!hasArtwork && (
-          <MaterialIcons name={resolvedTitle?.icon ?? 'movie'} size={18} color="rgba(255,255,255,0.9)" />
-        )}
       </View>
       <View style={styles.copy}>
         <AppText peso="forte" style={styles.title} numberOfLines={1}>
@@ -73,7 +58,7 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
         </AppText>
         <AppText tipo="legenda" tabular style={styles.meta} numberOfLines={1}>
           {displayKind ? `${displayKind} · ` : ''}
-          {formatDrawDate(entry.sorteadoEm)}
+          {formatShortDateTime(entry.sorteadoEm)}
         </AppText>
       </View>
       <View style={[styles.actionBadge, { backgroundColor: actionMeta.bg }]}>

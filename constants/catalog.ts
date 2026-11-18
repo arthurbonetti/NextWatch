@@ -27,6 +27,22 @@ export type MediaTitle = {
 
 const VALID_MEDIA_KINDS: ReadonlySet<string> = new Set<MediaKind>(['Filme', 'Série', 'Anime']);
 const VALID_MEDIA_ICONS: ReadonlySet<string> = new Set<MediaIcon>(['movie', 'live-tv', 'theaters']);
+const SAFE_HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+const SAFE_TMDB_PATH_REGEX = /^\/[a-zA-Z0-9._-]{1,120}$/;
+
+export function sanitizeTmdbPath(path: unknown): string | null {
+  if (typeof path !== 'string') return null;
+  return SAFE_TMDB_PATH_REGEX.test(path) && !path.includes('..') ? path : null;
+}
+
+export function sanitizeHexColor(color: unknown): string | undefined {
+  if (typeof color !== 'string') return undefined;
+  return SAFE_HEX_COLOR_REGEX.test(color) ? color : undefined;
+}
+
+export function getAllGenres(titles: readonly MediaTitle[]): string[] {
+  return Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)]));
+}
 
 export function isMediaTitle(value: unknown): value is MediaTitle {
   if (!value || typeof value !== 'object') return false;
@@ -106,24 +122,7 @@ function computeNameMatchScore(normalizedName: string, normalizedQuery: string, 
 }
 
 export function matchesSearchQuery(title: MediaTitle, rawQuery: string): boolean {
-  const normalizedQuery = normalizeSearchText(rawQuery);
-  if (!normalizedQuery) return true;
-  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
-  const normalizedTitle = normalizeSearchText(title.title);
-  const normalizedOriginal = title.originalTitle ? normalizeSearchText(title.originalTitle) : '';
-
-  if (
-    computeNameMatchScore(normalizedTitle, normalizedQuery, queryTokens) > 0
-    || computeNameMatchScore(normalizedOriginal, normalizedQuery, queryTokens) > 0
-  ) {
-    return true;
-  }
-
-  const titleServices = getTitleServices(title);
-  return (
-    title.genres.some((genre) => normalizeSearchText(genre).includes(normalizedQuery))
-    || titleServices.some((service) => normalizeSearchText(service).includes(normalizedQuery))
-  );
+  return !normalizeSearchText(rawQuery) || getSearchRelevanceScore(title, rawQuery) > 0;
 }
 
 export function getSearchRelevanceScore(title: MediaTitle, rawQuery: string): number {
@@ -148,8 +147,8 @@ export function getSearchRelevanceScore(title: MediaTitle, rawQuery: string): nu
 
   const defaultVoteCount = title.catalogSource === 'tmdb' ? 0 : 5000;
   const defaultPopularity = title.catalogSource === 'tmdb' ? 0 : 80;
-  const voteCountBoost = Math.log10((title.voteCount ?? defaultVoteCount) + 1) * 35;
-  const popularityBoost = Math.log10((title.popularity ?? defaultPopularity) + 1) * 25;
+  const voteCountBoost = Math.log10(Math.max(0, title.voteCount ?? defaultVoteCount) + 1) * 35;
+  const popularityBoost = Math.log10(Math.max(0, title.popularity ?? defaultPopularity) + 1) * 25;
   const ratingBoost = getTitleAverageRating(title) * 6;
   const posterBoost = title.tmdbPosterPath || title.catalogSource !== 'tmdb' ? 25 : 0;
   const synopsisBoost = title.synopsis && title.synopsis !== 'Sinopse indisponível no TMDB.' ? 15 : 0;

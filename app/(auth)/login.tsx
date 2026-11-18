@@ -1,4 +1,3 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -9,6 +8,7 @@ import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
+import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { useAuth } from '@/contexts/AuthContext';
 import { isValidEmail, MIN_PASSWORD_LENGTH } from '@/services/authApi';
 
@@ -76,31 +76,14 @@ export default function LoginScreen() {
                 </View>
               </View>
 
-              {isConnected === false && (
-                <View style={styles.offlineBanner}>
-                  <MaterialIcons name="wifi-off" size={18} color="#9a5b20" />
-                  <AppText tipo="legenda" style={styles.offlineText}>
-                    Sem conexão com a internet. Você ainda pode acessar sua sessão salva neste aparelho.
-                  </AppText>
-                </View>
-              )}
-
-              {status === 'error' && errorMessage && (
-                <View style={styles.errorBanner}>
-                  <MaterialIcons name="error-outline" size={18} color="#c0392b" />
-                  <View style={styles.errorCopy}>
-                    <AppText tipo="legenda" peso="forte" style={styles.errorTitle}>Não foi possível entrar</AppText>
-                    <AppText tipo="legenda" style={styles.errorText}>{errorMessage}</AppText>
-                  </View>
-                  <Pressable
-                    onPress={() => { void handleLogin(); }}
-                    hitSlop={8}
-                    style={({ pressed }) => [styles.retryChip, pressed && styles.pressed]}
-                    accessibilityRole="button">
-                    <AppText tipo="legenda" peso="forte" style={styles.retryText}>Repetir</AppText>
-                  </Pressable>
-                </View>
-              )}
+              <AuthStatusBanners
+                isConnected={isConnected}
+                offlineMessage="Sem conexão com a internet. Você ainda pode acessar sua sessão salva neste aparelho."
+                status={status}
+                errorMessage={errorMessage}
+                errorTitle="Não foi possível entrar"
+                onRetry={() => { void handleLogin(); }}
+              />
 
               <AppInput
                 rotulo="E-mail"
@@ -216,35 +199,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#f5e6c8',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 14,
-  },
-  offlineText: { flex: 1, color: '#625a4c' },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#fdecea',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 18,
-  },
-  errorCopy: { flex: 1 },
-  errorTitle: { color: '#c0392b', marginBottom: 2 },
-  errorText: { color: '#7a271f' },
-  retryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: '#f9d7d3',
-  },
-  retryText: { color: '#962318', fontSize: 11 },
   submitButton: { backgroundColor: '#182230', borderRadius: 14, marginTop: 6 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
   loadingText: { color: '#5e5c57', fontSize: 13 },

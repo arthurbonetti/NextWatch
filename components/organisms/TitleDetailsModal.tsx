@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
-import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
+import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { MediaTitle } from '@/constants/catalog';
 import { useMyList } from '@/contexts/MyListContext';
@@ -33,10 +33,6 @@ export function TitleDetailsModal({
 
   if (!title) return null;
   const saved = isSaved(title.id);
-  const hasArtwork = getArtworkUri(title.id, 'backdrop', {
-    posterPath: title.tmdbPosterPath,
-    backdropPath: title.tmdbBackdropPath,
-  }) !== null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -44,8 +40,19 @@ export function TitleDetailsModal({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar detalhes" />
         <View style={styles.dialog}>
           <View style={[styles.cover, { backgroundColor: title.color }]}>
-            <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
-            {!hasArtwork && <View style={styles.coverGlow} />}
+            <TitleArtwork
+              id={title.id}
+              variant="backdrop"
+              posterPath={title.tmdbPosterPath}
+              backdropPath={title.tmdbBackdropPath}
+              fallback={
+                <>
+                  <View style={styles.coverGlow} />
+                  <MaterialIcons name={title.icon} size={66} color="rgba(255,255,255,0.9)" />
+                  <AppText tipo="legenda" peso="forte" style={styles.coverTitle}>{title.title.toUpperCase()}</AppText>
+                </>
+              }
+            />
             <Pressable
               style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
               onPress={onClose}
@@ -54,8 +61,6 @@ export function TitleDetailsModal({
               accessibilityLabel="Fechar">
               <MaterialIcons name="close" size={22} color="#fff" />
             </Pressable>
-            {!hasArtwork && <MaterialIcons name={title.icon} size={66} color="rgba(255,255,255,0.9)" />}
-            {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.coverTitle}>{title.title.toUpperCase()}</AppText>}
           </View>
 
           <ScrollView

@@ -84,6 +84,8 @@ export function hasSupabaseConfig(): boolean {
   return Boolean(getSupabaseUrl() && SUPABASE_ANON_KEY);
 }
 
+export type SupabaseOutcome = 'ok' | 'drop' | 'retry';
+
 export function buildSupabaseHeaders(token?: string | null): Record<string, string> {
   return {
     Accept: 'application/json',
@@ -91,6 +93,43 @@ export function buildSupabaseHeaders(token?: string | null): Record<string, stri
     apikey: SUPABASE_ANON_KEY,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function classifySupabaseOutcome(response: Response): SupabaseOutcome {
+  if (response.ok) return 'ok';
+  if (
+    response.status >= 400 &&
+    response.status < 500 &&
+    response.status !== 401 &&
+    response.status !== 403 &&
+    response.status !== 408 &&
+    response.status !== 429
+  ) {
+    return 'drop';
+  }
+  return 'retry';
+}
+
+async function parseJsonSafe<T>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 async function persistSession(session: AuthSession): Promise<void> {
@@ -162,6 +201,49 @@ function formatSupabaseError(errorMsg?: string): string {
   return 'Não foi possível concluir a autenticação. Verifique os dados e tente novamente.';
 }
 
+type RawSupabaseUser = {
+  id?: string;
+  email?: string;
+  created_at?: string;
+  user_metadata?: { name?: unknown };
+};
+
+function toAuthUser(rawUser: RawSupabaseUser & { id: string }, fallbackEmail = '', fallbackName?: string): AuthUser {
+  const metadataName = typeof rawUser.user_metadata?.name === 'string'
+    ? rawUser.user_metadata.name.trim().slice(0, MAX_NAME_LENGTH)
+    : '';
+  const email = rawUser.email || fallbackEmail;
+  return {
+    id: rawUser.id,
+    name: fallbackName || metadataName || email.split('@')[0] || 'Usuário',
+    email,
+    createdAt: rawUser.created_at || new Date().toISOString(),
+  };
+}
+
+async function postAuth(path: string, body: Record<string, unknown>): Promise<SupabaseAuthResponse> {
+  const baseUrl = getSupabaseUrl();
+  if (!baseUrl || !SUPABASE_ANON_KEY) {
+    throw new Error('Serviço de autenticação não configurado corretamente.');
+  }
+
+  checkAuthRateLimit();
+
+  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: buildSupabaseHeaders(),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonSafe<SupabaseAuthResponse>(response);
+
+  if (!response.ok || !data?.user) {
+    const msg = data?.msg || data?.message || data?.error_description || data?.error;
+    throw new Error(formatSupabaseError(msg));
+  }
+
+  return data;
+}
+
 /**
  * POST /auth/login — Autentica o usuário no Supabase Auth via REST API.
  * Salva o `accessToken` via `SecureStore` (conforme exigido na disciplina) e o perfil em `AsyncStorage`.
@@ -172,53 +254,20 @@ export async function loginWithCredentials({ email, password }: LoginCredentials
     throw new Error('E-mail ou senha inválidos.');
   }
 
-  const baseUrl = getSupabaseUrl();
-  if (!baseUrl || !SUPABASE_ANON_KEY) {
-    throw new Error('Serviço de autenticação não configurado corretamente.');
+  const data = await postAuth('/auth/v1/token?grant_type=password', {
+    email: normalizedEmail,
+    password,
+  });
+  if (!data.access_token || !data.user) {
+    throw new Error(formatSupabaseError(data.msg || data.message || data.error_description || data.error));
   }
 
-  checkAuthRateLimit();
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(`${baseUrl}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: buildSupabaseHeaders(),
-      body: JSON.stringify({
-        email: normalizedEmail,
-        password,
-      }),
-      signal: controller.signal,
-    });
-
-    const data = (await response.json()) as SupabaseAuthResponse;
-
-    if (!response.ok || !data.access_token || !data.user) {
-      const msg = data.msg || data.message || data.error_description || data.error;
-      throw new Error(formatSupabaseError(msg));
-    }
-
-    const rawName = typeof data.user.user_metadata?.name === 'string'
-      ? data.user.user_metadata.name.trim().slice(0, MAX_NAME_LENGTH)
-      : '';
-
-    const session: AuthSession = {
-      user: {
-        id: data.user.id,
-        name: rawName || normalizedEmail.split('@')[0] || 'Usuário',
-        email: data.user.email || normalizedEmail,
-        createdAt: data.user.created_at || new Date().toISOString(),
-      },
-      accessToken: data.access_token,
-    };
-
-    await persistSession(session);
-    return session;
-  } finally {
-    clearTimeout(timer);
-  }
+  const session: AuthSession = {
+    user: toAuthUser(data.user, normalizedEmail),
+    accessToken: data.access_token,
+  };
+  await persistSession(session);
+  return session;
 }
 
 /**
@@ -237,62 +286,28 @@ export async function registerAccount({ name, email, password }: RegisterPayload
     throw new Error('Verifique os dados informados para criar sua conta.');
   }
 
-  const baseUrl = getSupabaseUrl();
-  if (!baseUrl || !SUPABASE_ANON_KEY) {
-    throw new Error('Serviço de autenticação não configurado corretamente.');
+  const data = await postAuth('/auth/v1/signup', {
+    email: normalizedEmail,
+    password,
+    data: { name: normalizedName },
+  });
+
+  if (data.access_token && data.user) {
+    const session: AuthSession = {
+      user: toAuthUser(data.user, normalizedEmail, normalizedName),
+      accessToken: data.access_token,
+    };
+    await persistSession(session);
+    return session;
   }
 
-  checkAuthRateLimit();
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(`${baseUrl}/auth/v1/signup`, {
-      method: 'POST',
-      headers: buildSupabaseHeaders(),
-      body: JSON.stringify({
-        email: normalizedEmail,
-        password,
-        data: {
-          name: normalizedName,
-        },
-      }),
-      signal: controller.signal,
-    });
-
-    const data = (await response.json()) as SupabaseAuthResponse;
-
-    if (!response.ok || !data.user) {
-      const msg = data.msg || data.message || data.error_description || data.error;
-      throw new Error(formatSupabaseError(msg));
-    }
-
-    // Se o Supabase devolver a sessão com access_token direto no signup:
-    if (data.access_token) {
-      const session: AuthSession = {
-        user: {
-          id: data.user.id,
-          name: normalizedName,
-          email: data.user.email || normalizedEmail,
-          createdAt: data.user.created_at || new Date().toISOString(),
-        },
-        accessToken: data.access_token,
-      };
-      await persistSession(session);
-      return session;
-    }
-
-    // Se não devolveu o token imediatamente no signup, autentica na sequência:
-    return await loginWithCredentials({ email: normalizedEmail, password });
-  } finally {
-    clearTimeout(timer);
-  }
+  // Se não devolveu o token imediatamente no signup, autentica na sequência:
+  return loginWithCredentials({ email: normalizedEmail, password });
 }
 
 /**
  * GET /auth/me — Restaura a sessão validando o `accessToken` armazenado no `SecureStore`
- * com verificação online no Supabase `/auth/v1/user` e fallback offline no `AsyncStorage` (Slides 13 e 14).
+ * com verificação online no Supabase `/auth/v1/user` e fallback offline no `AsyncStorage`.
  */
 export async function restoreAuthSession(): Promise<AuthSession | null> {
   const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
@@ -300,15 +315,12 @@ export async function restoreAuthSession(): Promise<AuthSession | null> {
 
   const baseUrl = getSupabaseUrl();
   if (baseUrl && SUPABASE_ANON_KEY) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), SESSION_RESTORE_TIMEOUT_MS);
-
     try {
-      const response = await fetch(`${baseUrl}/auth/v1/user`, {
-        method: 'GET',
-        headers: buildSupabaseHeaders(token),
-        signal: controller.signal,
-      });
+      const response = await fetchWithTimeout(
+        `${baseUrl}/auth/v1/user`,
+        { method: 'GET', headers: buildSupabaseHeaders(token) },
+        SESSION_RESTORE_TIMEOUT_MS,
+      );
 
       // Se o token foi revogado ou expirou (401/403), limpa a sessão local e exige novo login (OWASP A07)
       if (response.status === 401 || response.status === 403) {
@@ -317,31 +329,15 @@ export async function restoreAuthSession(): Promise<AuthSession | null> {
       }
 
       if (response.ok) {
-        const userObj = (await response.json()) as {
-          id?: string;
-          email?: string;
-          created_at?: string;
-          user_metadata?: { name?: string };
-        };
-
+        const userObj = await parseJsonSafe<RawSupabaseUser>(response);
         if (typeof userObj?.id === 'string' && userObj.id.length > 0) {
-          const safeName = typeof userObj.user_metadata?.name === 'string'
-            ? userObj.user_metadata.name.trim().slice(0, MAX_NAME_LENGTH)
-            : '';
-          const user: AuthUser = {
-            id: userObj.id,
-            name: safeName || userObj.email?.split('@')[0] || 'Usuário',
-            email: userObj.email || '',
-            createdAt: userObj.created_at || new Date().toISOString(),
-          };
+          const user = toAuthUser({ ...userObj, id: userObj.id });
           await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
           return { user, accessToken: token };
         }
       }
     } catch {
-      // Offline ou falha transitória: recorre ao cache local conforme o PDF da aula
-    } finally {
-      clearTimeout(timer);
+      // Offline ou falha transitória: recorre ao cache local
     }
   }
 
@@ -368,18 +364,14 @@ export async function clearAuthSession(): Promise<void> {
   const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
   const baseUrl = getSupabaseUrl();
   if (token && baseUrl && SUPABASE_ANON_KEY) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), SESSION_RESTORE_TIMEOUT_MS);
     try {
-      await fetch(`${baseUrl}/auth/v1/logout`, {
-        method: 'POST',
-        headers: buildSupabaseHeaders(token),
-        signal: controller.signal,
-      });
+      await fetchWithTimeout(
+        `${baseUrl}/auth/v1/logout`,
+        { method: 'POST', headers: buildSupabaseHeaders(token) },
+        SESSION_RESTORE_TIMEOUT_MS,
+      );
     } catch {
       // Prossegue mesmo se estiver offline
-    } finally {
-      clearTimeout(timer);
     }
   }
   await purgeLocalSession();

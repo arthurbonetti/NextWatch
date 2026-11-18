@@ -52,7 +52,7 @@ export function TitleDetailsBody({
     providersAnim.setValue(0);
     let active = true;
     void fetchTitleDuration(title).then((resolved) => {
-      if (active) setDuration(resolved);
+      if (active) setDuration((current) => (current === resolved ? current : resolved));
     });
     return () => {
       active = false;

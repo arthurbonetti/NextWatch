@@ -6,12 +6,22 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
-import { GENRES, getTitleAverageRating, getTitleServices, matchesSearchQuery, MediaKind, MediaTitle, rankTitlesBySearchRelevance } from '@/constants/catalog';
+import {
+  getAllGenres,
+  getTitleAverageRating,
+  getTitleServices,
+  matchesSearchQuery,
+  MediaKind,
+  MediaTitle,
+  rankTitlesBySearchRelevance,
+} from '@/constants/catalog';
 import { FONT_FAMILIES } from '@/constants/typography';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { formatCount } from '@/utils/format';
 
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
 type SortOption = 'default' | 'rating' | 'year' | 'title';
@@ -24,8 +34,6 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ];
 
 const COLLAPSED_GENRE_COUNT = 7;
-
-const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
@@ -52,7 +60,6 @@ export default function ExploreScreen() {
   const [remoteQuery, setRemoteQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchErrorQuery, setSearchErrorQuery] = useState('');
   const searchRequestRef = useRef(0);
 
   const handlePullRefresh = useCallback(async () => {
@@ -69,15 +76,25 @@ export default function ExploreScreen() {
     getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
 
+  const handleSearchChange = useCallback((nextSearch: string) => {
+    setSearch(nextSearch);
+    if (nextSearch.trim().length < 2) {
+      searchRequestRef.current += 1;
+      setSearchLoading(false);
+      setRemoteResults(null);
+      setRemoteQuery('');
+      setSearchError(null);
+    }
+  }, []);
+
   useEffect(() => {
     const query = search.trim();
+    if (query.length < 2) return;
     const requestId = ++searchRequestRef.current;
-    if (query.length < 2) {
-      return;
-    }
 
     const timer = setTimeout(() => {
       setSearchLoading(true);
+      setSearchError(null);
       void searchTitles(query)
         .then((results) => {
           if (searchRequestRef.current === requestId) {
@@ -89,7 +106,6 @@ export default function ExploreScreen() {
           if (searchRequestRef.current === requestId) {
             setRemoteResults([]);
             setSearchError('Não foi possível pesquisar no catálogo online. Tente novamente.');
-            setSearchErrorQuery(query.toLocaleLowerCase());
           }
         })
         .finally(() => {
@@ -100,10 +116,7 @@ export default function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [search, searchTitles]);
 
-  const genres = useMemo(
-    () => Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)])),
-    [titles],
-  );
+  const genres = useMemo(() => getAllGenres(titles), [titles]);
   const serviceNames = useMemo(() => {
     const availableServiceSet = new Set(availableTitles.flatMap((title) => getTitleServices(title)));
     const activeOrdered = subscriptions
@@ -140,23 +153,18 @@ export default function ExploreScreen() {
     );
   }, []);
 
+  const hasFilterCriteria =
+    kindFilter !== 'Todos' ||
+    effectiveSelectedGenres.length > 0 ||
+    effectiveSelectedServices.length > 0 ||
+    ratingFilter !== 'Qualquer nota';
   const activeSheetFilterCount =
     effectiveSelectedServices.length +
     effectiveSelectedGenres.length +
     Number(ratingFilter !== 'Qualquer nota') +
     Number(sortBy !== 'default');
-  const hasActiveFilter =
-    kindFilter !== 'Todos' ||
-    effectiveSelectedGenres.length > 0 ||
-    effectiveSelectedServices.length > 0 ||
-    ratingFilter !== 'Qualquer nota' ||
-    search.trim().length > 0;
-  const hasResettableFilters =
-    kindFilter !== 'Todos' ||
-    effectiveSelectedGenres.length > 0 ||
-    effectiveSelectedServices.length > 0 ||
-    ratingFilter !== 'Qualquer nota' ||
-    sortBy !== 'default';
+  const hasActiveFilter = hasFilterCriteria || search.trim().length > 0;
+  const hasResettableFilters = hasFilterCriteria || sortBy !== 'default';
 
   const clearAllFilters = useCallback(() => {
     setKindFilter('Todos');
@@ -232,14 +240,14 @@ export default function ExploreScreen() {
         key: `service-${service}`,
         label: service,
         service,
-        onRemove: () => setSelectedServices((current) => current.filter((item) => item !== service)),
+        onRemove: () => toggleService(service),
       });
     }
     for (const genre of effectiveSelectedGenres) {
       chips.push({
         key: `genre-${genre}`,
         label: genre,
-        onRemove: () => setSelectedGenres((current) => current.filter((item) => item !== genre)),
+        onRemove: () => toggleGenre(genre),
       });
     }
     if (ratingFilter !== 'Qualquer nota') {
@@ -257,29 +265,34 @@ export default function ExploreScreen() {
       });
     }
     return chips;
-  }, [activeSortLabel, effectiveSelectedGenres, effectiveSelectedServices, ratingFilter, sortBy]);
+  }, [activeSortLabel, effectiveSelectedGenres, effectiveSelectedServices, ratingFilter, sortBy, toggleGenre, toggleService]);
 
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
+
+  const renderTitleItem = useCallback(
+    ({ item }: { item: MediaTitle }) => {
+      const saved = isSaved(item.id);
+      return (
+        <MediaTitleCard
+          title={item}
+          onOpen={() => openTitle(item)}
+          actionIcon={saved ? 'bookmark' : 'bookmark-add'}
+          actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
+          onAction={() => toggleSavedTitle(item)}
+          actionButtonStyle={saved ? styles.savedButtonActive : undefined}
+          actionIconColor={saved ? '#e58c34' : '#657078'}
+        />
+      );
+    },
+    [isSaved, openTitle, toggleSavedTitle],
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <FlatList
         data={results}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const saved = isSaved(item.id);
-          return (
-            <MediaTitleCard
-              title={item}
-              onOpen={() => openTitle(item)}
-              actionIcon={saved ? 'bookmark' : 'bookmark-add'}
-              actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
-              onAction={() => toggleSavedTitle(item)}
-              actionButtonStyle={saved ? styles.savedButtonActive : undefined}
-              actionIconColor={saved ? '#e58c34' : '#657078'}
-            />
-          );
-        }}
+        renderItem={renderTitleItem}
         contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -306,7 +319,7 @@ export default function ExploreScreen() {
                 <MaterialIcons name="search" size={21} color={searchFocused ? '#a3520d' : '#8b8a84'} />
                 <TextInput
                   value={search}
-                  onChangeText={setSearch}
+                  onChangeText={handleSearchChange}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
                   placeholder="Buscar filme, série ou gênero"
@@ -317,7 +330,7 @@ export default function ExploreScreen() {
                   accessibilityLabel="Pesquisar títulos"
                 />
                 {search.length > 0 && (
-                  <Pressable onPress={() => setSearch('')} hitSlop={10} accessibilityLabel="Limpar busca">
+                  <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
                     <MaterialIcons name="close" size={18} color="#7a7973" />
                   </Pressable>
                 )}
@@ -402,30 +415,24 @@ export default function ExploreScreen() {
                   {searchLoading
                     ? 'Pesquisando no catálogo online…'
                     : hasActiveFilter
-                      ? `${countFormat.format(results.length)} de ${countFormat.format(availableTitles.length)} títulos`
-                      : `${countFormat.format(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
+                      ? `${formatCount(results.length)} de ${formatCount(availableTitles.length)} títulos`
+                      : `${formatCount(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
                 </AppText>
               </View>
             </View>
 
-            {searchError && searchErrorQuery === search.trim().toLocaleLowerCase() && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
+            {searchError && <AppText tipo="legenda" style={styles.searchError}>{searchError}</AppText>}
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}><MaterialIcons name={activeServices.size > 0 ? 'search-off' : 'subscriptions'} size={26} color="#a3520d" /></View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>{activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}</AppText>
-            <AppText tipo="legenda" style={styles.emptyText}>{activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}</AppText>
-            {activeServices.size === 0 ? (
-              <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={() => router.push('/subscriptions')}>
-                <AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Gerenciar assinaturas</AppText>
-              </Pressable>
-            ) : hasResettableFilters ? (
-              <Pressable style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} onPress={clearAllFilters}>
-                <AppText tipo="legenda" peso="forte" style={styles.emptyActionText}>Limpar filtros</AppText>
-              </Pressable>
-            ) : null}
-          </View>
+          <EmptyStateCard
+            icon={activeServices.size > 0 ? 'search-off' : 'subscriptions'}
+            title={activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}
+            description={activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}
+            actionLabel={activeServices.size === 0 ? 'Gerenciar assinaturas' : hasResettableFilters ? 'Limpar filtros' : undefined}
+            onAction={activeServices.size === 0 ? () => router.push('/subscriptions') : hasResettableFilters ? clearAllFilters : undefined}
+            style={styles.emptyState}
+          />
         }
       />
 
@@ -609,7 +616,7 @@ export default function ExploreScreen() {
               <AppText peso="forte" style={[styles.applyButtonText, results.length === 0 && styles.applyButtonTextDisabled]}>
                 {results.length === 0
                   ? 'Nenhum título encontrado'
-                  : `Ver ${countFormat.format(results.length)} ${results.length === 1 ? 'título' : 'títulos'}`}
+                  : `Ver ${formatCount(results.length)} ${results.length === 1 ? 'título' : 'títulos'}`}
               </AppText>
             </Pressable>
             {results.length === 0 && hasResettableFilters && (
@@ -707,10 +714,5 @@ const styles = StyleSheet.create({
   secondaryResetText: { color: '#a3520d', fontSize: 13.5 },
   searchError: { color: '#c0392b', marginBottom: 8 },
   savedButtonActive: { backgroundColor: '#fff2d8', borderWidth: 1, borderColor: '#e58c34' },
-  emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', marginTop: 10 },
-  emptyIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1e8d7', marginBottom: 11 },
-  emptyTitle: { color: '#182230', fontSize: 16 },
-  emptyText: { color: '#5e5c57', fontSize: 13, textAlign: 'center', marginTop: 5, lineHeight: 19 },
-  emptyAction: { borderRadius: 12, backgroundColor: '#f3b43f', paddingHorizontal: 16, paddingVertical: 10, marginTop: 14 },
-  emptyActionText: { color: '#182230', fontSize: 13 },
+  emptyState: { marginTop: 10 },
 });

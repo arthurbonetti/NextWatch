@@ -1,18 +1,20 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { SwitchToggle } from '@/components/atoms/SwitchToggle';
+import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
+import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
 import { Subscription } from '@/constants/subscriptions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
-
-const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+import { formatCurrency } from '@/utils/format';
 
 export default function SubscriptionsScreen() {
   const { user, authReady } = useAuth();
@@ -44,19 +46,11 @@ export default function SubscriptionsScreen() {
     setEditorOpen(false);
   };
 
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-    router.replace('/(tabs)/tab3');
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <BackButton onPress={handleBack} />
+          <BackButton fallbackHref="/(tabs)/tab3" />
           <View style={styles.headerCopy}>
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
             <AppText tipo="titulo" peso="forte" style={styles.title}>Assinaturas</AppText>
@@ -88,7 +82,7 @@ export default function SubscriptionsScreen() {
             {monthlyTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </AppText>
           <View style={styles.totalFooter}>
-            <AppText tipo="legenda" tabular style={styles.totalHint}>{currency.format(monthlyTotal * 12)} por ano</AppText>
+            <AppText tipo="legenda" tabular style={styles.totalHint}>{formatCurrency(monthlyTotal * 12)} por ano</AppText>
             <Pressable
               onPress={() => setShowAnnualCost((value) => !value)}
               style={({ pressed }) => [styles.costLink, pressed && styles.pressed]}
@@ -101,11 +95,11 @@ export default function SubscriptionsScreen() {
             <View style={styles.annualBreakdown}>
               <View style={styles.breakdownRow}>
                 <AppText tipo="legenda" style={styles.annualText}>Média por streaming ativo</AppText>
-                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{currency.format(averagePerService)}</AppText>
+                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{formatCurrency(averagePerService)}</AppText>
               </View>
               <View style={styles.breakdownRow}>
                 <AppText tipo="legenda" style={styles.annualText}>Projeção em 6 meses</AppText>
-                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{currency.format(monthlyTotal * 6)}</AppText>
+                <AppText tipo="legenda" peso="forte" tabular style={styles.annualValue}>{formatCurrency(monthlyTotal * 6)}</AppText>
               </View>
             </View>
           )}
@@ -120,18 +114,15 @@ export default function SubscriptionsScreen() {
         </View>
 
         {subscriptions.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}><MaterialIcons name="subscriptions" size={26} color="#d77c29" /></View>
-            <AppText tipo="subtitulo" peso="forte" style={styles.emptyTitle}>Nenhuma assinatura cadastrada</AppText>
-            <AppText tipo="legenda" style={styles.emptyDescription}>Adicione os streamings que você assina para acompanhar gastos e liberar o catálogo na Roleta.</AppText>
-            <Pressable
-              style={({ pressed }) => [styles.emptyButton, pressed && styles.pressed]}
-              onPress={addSubscription}
-              accessibilityRole="button">
-              <MaterialIcons name="add" size={18} color="#182230" />
-              <AppText peso="forte" style={styles.emptyButtonText}>Adicionar primeiro serviço</AppText>
-            </Pressable>
-          </View>
+          <EmptyStateCard
+            icon="subscriptions"
+            iconColor="#d77c29"
+            title="Nenhuma assinatura cadastrada"
+            description="Adicione os streamings que você assina para acompanhar gastos e liberar o catálogo na Roleta."
+            actionLabel="Adicionar primeiro serviço"
+            actionIcon="add"
+            onAction={addSubscription}
+          />
         ) : subscriptions.map((subscription) => {
           return (
             <View key={subscription.id} style={[styles.subscriptionCard, !subscription.active && styles.subscriptionInactive]}>
@@ -150,7 +141,7 @@ export default function SubscriptionsScreen() {
                   </AppText>
                 </View>
                 <View style={styles.priceArea}>
-                  <AppText peso="forte" tabular style={styles.price}>{currency.format(subscription.monthlyPrice)}</AppText>
+                  <AppText peso="forte" tabular style={styles.price}>{formatCurrency(subscription.monthlyPrice)}</AppText>
                   <AppText tipo="legenda" style={styles.priceCaption}>por mês</AppText>
                 </View>
               </Pressable>
@@ -191,16 +182,12 @@ export default function SubscriptionsScreen() {
                     accessibilityLabel={`Remover ${subscription.provider}`}>
                     <MaterialIcons name="delete-outline" size={19} color="#c0392b" />
                   </Pressable>
-                  <Pressable
-                    onPress={() => toggleSubscription(subscription.id)}
-                    accessibilityRole="switch"
-                    accessibilityState={{ checked: subscription.active }}
+                  <SwitchToggle
+                    value={subscription.active}
+                    onToggle={() => toggleSubscription(subscription.id)}
                     accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
-                    style={({ pressed }) => [styles.switchHitArea, pressed && styles.pressed]}>
-                    <View style={[styles.customSwitchTrack, subscription.active && styles.customSwitchTrackActive]}>
-                      <View style={[styles.customSwitchThumb, subscription.active && styles.customSwitchThumbActive]} />
-                    </View>
-                  </Pressable>
+                    style={styles.switchHitArea}
+                  />
                 </View>
               </View>
             </View>
@@ -224,47 +211,22 @@ export default function SubscriptionsScreen() {
 
       {editorOpen && <SubscriptionEditorModal key={editingSubscription?.id ?? 'new-subscription'} initialSubscription={editingSubscription} onClose={() => setEditorOpen(false)} onSave={handleSaveSubscription} />}
 
-      <Modal
+      <ConfirmDialog
         visible={deletingSubscription !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDeletingSubscription(null)}
-        statusBarTranslucent>
-        <View style={styles.confirmBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeletingSubscription(null)} accessibilityLabel="Cancelar exclusão" />
-          <View style={styles.confirmCard}>
-            <View style={styles.confirmIconBadge}>
-              <MaterialIcons name="delete-outline" size={24} color="#c0392b" />
-            </View>
-            <AppText tipo="legenda" peso="forte" style={styles.confirmEyebrow}>EXCLUIR ASSINATURA</AppText>
-            <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.confirmTitle}>
-              Remover {deletingSubscription?.provider}?
-            </AppText>
-            <AppText tipo="legenda" style={styles.confirmMessage}>
-              Os títulos exclusivos desse streaming deixarão de aparecer na Roleta e em Explorar.
-            </AppText>
-            <View style={styles.confirmActions}>
-              <Pressable
-                style={({ pressed }) => [styles.confirmDeleteButton, pressed && styles.pressed]}
-                onPress={() => {
-                  if (deletingSubscription) {
-                    removeSubscription(deletingSubscription.id);
-                    setDeletingSubscription(null);
-                  }
-                }}
-                accessibilityRole="button">
-                <AppText peso="forte" style={styles.confirmDeleteText}>Sim, remover</AppText>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.confirmCancelButton, pressed && styles.pressed]}
-                onPress={() => setDeletingSubscription(null)}
-                accessibilityRole="button">
-                <AppText peso="forte" style={styles.confirmCancelText}>Cancelar</AppText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        icon="delete-outline"
+        eyebrow="EXCLUIR ASSINATURA"
+        title={`Remover ${deletingSubscription?.provider ?? ''}?`}
+        message="Os títulos exclusivos desse streaming deixarão de aparecer na Roleta e em Explorar."
+        confirmLabel="Sim, remover"
+        cancelAccessibilityLabel="Cancelar exclusão"
+        onConfirm={() => {
+          if (deletingSubscription) {
+            removeSubscription(deletingSubscription.id);
+            setDeletingSubscription(null);
+          }
+        }}
+        onCancel={() => setDeletingSubscription(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -327,30 +289,9 @@ const styles = StyleSheet.create({
   subscriptionActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   iconActionBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center' },
   switchHitArea: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingLeft: 2 },
-  customSwitchTrack: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#d8d3c9', padding: 3, justifyContent: 'center' },
-  customSwitchTrackActive: { backgroundColor: '#182230' },
-  customSwitchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fffdf8' },
-  customSwitchThumbActive: { alignSelf: 'flex-end', backgroundColor: '#f3b43f' },
   addRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d3c9', borderStyle: 'dashed', backgroundColor: '#fffdf8', marginTop: 6 },
   addIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3b43f', marginRight: 12 },
   addCopy: { flex: 1 },
   addTitle: { color: '#182230', fontSize: 14.5, lineHeight: 19 },
   addSubtitle: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
-  emptyState: { alignItems: 'center', paddingHorizontal: 26, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
-  emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#f1e8d7', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  emptyTitle: { color: '#182230', fontSize: 17, lineHeight: 22 },
-  emptyDescription: { color: '#5e5c57', textAlign: 'center', fontSize: 13, lineHeight: 19, marginTop: 6 },
-  emptyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 13, paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#f3b43f', marginTop: 16 },
-  emptyButtonText: { color: '#182230', fontSize: 13 },
-  confirmBackdrop: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.72)' },
-  confirmCard: { width: '100%', maxWidth: 360, alignItems: 'center', borderRadius: 24, paddingHorizontal: 22, paddingTop: 24, paddingBottom: 20, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
-  confirmIconBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#fdecea', borderWidth: 1, borderColor: '#f5c6c2', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  confirmEyebrow: { color: '#c0392b', letterSpacing: 1.3, textAlign: 'center', marginBottom: 6 },
-  confirmTitle: { color: '#182230', fontSize: 21, lineHeight: 26, letterSpacing: -0.35, textAlign: 'center', marginBottom: 8 },
-  confirmMessage: { color: '#5e5c57', fontSize: 13.5, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
-  confirmActions: { width: '100%', gap: 10 },
-  confirmDeleteButton: { width: '100%', minHeight: 48, borderRadius: 14, backgroundColor: '#c0392b', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  confirmDeleteText: { color: '#fffdf8', fontSize: 14.5 },
-  confirmCancelButton: { width: '100%', minHeight: 46, borderRadius: 14, borderWidth: 1, borderColor: '#ded8cd', backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  confirmCancelText: { color: '#182230', fontSize: 14.5 },
 });

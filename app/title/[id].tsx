@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
-import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
+import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { TitleDetailsBody } from '@/components/organisms/TitleDetailsBody';
 import { MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,18 +29,18 @@ export default function TitleDetailsScreen() {
   if (!authReady) return null;
   if (!user) return <Redirect href="/(auth)/login" />;
 
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-    router.replace('/(tabs)/tab2');
-  };
-
   if (!title) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.notFound}><MaterialIcons name="movie-filter" size={40} color="#d77c29" /><AppText tipo="subtitulo" peso="forte" style={styles.title}>{status === 'loading' || !storageReady ? 'Carregando título…' : 'Título não encontrado'}</AppText><Pressable onPress={handleBack}><AppText peso="forte" style={styles.link}>Voltar</AppText></Pressable></View>
+        <View style={styles.notFound}>
+          <MaterialIcons name="movie-filter" size={40} color="#d77c29" />
+          <AppText tipo="subtitulo" peso="forte" style={styles.notFoundTitle}>
+            {status === 'loading' || !storageReady ? 'Carregando título…' : 'Título não encontrado'}
+          </AppText>
+          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/tab2'))}>
+            <AppText peso="forte" style={styles.link}>Voltar</AppText>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -50,11 +50,6 @@ export default function TitleDetailsScreen() {
     toggleSavedTitle(title);
   };
 
-  const hasArtwork = getArtworkUri(title.id, 'backdrop', {
-    posterPath: title.tmdbPosterPath,
-    backdropPath: title.tmdbBackdropPath,
-  }) !== null;
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -62,7 +57,7 @@ export default function TitleDetailsScreen() {
         scrollEnabled={scrollEnabled}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topbar}>
-          <BackButton onPress={handleBack} />
+          <BackButton fallbackHref="/(tabs)/tab2" />
           <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>DETALHES</AppText>
           <Pressable
             onPress={handleToggleSaved}
@@ -74,8 +69,18 @@ export default function TitleDetailsScreen() {
           </Pressable>
         </View>
         <View style={[styles.poster, { backgroundColor: title.color }]}>
-          <TitleArtwork id={title.id} variant="backdrop" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
-          {!hasArtwork && <><MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" /><AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText></>}
+          <TitleArtwork
+            id={title.id}
+            variant="backdrop"
+            posterPath={title.tmdbPosterPath}
+            backdropPath={title.tmdbBackdropPath}
+            fallback={
+              <>
+                <MaterialIcons name={title.icon} size={64} color="rgba(255,255,255,0.9)" />
+                <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>
+              </>
+            }
+          />
         </View>
         <TitleDetailsBody title={title} pillBackgroundColor="#fffdf8" onScrollEnabledChange={setScrollEnabled} />
         <Pressable
@@ -102,7 +107,7 @@ const styles = StyleSheet.create({
   iconButtonSaved: { borderColor: '#e58c34', backgroundColor: '#fff2d8' },
   poster: { height: 195, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(24,34,48,0.08)', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 20, marginBottom: 14, overflow: 'hidden' },
   posterLabel: { color: '#fffdf8', letterSpacing: 1.2, textAlign: 'center' },
-  title: { color: '#182230', fontSize: 26, lineHeight: 32, marginBottom: 4 },
+  notFoundTitle: { color: '#182230', textAlign: 'center' },
   primaryButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   primaryButtonSaved: { backgroundColor: '#182230' },
   primaryText: { color: '#182230' },

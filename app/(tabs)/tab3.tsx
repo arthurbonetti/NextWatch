@@ -6,14 +6,15 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppText } from '@/components/atoms/AppText';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
+import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useDrawHistory } from '@/contexts/DrawHistoryContext';
 import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { formatCount } from '@/utils/format';
 
 const PREVIEW_HISTORY_LIMIT = 3;
-const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
@@ -114,7 +115,7 @@ export default function ProfileTabScreen() {
               <AppText tipo="legenda" style={styles.muted}>
                 {history.length === 0
                   ? 'Seus últimos sorteios na Roleta'
-                  : `${countFormat.format(history.length)} ${history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}`}
+                  : `${formatCount(history.length)} ${history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}`}
               </AppText>
             </View>
             {history.length > 0 && (
@@ -145,23 +146,14 @@ export default function ProfileTabScreen() {
               })}
             </View>
           ) : (
-            <View style={styles.historyEmptyCard}>
-              <View style={styles.historyEmptyIcon}>
-                <MaterialIcons name="casino" size={22} color="#a3520d" />
-              </View>
-              <AppText peso="forte" style={styles.historyEmptyTitle}>
-                Nenhum sorteio registrado
-              </AppText>
-              <AppText tipo="legenda" style={styles.historyEmptyText}>
-                Gire a Roleta na tela inicial para registrar o que você assistiu, salvou ou pulou.
-              </AppText>
-              <Pressable
-                style={({ pressed }) => [styles.historyEmptyCta, pressed && styles.pressed]}
-                onPress={() => router.push('/(tabs)')}
-                accessibilityRole="button">
-                <AppText tipo="legenda" peso="forte" style={styles.historyEmptyCtaText}>Ir para a Roleta</AppText>
-              </Pressable>
-            </View>
+            <EmptyStateCard
+              compact
+              icon="casino"
+              title="Nenhum sorteio registrado"
+              description="Gire a Roleta na tela inicial para registrar o que você assistiu, salvou ou pulou."
+              actionLabel="Ir para a Roleta"
+              onAction={() => router.push('/(tabs)')}
+            />
           )}
         </View>
 
@@ -180,7 +172,7 @@ export default function ProfileTabScreen() {
               {status === 'loading'
                 ? 'Buscando filmes, séries e animes nos seus serviços ativos.'
                 : status === 'ready'
-                  ? `${countFormat.format(titles.length)} títulos sincronizados · disponibilidade no Brasil`
+                  ? `${formatCount(titles.length)} títulos sincronizados · disponibilidade no Brasil`
                   : status === 'needs-api-key'
                     ? 'Configure o Supabase ou EXPO_PUBLIC_TMDB_API_KEY para carregar títulos automaticamente.'
                     : errorMessage ?? 'Confira a conexão e tente novamente.'}
@@ -244,34 +236,6 @@ const styles = StyleSheet.create({
   seeAllLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 6, paddingLeft: 8 },
   seeAllText: { color: '#a3520d', fontSize: 14, lineHeight: 19 },
   historyList: { gap: 8 },
-  historyEmptyCard: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#e8e2d5',
-    backgroundColor: '#fffdf8',
-  },
-  historyEmptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#f1e8d7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  historyEmptyTitle: { color: '#182230', fontSize: 15, marginBottom: 4 },
-  historyEmptyText: { color: '#5e5c57', fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  historyEmptyCta: {
-    marginTop: 12,
-    borderRadius: 12,
-    backgroundColor: '#f3b43f',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-  },
-  historyEmptyCtaText: { color: '#182230', fontSize: 13 },
   catalogNotice: {
     flexDirection: 'row',
     alignItems: 'center',

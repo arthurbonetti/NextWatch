@@ -1,9 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Href, router } from 'expo-router';
 import { useState } from 'react';
 import { Animated, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 
 type BackButtonProps = {
-  onPress: () => void;
+  onPress?: () => void;
+  fallbackHref?: Href;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 };
@@ -13,6 +15,7 @@ type BackButtonProps = {
  */
 export function BackButton({
   onPress,
+  fallbackHref = '/(tabs)',
   accessibilityLabel = 'Voltar',
   style,
 }: BackButtonProps) {
@@ -27,6 +30,18 @@ export function BackButton({
     }).start();
   };
 
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace(fallbackHref);
+  };
+
   const buttonScale = pressAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 0.91],
@@ -39,7 +54,7 @@ export function BackButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       onPressIn={() => animateTo(1)}
       onPressOut={() => animateTo(0)}
       hitSlop={6}

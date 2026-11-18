@@ -8,19 +8,26 @@ import { AppText } from '@/components/atoms/AppText';
 import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
+import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
-import { formatAverageRating, GENRES, getTitleAverageRating, getTitleServices, MediaKind, MediaTitle } from '@/constants/catalog';
+import {
+  formatAverageRating,
+  getAllGenres,
+  getTitleAverageRating,
+  getTitleServices,
+  MediaKind,
+  MediaTitle,
+} from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog } from '@/contexts/CatalogContext';
-import { useDrawHistory } from '@/contexts/DrawHistoryContext';
+import { DrawAction, useDrawHistory } from '@/contexts/DrawHistoryContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 import { fetchTitleDuration } from '@/services/tmdb';
+import { formatCount, formatCurrency } from '@/utils/format';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type KindFilter = 'Todos' | MediaKind;
 const MIN_DRAW_RATING = 6.0;
-const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const countFormat = new Intl.NumberFormat('pt-BR');
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -68,11 +75,12 @@ export default function HomeScreen() {
     };
   }, [heroOpacity, heroTranslateY]);
 
-  const activeServiceNames = useMemo(() => new Set(subscriptions.filter((subscription) => subscription.active).map((subscription) => subscription.provider)), [subscriptions]);
+  const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
+  const activeServiceNames = useMemo(() => new Set(activeSubscriptions.map((subscription) => subscription.provider)), [activeSubscriptions]);
   const availableTitles = useMemo(() => titles.filter((title) =>
     getTitleServices(title).some((service) => activeServiceNames.has(service))
   ), [activeServiceNames, titles]);
-  const availableGenres = useMemo(() => Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)])), [titles]);
+  const availableGenres = useMemo(() => getAllGenres(titles), [titles]);
   const eligibleTitles = useMemo(() => availableTitles.filter((title) => {
     const rating = getTitleAverageRating(title);
     const ratingMatches = rating >= MIN_DRAW_RATING;
@@ -80,7 +88,18 @@ export default function HomeScreen() {
     const genreMatches = genre === 'Todos os gêneros' || title.genres.includes(genre);
     return ratingMatches && kindMatches && genreMatches;
   }), [availableTitles, genre, kind]);
-  const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
+
+  const commitDrawAction = (title: MediaTitle, action: DrawAction) => {
+    drawHandledRef.current = true;
+    const existingPromise = drawEntryPromiseRef.current;
+    if (!existingPromise) {
+      drawEntryPromiseRef.current = recordDrawAction(title, action);
+      return;
+    }
+    void existingPromise.then((entryId) => {
+      if (entryId) void updateDrawAction(entryId, action);
+    });
+  };
 
   const openDetails = (title: MediaTitle, isDrawn = false) => {
     void fetchTitleDuration(title);
@@ -140,7 +159,6 @@ export default function HomeScreen() {
       setRouletteTitle(result);
       rouletteTimer.current = setTimeout(() => {
         setSpinning(false);
-        setFilterVisible(false);
         drawLock.current = false;
         openDetails(result, true);
       }, 220);
@@ -188,7 +206,7 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
             onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{countFormat.format(activeSubscriptions.length)}</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(activeSubscriptions.length)}</AppText>
             <AppText tipo="legenda" peso="medio" style={styles.statLabel}>streamings ativos</AppText>
           </Pressable>
           <View style={styles.statDivider} />
@@ -196,12 +214,12 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
             onPress={() => router.push('/(tabs)/tab2')}
             accessibilityRole="button">
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{countFormat.format(availableTitles.length)}</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(availableTitles.length)}</AppText>
             <AppText tipo="legenda" peso="medio" style={styles.statLabel}>no catálogo</AppText>
           </Pressable>
           <View style={styles.statDivider} />
           <View style={styles.statBlock}>
-            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{countFormat.format(eligibleTitles.length)}</AppText>
+            <AppText tipo="subtitulo" peso="forte" tabular style={styles.statHighlight}>{formatCount(eligibleTitles.length)}</AppText>
             <AppText tipo="legenda" peso="medio" style={styles.statLabel}>nota 6,0+</AppText>
           </View>
         </View>
@@ -231,7 +249,7 @@ export default function HomeScreen() {
             <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
             <AppText tipo="legenda" style={styles.heroDescription}>
               {availableTitles.length > 0
-                ? `${countFormat.format(eligibleTitles.length)} obras com nota 6,0+ prontas para sortear nos seus streamings.`
+                ? `${formatCount(eligibleTitles.length)} obras com nota 6,0+ prontas para sortear nos seus streamings.`
                 : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
             </AppText>
             <Pressable
@@ -294,7 +312,7 @@ export default function HomeScreen() {
               <ServiceLogo name={subscription.provider} size={39} />
               <View style={styles.serviceCopy}>
                 <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>{subscription.provider}</AppText>
-                <AppText tipo="legenda" tabular style={styles.servicePrice}>{currency.format(subscription.monthlyPrice)}/mês</AppText>
+                <AppText tipo="legenda" tabular style={styles.servicePrice}>{formatCurrency(subscription.monthlyPrice)}/mês</AppText>
               </View>
             </Pressable>
           ))}
@@ -397,11 +415,18 @@ export default function HomeScreen() {
               <View style={[styles.wheelDot, styles.wheelDotLeft]} />
               <View style={styles.wheelCenter}><MaterialIcons name="casino" size={37} color="#182230" /></View>
             </Animated.View>
-            <AppText tipo="legenda" tabular style={styles.rouletteCaption}>Escolhendo entre {countFormat.format(eligibleTitles.length)} títulos…</AppText>
+            <AppText tipo="legenda" tabular style={styles.rouletteCaption}>Escolhendo entre {formatCount(eligibleTitles.length)} títulos…</AppText>
             <View style={styles.roulettePreview}>
               <View style={[styles.previewPoster, { backgroundColor: rouletteTitle?.color ?? '#263b50' }]}>
-                {rouletteTitle && <TitleArtwork id={rouletteTitle.id} variant="poster" posterPath={rouletteTitle.tmdbPosterPath} backdropPath={rouletteTitle.tmdbBackdropPath} />}
-                {rouletteTitle && !getArtworkUri(rouletteTitle.id, 'poster', { posterPath: rouletteTitle.tmdbPosterPath, backdropPath: rouletteTitle.tmdbBackdropPath }) && <MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
+                {rouletteTitle && (
+                  <TitleArtwork
+                    id={rouletteTitle.id}
+                    variant="poster"
+                    posterPath={rouletteTitle.tmdbPosterPath}
+                    backdropPath={rouletteTitle.tmdbBackdropPath}
+                    fallback={<MaterialIcons name={rouletteTitle.icon} size={24} color="#fffdf8" />}
+                  />
+                )}
               </View>
               <View style={styles.previewCopy}>
                 <AppText tipo="legenda" peso="forte" tabular style={styles.previewType}>{rouletteTitle ? `${rouletteTitle.kind.toUpperCase()} · ${rouletteTitle.year}` : 'SORTEANDO'}</AppText>
@@ -472,7 +497,7 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
             <AppText tipo="legenda" tabular style={styles.resultCount}>
-              {`${countFormat.format(eligibleTitles.length)} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
+              {`${formatCount(eligibleTitles.length)} ${eligibleTitles.length === 1 ? 'título com média 6,0+ disponível' : 'títulos com média 6,0+ disponíveis'}`}
             </AppText>
             <Pressable
               style={({ pressed }) => [
@@ -488,43 +513,23 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
-        {incompleteCatalogConfirmVisible && (
-          <View style={styles.confirmBackdrop}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setIncompleteCatalogConfirmVisible(false)}
-              accessibilityLabel="Fechar aviso de carregamento"
-            />
-            <View style={styles.confirmCard}>
-              <View style={styles.confirmIconBadge}>
-                <MaterialIcons name="hourglass-top" size={24} color="#d77c29" />
-              </View>
-              <AppText tipo="legenda" peso="forte" style={styles.confirmEyebrow}>CATÁLOGO EM CARREGAMENTO</AppText>
-              <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.confirmTitle}>Títulos ainda carregando</AppText>
-              <AppText tipo="legenda" style={styles.confirmMessage}>
-                Nem todos os títulos foram carregados ainda. Deseja sortear apenas com os disponíveis?
-              </AppText>
-              <View style={styles.confirmActions}>
-                <Pressable
-                  style={({ pressed }) => [styles.confirmProceedButton, pressed && styles.pressed]}
-                  onPress={() => {
-                    setIncompleteCatalogConfirmVisible(false);
-                    drawTitle();
-                  }}
-                  accessibilityRole="button">
-                  <MaterialIcons name="auto-awesome" size={18} color="#182230" />
-                  <AppText peso="forte" style={styles.confirmProceedText} numberOfLines={1}>Sortear mesmo assim</AppText>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.confirmCancelButton, pressed && styles.pressed]}
-                  onPress={() => setIncompleteCatalogConfirmVisible(false)}
-                  accessibilityRole="button">
-                  <AppText peso="forte" style={styles.confirmCancelText}>Cancelar</AppText>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        )}
+        <ConfirmDialog
+          visible={incompleteCatalogConfirmVisible}
+          inline
+          tone="warning"
+          icon="hourglass-top"
+          eyebrow="CATÁLOGO EM CARREGAMENTO"
+          title="Títulos ainda carregando"
+          message="Nem todos os títulos foram carregados ainda. Deseja sortear apenas com os disponíveis?"
+          confirmLabel="Sortear mesmo assim"
+          confirmIcon="auto-awesome"
+          cancelAccessibilityLabel="Fechar aviso de carregamento"
+          onConfirm={() => {
+            setIncompleteCatalogConfirmVisible(false);
+            drawTitle();
+          }}
+          onCancel={() => setIncompleteCatalogConfirmVisible(false)}
+        />
       </Modal>
 
       <TitleDetailsModal
@@ -540,32 +545,13 @@ export default function HomeScreen() {
         }}
         onWatch={() => {
           if (detailsIsDrawn && selectedTitle) {
-            drawHandledRef.current = true;
-            const existingPromise = drawEntryPromiseRef.current;
-            if (existingPromise) {
-              void existingPromise.then((entryId) => {
-                if (entryId) {
-                  void updateDrawAction(entryId, 'assistiu');
-                }
-              });
-            } else {
-              drawEntryPromiseRef.current = recordDrawAction(selectedTitle, 'assistiu');
-            }
+            commitDrawAction(selectedTitle, 'assistiu');
           }
           setDetailsVisible(false);
         }}
         onSaveChange={(nextSaved) => {
-          if (!detailsIsDrawn || !selectedTitle || !nextSaved) return;
-          drawHandledRef.current = true;
-          const existingPromise = drawEntryPromiseRef.current;
-          if (!existingPromise) {
-            drawEntryPromiseRef.current = recordDrawAction(selectedTitle, 'salvou');
-          } else {
-            void existingPromise.then((entryId) => {
-              if (entryId) {
-                void updateDrawAction(entryId, 'salvou');
-              }
-            });
+          if (detailsIsDrawn && selectedTitle && nextSaved) {
+            commitDrawAction(selectedTitle, 'salvou');
           }
         }}
         onDrawAnother={
@@ -657,17 +643,6 @@ const styles = StyleSheet.create({
   confirmButton: { minHeight: 52, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   disabledButton: { opacity: 0.5 },
   confirmButtonText: { color: '#182230' },
-  confirmBackdrop: { ...StyleSheet.absoluteFill, padding: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.72)' },
-  confirmCard: { width: '100%', maxWidth: 360, alignItems: 'center', borderRadius: 24, paddingHorizontal: 22, paddingTop: 24, paddingBottom: 20, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
-  confirmIconBadge: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#f6ebd4', borderWidth: 1, borderColor: '#ebd9b3', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  confirmEyebrow: { color: '#e58c34', letterSpacing: 1.3, textAlign: 'center', marginBottom: 6 },
-  confirmTitle: { color: '#182230', fontSize: 21, lineHeight: 26, letterSpacing: -0.35, textAlign: 'center', marginBottom: 8 },
-  confirmMessage: { color: '#687078', fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 22 },
-  confirmActions: { width: '100%', gap: 10 },
-  confirmProceedButton: { width: '100%', minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
-  confirmProceedText: { color: '#182230', fontSize: 14, textAlign: 'center' },
-  confirmCancelButton: { width: '100%', minHeight: 46, borderRadius: 14, borderWidth: 1, borderColor: '#ded8cd', backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  confirmCancelText: { color: '#182230', fontSize: 14, textAlign: 'center' },
   rouletteBackdrop: { flex: 1, padding: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(9,15,23,0.82)' },
   rouletteCard: { width: '100%', maxWidth: 380, alignItems: 'center', borderRadius: 26, paddingHorizontal: 22, paddingTop: 27, paddingBottom: 23, backgroundColor: '#fffdf8' },
   rouletteEyebrow: { color: '#a3520d', letterSpacing: 1.5, marginBottom: 19 },

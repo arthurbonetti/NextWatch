@@ -2,10 +2,11 @@ import {
   getSearchRelevanceScore,
   normalizeSearchText,
   rankTitlesBySearchRelevance,
+  sanitizeTmdbPath,
   type MediaIcon,
   type MediaTitle,
 } from '@/constants/catalog';
-import { buildSupabaseHeaders, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
+import { buildSupabaseHeaders, fetchWithTimeout, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type TmdbProvider = {
@@ -70,7 +71,6 @@ const MAX_PAGES_PER_ENDPOINT = 50;
 const REQUEST_CONCURRENCY = 8;
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_SEARCH_QUERY_LENGTH = 100;
-const SAFE_TMDB_PATH_REGEX = /^\/[a-zA-Z0-9._-]+$/;
 
 type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
 
@@ -169,7 +169,7 @@ function mergeTitleIntoCatalog(
   byNameKey: Map<string, string>,
   incoming: MediaTitle,
 ) {
-  const nameKey = `${incoming.kind}-${normalize(incoming.title)}-${incoming.year}`;
+  const nameKey = `${incoming.kind}-${normalizeSearchText(incoming.title)}-${incoming.year}`;
   const existingId = byId.has(incoming.id) ? incoming.id : byNameKey.get(nameKey);
   const existing = existingId ? byId.get(existingId) : undefined;
 
@@ -223,22 +223,17 @@ export async function fetchAllCatalogForProviders(
 
   const firstPages = await Promise.all(
     resolvedProviders.flatMap(({ providerName, ids }) => {
-      const providersQuery = ids.join('|');
-      const movieParams: Record<string, string> = {
+      const baseParams: Record<string, string> = {
         language: 'pt-BR',
-        region: 'BR',
         watch_region: 'BR',
-        with_watch_providers: providersQuery,
+        with_watch_providers: ids.join('|'),
         with_watch_monetization_types: 'flatrate|free|ads',
         sort_by: 'popularity.desc',
-        include_adult: 'false',
       };
-      const tvParams: Record<string, string> = {
-        language: 'pt-BR',
-        watch_region: 'BR',
-        with_watch_providers: providersQuery,
-        with_watch_monetization_types: 'flatrate|free|ads',
-        sort_by: 'popularity.desc',
+      const movieParams: Record<string, string> = {
+        ...baseParams,
+        region: 'BR',
+        include_adult: 'false',
       };
 
       return [
@@ -248,10 +243,10 @@ export async function fetchAllCatalogForProviders(
           params: movieParams,
           response: res,
         })),
-        request<TmdbMediaResponse>('/discover/tv', { ...tvParams, page: '1' }).then((res) => ({
+        request<TmdbMediaResponse>('/discover/tv', { ...baseParams, page: '1' }).then((res) => ({
           endpoint: 'tv' as const,
           providerName,
-          params: tvParams,
+          params: baseParams,
           response: res,
         })),
       ];
@@ -387,9 +382,9 @@ async function fetchTitleProvidersInBrazil(endpoint: MediaEndpoint, tmdbId: numb
 }
 
 function matchCanonicalProviderName(rawProviderName: string): string | null {
-  const normalizedRaw = normalize(rawProviderName);
+  const normalizedRaw = normalizeSearchText(rawProviderName);
   for (const [canonicalName, aliases] of Object.entries(PROVIDER_ALIASES)) {
-    if (aliases.some((alias) => normalize(alias) === normalizedRaw)) {
+    if (aliases.some((alias) => normalizeSearchText(alias) === normalizedRaw)) {
       return canonicalName;
     }
   }
@@ -397,8 +392,8 @@ function matchCanonicalProviderName(rawProviderName: string): string | null {
 }
 
 export function tmdbImageUri(path: string | null | undefined, size: TmdbImageSize): string | null {
-  if (!path || !SAFE_TMDB_PATH_REGEX.test(path)) return null;
-  return `${IMAGE_BASE_URL}/${size}${path}`;
+  const safePath = sanitizeTmdbPath(path);
+  return safePath ? `${IMAGE_BASE_URL}/${size}${safePath}` : null;
 }
 
 async function request<T>(endpoint: string, params: Record<string, string>, retries = 3): Promise<T> {
@@ -433,29 +428,21 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
     };
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const retryRequest = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
+    return request<T>(endpoint, params, retries - 1);
+  };
 
   let response: Response;
   try {
-    response = await fetch(fetchUrl, {
-      ...fetchInit,
-      signal: controller.signal,
-    });
+    response = await fetchWithTimeout(fetchUrl, fetchInit, REQUEST_TIMEOUT_MS);
   } catch (error) {
-    clearTimeout(timer);
-    if (retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
-      return request<T>(endpoint, params, retries - 1);
-    }
+    if (retries > 0) return retryRequest();
     throw error;
-  } finally {
-    clearTimeout(timer);
   }
 
   if ((response.status === 429 || response.status >= 500) && retries > 0) {
-    await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
-    return request<T>(endpoint, params, retries - 1);
+    return retryRequest();
   }
 
   if (!response.ok) {
@@ -465,10 +452,10 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
 }
 
 function findProviderIds(activeNames: string[], providers: TmdbProvider[]) {
-  const providerNames = new Set(activeNames.flatMap((name) => PROVIDER_ALIASES[name] ?? [name]).map(normalize));
+  const providerNames = new Set(activeNames.flatMap((name) => PROVIDER_ALIASES[name] ?? [name]).map(normalizeSearchText));
   return Array.from(new Set(
     providers
-      .filter((provider) => providerNames.has(normalize(provider.provider_name)))
+      .filter((provider) => providerNames.has(normalizeSearchText(provider.provider_name)))
       .map((provider) => provider.provider_id),
   ));
 }
@@ -512,7 +499,6 @@ export function getCachedTitleDuration(title: MediaTitle): string {
 export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
   const cached = resolvedDurationCache.get(title.id);
   if (cached) {
-    title.duration = cached;
     return cached;
   }
 
@@ -546,7 +532,6 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
         }
       }
       resolvedDurationCache.set(title.id, formatted);
-      title.duration = formatted;
       return formatted;
     })
     .catch(() => title.duration)
@@ -595,5 +580,3 @@ function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: stri
     voteCount: item.vote_count ?? 0,
   };
 }
-
-const normalize = normalizeSearchText;

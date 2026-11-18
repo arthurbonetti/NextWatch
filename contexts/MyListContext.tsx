@@ -1,10 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform } from 'react-native';
 
-import { isMediaTitle, MediaTitle } from '@/constants/catalog';
+import { isMediaTitle, MediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
-import { buildSupabaseHeaders, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
+import { useForegroundSync } from '@/hooks/useNetworkStatus';
+import {
+  buildSupabaseHeaders,
+  classifySupabaseOutcome,
+  fetchWithTimeout,
+  getSupabaseUrl,
+  hasSupabaseConfig,
+  type SupabaseOutcome,
+} from '@/services/authApi';
 import { getCachedTitleDuration } from '@/services/tmdb';
 
 const BASE_STORAGE_KEY = '@nextwatch/my-list';
@@ -12,8 +19,6 @@ const SYNCED_FLAG_PREFIX = '@nextwatch/my-list-synced';
 const PENDING_OPS_PREFIX = '@nextwatch/my-list-pending';
 const SYNC_TIMEOUT_MS = 8000;
 const AUTO_REFRESH_COOLDOWN_MS = 4000;
-const SAFE_HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
-const SAFE_TMDB_PATH_REGEX = /^\/[a-zA-Z0-9._-]{1,120}$/;
 
 type RefreshOptions = {
   minIntervalMs?: number;
@@ -64,8 +69,6 @@ type DbMyListRow = {
   vote_count: number | null;
   created_at?: string;
 };
-
-type RemoteOutcome = 'ok' | 'drop' | 'retry';
 
 const MyListContext = createContext<MyListContextValue | null>(null);
 
@@ -192,14 +195,12 @@ function mapMediaTitleToDbRow(userId: string, title: MediaTitle): Omit<DbMyListR
         ? Math.min(100, Math.max(0, Math.round(title.metacriticScore)))
         : null,
     synopsis: (title.synopsis ?? '').slice(0, 4000),
-    color: SAFE_HEX_COLOR_REGEX.test(title.color) ? title.color : '#596b7c',
+    color: sanitizeHexColor(title.color) ?? '#596b7c',
     icon: title.icon,
     rating_source: title.ratingSource === 'IMDb' || title.ratingSource === 'TMDB' ? title.ratingSource : null,
     catalog_source: title.catalogSource === 'tmdb' ? 'tmdb' : null,
-    tmdb_poster_path:
-      title.tmdbPosterPath && SAFE_TMDB_PATH_REGEX.test(title.tmdbPosterPath) ? title.tmdbPosterPath : null,
-    tmdb_backdrop_path:
-      title.tmdbBackdropPath && SAFE_TMDB_PATH_REGEX.test(title.tmdbBackdropPath) ? title.tmdbBackdropPath : null,
+    tmdb_poster_path: sanitizeTmdbPath(title.tmdbPosterPath),
+    tmdb_backdrop_path: sanitizeTmdbPath(title.tmdbBackdropPath),
     original_title:
       typeof title.originalTitle === 'string' && title.originalTitle.trim().length > 0
         ? title.originalTitle.trim().slice(0, 500)
@@ -215,37 +216,46 @@ function mapMediaTitleToDbRow(userId: string, title: MediaTitle): Omit<DbMyListR
   };
 }
 
-function classifyHttpOutcome(response: Response): RemoteOutcome {
-  if (response.ok) return 'ok';
-  if (response.status === 400 || response.status === 404 || response.status === 409 || response.status === 422) {
-    return 'drop';
+async function remoteFetchTitles(baseUrl: string, token: string, userId: string): Promise<MediaTitle[] | null> {
+  try {
+    const response = await fetchWithTimeout(
+      `${baseUrl}/rest/v1/user_my_list?user_id=eq.${encodeURIComponent(userId)}&select=*&order=created_at.desc`,
+      { headers: buildSupabaseHeaders(token) },
+      SYNC_TIMEOUT_MS,
+    );
+    if (!response.ok) return null;
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows)) return null;
+    return (rows as DbMyListRow[])
+      .map(mapRowToMediaTitle)
+      .filter((item): item is MediaTitle => item !== null);
+  } catch {
+    return null;
   }
-  return 'retry';
 }
 
 async function remoteUpsertTitles(
   baseUrl: string,
   token: string,
   rows: Array<Omit<DbMyListRow, 'created_at'>>,
-): Promise<RemoteOutcome> {
+): Promise<SupabaseOutcome> {
   if (rows.length === 0) return 'ok';
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
   try {
-    const response = await fetch(`${baseUrl}/rest/v1/user_my_list`, {
-      method: 'POST',
-      headers: {
-        ...buildSupabaseHeaders(token),
-        Prefer: 'resolution=merge-duplicates',
+    const response = await fetchWithTimeout(
+      `${baseUrl}/rest/v1/user_my_list`,
+      {
+        method: 'POST',
+        headers: {
+          ...buildSupabaseHeaders(token),
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(rows.length === 1 ? rows[0] : rows),
       },
-      body: JSON.stringify(rows.length === 1 ? rows[0] : rows),
-      signal: controller.signal,
-    });
-    return classifyHttpOutcome(response);
+      SYNC_TIMEOUT_MS,
+    );
+    return classifySupabaseOutcome(response);
   } catch {
     return 'retry';
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -254,23 +264,19 @@ async function remoteDeleteTitle(
   token: string,
   userId: string,
   titleId: string,
-): Promise<RemoteOutcome> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+): Promise<SupabaseOutcome> {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${baseUrl}/rest/v1/user_my_list?user_id=eq.${encodeURIComponent(userId)}&title_id=eq.${encodeURIComponent(titleId)}`,
       {
         method: 'DELETE',
         headers: buildSupabaseHeaders(token),
-        signal: controller.signal,
       },
+      SYNC_TIMEOUT_MS,
     );
-    return classifyHttpOutcome(response);
+    return classifySupabaseOutcome(response);
   } catch {
     return 'retry';
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -352,11 +358,7 @@ export function MyListProvider({ children }: PropsWithChildren) {
           pendingOpsByKeyRef.current[pendingKey] = mergedPending;
           syncedFlag = syncedRaw === '1';
 
-          const currentBase = latestListRef.current.key === storageKey ? latestListRef.current.items : [];
-          const mergedBase = currentBase.length > 0
-            ? [...currentBase, ...localCached.filter((item) => !currentBase.some((cur) => cur.id === item.id))]
-            : localCached;
-          const initialItems = applyPendingOps(mergedBase, mergedPending);
+          const initialItems = applyPendingOps(localCached, mergedPending);
 
           commitListState({ key: storageKey, items: initialItems });
         } else {
@@ -402,32 +404,9 @@ export function MyListProvider({ children }: PropsWithChildren) {
 
         // 3. Busca lista autoritativa no Supabase
         const epochAtGetStart = mutationEpochRef.current;
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
-        let remoteRows: DbMyListRow[];
-        try {
-          const response = await fetch(
-            `${baseUrl}/rest/v1/user_my_list?user_id=eq.${encodeURIComponent(userId)}&select=*&order=created_at.desc`,
-            {
-              headers: buildSupabaseHeaders(sessionToken),
-              signal: controller.signal,
-            },
-          );
-          if (!response.ok) return;
-          const json: unknown = await response.json();
-          if (!Array.isArray(json)) return;
-          remoteRows = json as DbMyListRow[];
-        } catch {
-          return;
-        } finally {
-          clearTimeout(timer);
-        }
-
-        if (!isSessionCurrent()) return;
-
-        let remoteTitles = remoteRows
-          .map(mapRowToMediaTitle)
-          .filter((item): item is MediaTitle => item !== null);
+        const fetchedTitles = await remoteFetchTitles(baseUrl, sessionToken, userId);
+        if (!isSessionCurrent() || fetchedTitles === null) return;
+        let remoteTitles = fetchedTitles;
 
         // 4. Migra títulos que existiam apenas no cache local antes da sincronização na nuvem
         if (!syncedFlag) {
@@ -485,45 +464,14 @@ export function MyListProvider({ children }: PropsWithChildren) {
     if (previousKey !== storageKey) {
       lastRemoteSyncAtRef.current = 0;
     }
-    if (!storageKey || !userId) return;
-    void syncList();
-  }, [storageKey, syncList, token, userId]);
-
-  // Re-sincroniza ao voltar para o primeiro plano ou recuperar conexão
-  useEffect(() => {
-    if (!storageKey || !userId || !token) return;
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const handleOnline = () => {
-        void syncList();
-      };
-      const handleVisibility = () => {
-        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-          void syncList({ minIntervalMs: AUTO_REFRESH_COOLDOWN_MS });
-        }
-      };
-      window.addEventListener('online', handleOnline);
-      if (typeof document !== 'undefined') {
-        document.addEventListener('visibilitychange', handleVisibility);
-      }
-      return () => {
-        window.removeEventListener('online', handleOnline);
-        if (typeof document !== 'undefined') {
-          document.removeEventListener('visibilitychange', handleVisibility);
-        }
-      };
+    if (!storageKey || !userId) {
+      commitListState({ key: null, items: [] });
+      return;
     }
+    void syncList();
+  }, [commitListState, storageKey, syncList, token, userId]);
 
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        void syncList({ minIntervalMs: AUTO_REFRESH_COOLDOWN_MS });
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [storageKey, syncList, token, userId]);
+  useForegroundSync(Boolean(storageKey && userId && token), syncList, AUTO_REFRESH_COOLDOWN_MS);
 
   const storageReady = !storageKey || listState.key === storageKey;
   const savedTitles = useMemo(

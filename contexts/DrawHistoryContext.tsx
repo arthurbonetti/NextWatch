@@ -1,18 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform } from 'react-native';
 
-import { MediaKind, MediaTitle } from '@/constants/catalog';
+import { MediaKind, MediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
-import { buildSupabaseHeaders, getSupabaseUrl, hasSupabaseConfig } from '@/services/authApi';
+import { useForegroundSync } from '@/hooks/useNetworkStatus';
+import {
+  buildSupabaseHeaders,
+  classifySupabaseOutcome,
+  fetchWithTimeout,
+  getSupabaseUrl,
+  hasSupabaseConfig,
+  type SupabaseOutcome,
+} from '@/services/authApi';
 
 const BASE_STORAGE_KEY = '@nextwatch/draw-history';
 const PENDING_STORAGE_PREFIX = '@nextwatch/draw-history-pending';
 const SYNC_TIMEOUT_MS = 8000;
 const MAX_HISTORY_ENTRIES = 100;
 const AUTO_REFRESH_COOLDOWN_MS = 4000;
-const SAFE_HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
-const SAFE_TMDB_PATH_REGEX = /^\/[a-zA-Z0-9._-]{1,120}$/;
 
 export type DrawAction = 'assistiu' | 'salvou' | 'sorteou outro' | 'ignorou';
 
@@ -71,16 +76,6 @@ function isDrawAction(value: unknown): value is DrawAction {
   return typeof value === 'string' && VALID_ACTIONS.has(value as DrawAction);
 }
 
-function sanitizePosterPath(path: unknown): string | null {
-  if (typeof path !== 'string') return null;
-  return SAFE_TMDB_PATH_REGEX.test(path) ? path : null;
-}
-
-function sanitizeColor(color: unknown): string | undefined {
-  if (typeof color !== 'string') return undefined;
-  return SAFE_HEX_COLOR_REGEX.test(color) ? color : undefined;
-}
-
 function isDrawHistoryEntry(value: unknown): value is DrawHistoryEntry {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<DrawHistoryEntry>;
@@ -96,28 +91,22 @@ function isDrawHistoryEntry(value: unknown): value is DrawHistoryEntry {
   );
 }
 
-function parseStoredHistory(raw: string | null): DrawHistoryEntry[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isDrawHistoryEntry).slice(0, MAX_HISTORY_ENTRIES) : [];
-  } catch {
-    return [];
-  }
+function isPendingInsert(value: unknown): value is PendingInsert {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    typeof (value as PendingInsert).localId === 'string' &&
+    isDrawHistoryEntry((value as PendingInsert).entry)
+  );
 }
 
-function parsePendingInserts(raw: string | null): PendingInsert[] {
+function parseStoredArray<T>(raw: string | null, guard: (value: unknown) => value is T, limit?: number): T[] {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is PendingInsert =>
-        Boolean(item) &&
-        typeof item === 'object' &&
-        typeof (item as PendingInsert).localId === 'string' &&
-        isDrawHistoryEntry((item as PendingInsert).entry),
-    );
+    const valid = parsed.filter(guard);
+    return limit ? valid.slice(0, limit) : valid;
   } catch {
     return [];
   }
@@ -135,8 +124,8 @@ function mapDbRowToEntry(row: DbDrawHistoryRow): DrawHistoryEntry | null {
     acao: row.acao,
     title: typeof row.title === 'string' && row.title.trim() ? row.title : undefined,
     kind,
-    tmdbPosterPath: sanitizePosterPath(row.tmdb_poster_path),
-    color: sanitizeColor(row.color),
+    tmdbPosterPath: sanitizeTmdbPath(row.tmdb_poster_path),
+    color: sanitizeHexColor(row.color),
   };
 }
 
@@ -152,15 +141,11 @@ async function remoteFetchHistory(
   token: string,
   userId: string,
 ): Promise<DrawHistoryEntry[] | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${baseUrl}/rest/v1/user_draw_history?user_id=eq.${encodeURIComponent(userId)}&order=sorteado_em.desc&limit=${MAX_HISTORY_ENTRIES}&select=id,user_id,tmdb_id,sorteado_em,acao,title,kind,tmdb_poster_path,color`,
-      {
-        headers: buildSupabaseHeaders(token),
-        signal: controller.signal,
-      },
+      { headers: buildSupabaseHeaders(token) },
+      SYNC_TIMEOUT_MS,
     );
     if (!response.ok) return null;
     const rows: unknown = await response.json();
@@ -170,8 +155,6 @@ async function remoteFetchHistory(
       .filter((entry): entry is DrawHistoryEntry => entry !== null);
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -180,95 +163,56 @@ async function remoteInsertEntry(
   token: string,
   userId: string,
   entry: DrawHistoryEntry,
-): Promise<{ status: 'ok'; saved: DrawHistoryEntry } | { status: 'drop' } | { status: 'retry' }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+): Promise<{ status: 'ok'; saved: DrawHistoryEntry } | { status: Exclude<SupabaseOutcome, 'ok'> }> {
   try {
-    const response = await fetch(`${baseUrl}/rest/v1/user_draw_history`, {
-      method: 'POST',
-      headers: {
-        ...buildSupabaseHeaders(token),
-        Prefer: 'return=representation',
+    const response = await fetchWithTimeout(
+      `${baseUrl}/rest/v1/user_draw_history`,
+      {
+        method: 'POST',
+        headers: {
+          ...buildSupabaseHeaders(token),
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          tmdb_id: entry.tmdbId.slice(0, 128),
+          sorteado_em: entry.sorteadoEm,
+          acao: entry.acao,
+          title: entry.title ? entry.title.slice(0, 500) : null,
+          kind: entry.kind ?? null,
+          tmdb_poster_path: sanitizeTmdbPath(entry.tmdbPosterPath),
+          color: sanitizeHexColor(entry.color) ?? null,
+        }),
       },
-      body: JSON.stringify({
-        user_id: userId,
-        tmdb_id: entry.tmdbId.slice(0, 128),
-        sorteado_em: entry.sorteadoEm,
-        acao: entry.acao,
-        title: entry.title ? entry.title.slice(0, 500) : null,
-        kind: entry.kind ?? null,
-        tmdb_poster_path: sanitizePosterPath(entry.tmdbPosterPath),
-        color: sanitizeColor(entry.color) ?? null,
-      }),
-      signal: controller.signal,
-    });
-    if (response.ok) {
-      const payload: unknown = await response.json();
-      if (Array.isArray(payload) && payload.length > 0) {
-        const mapped = mapDbRowToEntry(payload[0] as DbDrawHistoryRow);
-        if (mapped) return { status: 'ok', saved: mapped };
-      }
-      return { status: 'ok', saved: entry };
-    }
-    if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
-      return { status: 'drop' };
-    }
-    return { status: 'retry' };
+      SYNC_TIMEOUT_MS,
+    );
+    const outcome = classifySupabaseOutcome(response);
+    if (outcome !== 'ok') return { status: outcome };
+
+    const payload: unknown = await response.json();
+    const mapped = Array.isArray(payload) && payload.length > 0
+      ? mapDbRowToEntry(payload[0] as DbDrawHistoryRow)
+      : null;
+    return { status: 'ok', saved: mapped ?? entry };
   } catch {
     return { status: 'retry' };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-async function remoteUpdateEntryAction(
-  baseUrl: string,
-  token: string,
-  userId: string,
-  entryId: string,
-  acao: DrawAction,
-): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+async function remoteRequestOk(url: string, token: string, method: 'PATCH' | 'DELETE', body?: unknown): Promise<boolean> {
   try {
-    const response = await fetch(
-      `${baseUrl}/rest/v1/user_draw_history?id=eq.${encodeURIComponent(entryId)}&user_id=eq.${encodeURIComponent(userId)}`,
+    const response = await fetchWithTimeout(
+      url,
       {
-        method: 'PATCH',
+        method,
         headers: buildSupabaseHeaders(token),
-        body: JSON.stringify({ acao }),
-        signal: controller.signal,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       },
+      SYNC_TIMEOUT_MS,
     );
     return response.ok;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function remoteClearHistory(
-  baseUrl: string,
-  token: string,
-  userId: string,
-): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
-  try {
-    const response = await fetch(
-      `${baseUrl}/rest/v1/user_draw_history?user_id=eq.${encodeURIComponent(userId)}`,
-      {
-        method: 'DELETE',
-        headers: buildSupabaseHeaders(token),
-        signal: controller.signal,
-      },
-    );
-    return response.ok;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -330,8 +274,8 @@ export function DrawHistoryProvider({ children }: PropsWithChildren) {
           ]);
           if (!isSessionCurrent()) return;
 
-          const localCached = parseStoredHistory(storedRaw);
-          const storedPending = parsePendingInserts(pendingRaw);
+          const localCached = parseStoredArray(storedRaw, isDrawHistoryEntry, MAX_HISTORY_ENTRIES);
+          const storedPending = parseStoredArray(pendingRaw, isPendingInsert);
           const existingPending = pendingByKeyRef.current[pendingKey] ?? [];
           const mergedPending = [...existingPending];
           for (const item of storedPending) {
@@ -414,30 +358,7 @@ export function DrawHistoryProvider({ children }: PropsWithChildren) {
     void syncHistory();
   }, [commitHistoryState, pendingKey, storageKey, syncHistory, token, userId]);
 
-  useEffect(() => {
-    if (!storageKey || !userId) return;
-
-    const appStateSub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        void syncHistory({ minIntervalMs: AUTO_REFRESH_COOLDOWN_MS });
-      }
-    });
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const handleFocus = () => {
-        void syncHistory({ minIntervalMs: AUTO_REFRESH_COOLDOWN_MS });
-      };
-      window.addEventListener('focus', handleFocus);
-      return () => {
-        appStateSub.remove();
-        window.removeEventListener('focus', handleFocus);
-      };
-    }
-
-    return () => {
-      appStateSub.remove();
-    };
-  }, [storageKey, syncHistory, userId]);
+  useForegroundSync(Boolean(storageKey && userId && token), syncHistory, AUTO_REFRESH_COOLDOWN_MS);
 
   const recordDrawAction = useCallback(async (title: MediaTitle, acao: DrawAction): Promise<string | null> => {
     if (!storageKey || !userId || !pendingKey) return null;
@@ -450,8 +371,8 @@ export function DrawHistoryProvider({ children }: PropsWithChildren) {
       acao,
       title: title.title,
       kind: title.kind,
-      tmdbPosterPath: sanitizePosterPath(title.tmdbPosterPath),
-      color: sanitizeColor(title.color),
+      tmdbPosterPath: sanitizeTmdbPath(title.tmdbPosterPath),
+      color: sanitizeHexColor(title.color),
     };
 
     const nextItems = [newEntry, ...latestHistoryRef.current.items].slice(0, MAX_HISTORY_ENTRIES);
@@ -482,7 +403,12 @@ export function DrawHistoryProvider({ children }: PropsWithChildren) {
         if (result.saved.id !== localId) {
           const currentLocal = latestHistoryRef.current.items.find((item) => item.id === result.saved.id);
           if (currentLocal && currentLocal.acao !== result.saved.acao) {
-            void remoteUpdateEntryAction(baseUrl, token, userId, result.saved.id, currentLocal.acao);
+            void remoteRequestOk(
+              `${baseUrl}/rest/v1/user_draw_history?id=eq.${encodeURIComponent(result.saved.id)}&user_id=eq.${encodeURIComponent(userId)}`,
+              token,
+              'PATCH',
+              { acao: currentLocal.acao },
+            );
           }
           return result.saved.id;
         }
@@ -520,7 +446,12 @@ export function DrawHistoryProvider({ children }: PropsWithChildren) {
 
     const baseUrl = getSupabaseUrl();
     if (baseUrl && token && hasSupabaseConfig()) {
-      await remoteUpdateEntryAction(baseUrl, token, userId, entryId, acao);
+      await remoteRequestOk(
+        `${baseUrl}/rest/v1/user_draw_history?id=eq.${encodeURIComponent(entryId)}&user_id=eq.${encodeURIComponent(userId)}`,
+        token,
+        'PATCH',
+        { acao },
+      );
     }
   }, [commitHistoryState, pendingKey, storageKey, token, userId]);
 
@@ -534,7 +465,11 @@ export function DrawHistoryProvider({ children }: PropsWithChildren) {
 
     const baseUrl = getSupabaseUrl();
     if (baseUrl && token && hasSupabaseConfig()) {
-      await remoteClearHistory(baseUrl, token, userId);
+      await remoteRequestOk(
+        `${baseUrl}/rest/v1/user_draw_history?user_id=eq.${encodeURIComponent(userId)}`,
+        token,
+        'DELETE',
+      );
     }
   }, [commitHistoryState, pendingKey, storageKey, token, userId]);
 

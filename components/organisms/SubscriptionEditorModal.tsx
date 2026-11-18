@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { SwitchToggle } from '@/components/atoms/SwitchToggle';
 import { SUBSCRIPTION_PROVIDERS, Subscription, SubscriptionProvider } from '@/constants/subscriptions';
 import { FONT_FAMILIES } from '@/constants/typography';
 
@@ -200,15 +201,12 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
             <View style={styles.alertHeader}>
               <View style={styles.alertIcon}><MaterialIcons name="notifications-active" size={19} color="#d77c29" /></View>
               <View style={styles.alertCopy}><AppText tipo="legenda" peso="forte" style={styles.alertTitle}>Avisar antes de renovar</AppText><AppText tipo="legenda" style={styles.helper}>Receba um lembrete antes da cobrança</AppText></View>
-              <Pressable
-                onPress={() => setRenewalAlert((prev) => !prev)}
-                hitSlop={8}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: renewalAlert }}
+              <SwitchToggle
+                value={renewalAlert}
+                onToggle={() => setRenewalAlert((prev) => !prev)}
                 accessibilityLabel="Alternar lembrete de renovação"
-                style={[styles.customSwitchTrack, renewalAlert && styles.customSwitchTrackActive]}>
-                <View style={[styles.customSwitchThumb, renewalAlert && styles.customSwitchThumbActive]} />
-              </Pressable>
+                style={styles.switchToggle}
+              />
             </View>
             {renewalAlert && (
               <View style={styles.reminderOptions}>
@@ -270,10 +268,7 @@ const styles = StyleSheet.create({
   alertCopy: { flex: 1 },
   alertTitle: { color: '#182230', fontSize: 13 },
   helper: { color: '#7b7b78', fontSize: 12, lineHeight: 16, marginTop: 2 },
-  customSwitchTrack: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#d8d3c9', padding: 3, justifyContent: 'center', marginLeft: 8 },
-  customSwitchTrackActive: { backgroundColor: '#182230' },
-  customSwitchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fffdf8' },
-  customSwitchThumbActive: { alignSelf: 'flex-end', backgroundColor: '#f3b43f' },
+  switchToggle: { marginLeft: 8 },
   reminderOptions: { flexDirection: 'row', gap: 7, marginTop: 12, paddingLeft: 46 },
   reminderChip: { borderRadius: 11, borderWidth: 1, borderColor: '#d8ccb9', paddingHorizontal: 12, paddingVertical: 7 },
   reminderSelected: { borderColor: '#e58c34', backgroundColor: '#fff2d8' },

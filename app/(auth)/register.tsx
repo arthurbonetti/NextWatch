@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
+import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { useAuth } from '@/contexts/AuthContext';
 import { isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/services/authApi';
 
@@ -100,31 +101,14 @@ export default function RegisterScreen() {
                 Monte seu painel de assinaturas e descubra o que assistir hoje.
               </AppText>
 
-              {isConnected === false && (
-                <View style={styles.offlineBanner}>
-                  <MaterialIcons name="wifi-off" size={18} color="#9a5b20" />
-                  <AppText tipo="legenda" style={styles.offlineText}>
-                    Sem conexão com a internet. Conecte-se para sincronizar sua nova conta.
-                  </AppText>
-                </View>
-              )}
-
-              {status === 'error' && errorMessage && (
-                <View style={styles.errorBanner}>
-                  <MaterialIcons name="error-outline" size={18} color="#c0392b" />
-                  <View style={styles.errorCopy}>
-                    <AppText tipo="legenda" peso="forte" style={styles.errorTitle}>Não foi possível criar a conta</AppText>
-                    <AppText tipo="legenda" style={styles.errorText}>{errorMessage}</AppText>
-                  </View>
-                  <Pressable
-                    onPress={() => { void handleRegister(); }}
-                    hitSlop={8}
-                    style={({ pressed }) => [styles.retryChip, pressed && styles.pressed]}
-                    accessibilityRole="button">
-                    <AppText tipo="legenda" peso="forte" style={styles.retryText}>Repetir</AppText>
-                  </Pressable>
-                </View>
-              )}
+              <AuthStatusBanners
+                isConnected={isConnected}
+                offlineMessage="Sem conexão com a internet. Conecte-se para sincronizar sua nova conta."
+                status={status}
+                errorMessage={errorMessage}
+                errorTitle="Não foi possível criar a conta"
+                onRetry={() => { void handleRegister(); }}
+              />
 
               <AppInput
                 rotulo="Nome"
@@ -214,35 +198,6 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#e58c34', letterSpacing: 2.0, marginBottom: 6 },
   title: { color: '#182230', fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
   subtitle: { color: '#687078', fontSize: 15, lineHeight: 23, marginBottom: 18 },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#f5e6c8',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 14,
-  },
-  offlineText: { flex: 1, color: '#625a4c' },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#fdecea',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 18,
-  },
-  errorCopy: { flex: 1 },
-  errorTitle: { color: '#c0392b', marginBottom: 2 },
-  errorText: { color: '#7a271f' },
-  retryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: '#f9d7d3',
-  },
-  retryText: { color: '#962318', fontSize: 11 },
   submitButton: { backgroundColor: '#182230', borderRadius: 14, marginTop: 4 },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
   loadingText: { color: '#5e5c57', fontSize: 13 },

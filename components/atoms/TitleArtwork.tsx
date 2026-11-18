@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
@@ -30,12 +31,13 @@ type TitleArtworkProps = {
   variant: ArtworkVariant;
   posterPath?: string | null;
   backdropPath?: string | null;
+  fallback?: ReactNode;
 };
 
 // Preenche o container pai (que já tem a cor do título como fundo enquanto a imagem carrega).
-export function TitleArtwork({ id, variant, posterPath, backdropPath }: TitleArtworkProps) {
+export function TitleArtwork({ id, variant, posterPath, backdropPath, fallback = null }: TitleArtworkProps) {
   const uri = getArtworkUri(id, variant, { posterPath, backdropPath });
-  if (!uri) return null;
+  if (!uri) return fallback;
 
   return (
     <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} cachePolicy="memory-disk" accessible={false} />

@@ -5,7 +5,7 @@ import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
-import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
+import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, getTitleServices, MediaTitle } from '@/constants/catalog';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
@@ -37,17 +37,15 @@ export const MediaTitleCard = memo(function MediaTitleCard({
   useEffect(() => {
     let active = true;
     void fetchTitleDuration(title).then((resolved) => {
-      if (active) setResolvedDuration({ id: title.id, value: resolved });
+      if (active && resolved !== cachedDuration) {
+        setResolvedDuration({ id: title.id, value: resolved });
+      }
     });
     return () => {
       active = false;
     };
-  }, [title]);
+  }, [cachedDuration, title]);
 
-  const hasArtwork = getArtworkUri(title.id, 'poster', {
-    posterPath: title.tmdbPosterPath,
-    backdropPath: title.tmdbBackdropPath,
-  }) !== null;
   const averageRating = formatAverageRating(title);
 
   return (
@@ -62,8 +60,8 @@ export const MediaTitleCard = memo(function MediaTitleCard({
           variant="poster"
           posterPath={title.tmdbPosterPath}
           backdropPath={title.tmdbBackdropPath}
+          fallback={<MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
         />
-        {!hasArtwork && <MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
       </Pressable>
       <Pressable
         style={({ pressed }) => [styles.resultCopy, pressed && styles.pressed]}
