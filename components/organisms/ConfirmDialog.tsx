@@ -1,8 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ComponentProps } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
+import { AnimatedModalShell, useCenterEntranceStyle } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
+import { THEME } from '@/constants/theme';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
@@ -37,97 +40,115 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const inlineEntranceStyle = useCenterEntranceStyle(visible && inline);
+
   if (!visible) return null;
   const isWarning = tone === 'warning';
 
-  const content = (
-    <View style={inline ? styles.inlineBackdrop : styles.modalBackdrop}>
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={onCancel}
-        accessibilityLabel={cancelAccessibilityLabel}
-      />
-      <View style={styles.card}>
-        <View style={[styles.iconBadge, isWarning ? styles.iconBadgeWarning : styles.iconBadgeDanger]}>
-          <MaterialIcons name={icon} size={24} color={isWarning ? '#d77c29' : '#c0392b'} />
-        </View>
-        <AppText tipo="legenda" peso="forte" style={[styles.eyebrow, isWarning && styles.eyebrowWarning]}>
-          {eyebrow}
-        </AppText>
-        <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.title}>
-          {title}
-        </AppText>
-        <AppText tipo="legenda" style={styles.message}>
-          {message}
-        </AppText>
-        <View style={styles.actions}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.confirmButton,
-              isWarning ? styles.confirmButtonWarning : styles.confirmButtonDanger,
-              pressed && styles.pressed,
-            ]}
-            onPress={onConfirm}
-            accessibilityRole="button">
-            {confirmIcon && (
-              <MaterialIcons name={confirmIcon} size={18} color={isWarning ? '#182230' : '#fffdf8'} />
-            )}
-            <AppText
-              peso="forte"
-              style={[styles.confirmText, isWarning ? styles.confirmTextWarning : styles.confirmTextDanger]}
-              numberOfLines={1}>
-              {confirmLabel}
-            </AppText>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}
-            onPress={onCancel}
-            accessibilityRole="button">
-            <AppText peso="forte" style={styles.cancelText}>
-              {cancelLabel}
-            </AppText>
-          </Pressable>
-        </View>
+  const cardBody = (
+    <View style={styles.card}>
+      <View style={[styles.iconBadge, isWarning ? styles.iconBadgeWarning : styles.iconBadgeDanger]}>
+        <MaterialIcons
+          name={icon}
+          size={24}
+          color={isWarning ? THEME.colors.accentDeep : THEME.colors.mcRed}
+        />
+      </View>
+      <AppText tipo="legenda" peso="forte" style={[styles.eyebrow, isWarning && styles.eyebrowWarning]}>
+        {eyebrow}
+      </AppText>
+      <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.title}>
+        {title}
+      </AppText>
+      <AppText tipo="legenda" style={styles.message}>
+        {message}
+      </AppText>
+      <View style={styles.actions}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.confirmButton,
+            isWarning ? styles.confirmButtonWarning : styles.confirmButtonDanger,
+            pressed && styles.pressed,
+          ]}
+          onPress={onConfirm}
+          accessibilityRole="button">
+          {confirmIcon && (
+            <MaterialIcons
+              name={confirmIcon}
+              size={18}
+              color={isWarning ? THEME.colors.navy : THEME.colors.textOnNavy}
+            />
+          )}
+          <AppText
+            peso="forte"
+            style={[styles.confirmText, isWarning ? styles.confirmTextWarning : styles.confirmTextDanger]}
+            numberOfLines={1}>
+            {confirmLabel}
+          </AppText>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}
+          onPress={onCancel}
+          accessibilityRole="button">
+          <AppText peso="forte" style={styles.cancelText}>
+            {cancelLabel}
+          </AppText>
+        </Pressable>
       </View>
     </View>
   );
 
-  if (inline) return content;
+  if (inline) {
+    return (
+      <View style={styles.inlineBackdrop}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onCancel}
+          accessibilityLabel={cancelAccessibilityLabel}
+        />
+        <Animated.View style={[styles.inlineCardWrap, inlineEntranceStyle]}>
+          {cardBody}
+        </Animated.View>
+      </View>
+    );
+  }
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
-      {content}
-    </Modal>
+    <AnimatedModalShell
+      visible={visible}
+      onClose={onCancel}
+      variant="center"
+      maxWidth={360}
+      backdropAccessibilityLabel={cancelAccessibilityLabel}>
+      {cardBody}
+    </AnimatedModalShell>
   );
 }
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-  modalBackdrop: {
-    flex: 1,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(9,15,23,0.72)',
-  },
   inlineBackdrop: {
     ...StyleSheet.absoluteFill,
-    padding: 24,
+    padding: THEME.spacing.s24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(9,15,23,0.72)',
+    backgroundColor: THEME.colors.backdropDark,
+    opacity: 1,
+  },
+  inlineCardWrap: {
+    width: '100%',
+    maxWidth: 360,
   },
   card: {
     width: '100%',
-    maxWidth: 360,
     alignItems: 'center',
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 20,
-    backgroundColor: '#fffdf8',
+    borderRadius: THEME.radius.card,
+    paddingHorizontal: THEME.spacing.s22,
+    paddingTop: THEME.spacing.s24,
+    paddingBottom: THEME.spacing.s20,
+    backgroundColor: THEME.colors.bgCard,
     borderWidth: 1,
-    borderColor: '#e8e2d5',
+    borderColor: THEME.colors.borderLight,
   },
   iconBadge: {
     width: 52,
@@ -136,53 +157,53 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: THEME.spacing.xl,
   },
-  iconBadgeDanger: { backgroundColor: '#fdecea', borderColor: '#f5c6c2' },
-  iconBadgeWarning: { backgroundColor: '#f6ebd4', borderColor: '#ebd9b3' },
-  eyebrow: { color: '#c0392b', letterSpacing: 1.3, textAlign: 'center', marginBottom: 6 },
-  eyebrowWarning: { color: '#e58c34' },
+  iconBadgeDanger: { backgroundColor: THEME.colors.bgDanger, borderColor: THEME.colors.borderDanger },
+  iconBadgeWarning: { backgroundColor: THEME.colors.bgWarning, borderColor: THEME.colors.borderWarning },
+  eyebrow: { color: THEME.colors.mcRed, letterSpacing: 1.3, textAlign: 'center', marginBottom: THEME.spacing.sm },
+  eyebrowWarning: { color: THEME.colors.accent },
   title: {
-    color: '#182230',
+    color: THEME.colors.textPrimary,
     fontSize: 21,
     lineHeight: 26,
     letterSpacing: -0.35,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: THEME.spacing.md,
   },
   message: {
-    color: '#5e5c57',
+    color: THEME.colors.textSecondary,
     fontSize: 13.5,
     lineHeight: 20,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: THEME.spacing.s20,
   },
-  actions: { width: '100%', gap: 10 },
+  actions: { width: '100%', gap: THEME.spacing.base },
   confirmButton: {
     width: '100%',
     minHeight: 48,
-    borderRadius: 14,
+    borderRadius: THEME.radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: THEME.spacing.md,
+    paddingHorizontal: THEME.spacing.xxl,
   },
-  confirmButtonDanger: { backgroundColor: '#c0392b' },
-  confirmButtonWarning: { backgroundColor: '#f3b43f' },
+  confirmButtonDanger: { backgroundColor: THEME.colors.mcRed },
+  confirmButtonWarning: { backgroundColor: THEME.colors.gold },
   confirmText: { fontSize: 14.5, textAlign: 'center' },
-  confirmTextDanger: { color: '#fffdf8' },
-  confirmTextWarning: { color: '#182230' },
+  confirmTextDanger: { color: THEME.colors.textOnNavy },
+  confirmTextWarning: { color: THEME.colors.navy },
   cancelButton: {
     width: '100%',
     minHeight: 46,
-    borderRadius: 14,
+    borderRadius: THEME.radius.lg,
     borderWidth: 1,
-    borderColor: '#ded8cd',
-    backgroundColor: '#f7f5f0',
+    borderColor: THEME.colors.borderMedium,
+    backgroundColor: THEME.colors.bgCanvas,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: THEME.spacing.xxl,
   },
-  cancelText: { color: '#182230', fontSize: 14.5, textAlign: 'center' },
+  cancelText: { color: THEME.colors.textPrimary, fontSize: 14.5, textAlign: 'center' },
 });

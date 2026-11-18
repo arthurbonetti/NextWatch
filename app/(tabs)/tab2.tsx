@@ -1,9 +1,10 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
@@ -445,17 +446,13 @@ export default function ExploreScreen() {
         }
       />
 
-      <Modal
+      <AnimatedModalShell
         visible={filtersVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFiltersVisible(false)}
-        statusBarTranslucent>
-        <View style={styles.sheetBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFiltersVisible(false)} accessibilityLabel="Fechar filtros" />
-          <View style={[styles.sheetCard, { paddingBottom: Math.max(24, insets.bottom + 14) }]}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
+        onClose={() => setFiltersVisible(false)}
+        variant="sheet"
+        maxHeight="84%"
+        backdropAccessibilityLabel="Fechar filtros">
+        <View style={styles.sheetHeader}>
               <View>
                 <AppText tipo="legenda" peso="forte" style={styles.sheetEyebrow}>REFINAR CATÁLOGO</AppText>
                 <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.sheetTitle}>
@@ -638,9 +635,7 @@ export default function ExploreScreen() {
                 </AppText>
               </Pressable>
             )}
-          </View>
-        </View>
-      </Modal>
+      </AnimatedModalShell>
     </SafeAreaView>
   );
 }
@@ -704,16 +699,13 @@ const styles = StyleSheet.create({
   resultsHeaderCopy: { flex: 1 },
   resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
   resultsSubtitle: { color: '#5e5c57', fontSize: 13, lineHeight: 18, marginTop: 2 },
-  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24,34,48,0.26)' },
-  sheetCard: { backgroundColor: '#fffdf8', borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 1, borderBottomWidth: 0, borderColor: '#ded8cd', paddingHorizontal: 22, paddingTop: 12, maxHeight: '82%' },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#d8d3c9', alignSelf: 'center', marginBottom: 12 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sheetEyebrow: { color: '#e58c34', letterSpacing: 1.3, marginBottom: 3 },
   sheetTitle: { color: '#182230', fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
   sheetHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   clearHeaderBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 12, backgroundColor: '#f1eee7' },
   sheetCloseButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
-  sheetScroll: { marginBottom: 14 },
+  sheetScroll: { flexShrink: 1, marginBottom: 14 },
   sheetScrollContent: { paddingBottom: 6 },
   applyButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', alignItems: 'center', justifyContent: 'center' },
   applyButtonDisabled: { backgroundColor: '#e8e2d5' },

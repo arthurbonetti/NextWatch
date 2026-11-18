@@ -6,6 +6,7 @@ import {
   type MediaIcon,
   type MediaTitle,
 } from '@/constants/catalog';
+import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
 import { getValidAccessToken, fetchWithTimeout, hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
 import { quickSortByRandom } from '@/utils/quickSort';
 
@@ -114,7 +115,7 @@ type MediaEndpoint = 'movie' | 'tv';
 export type TmdbCatalogBatchCallback = (titles: MediaTitle[]) => void;
 
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
-const MAX_PAGES_PER_ENDPOINT = 50;
+const MAX_PAGES_PER_ENDPOINT = 60;
 const REQUEST_CONCURRENCY = 8;
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_SEARCH_QUERY_LENGTH = 100;
@@ -824,6 +825,98 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
     });
 
   pendingDurationCache.set(title.id, promise);
+  return promise;
+}
+
+type TmdbVideoItem = {
+  key?: string | null;
+  site?: string | null;
+  type?: string | null;
+  official?: boolean | null;
+};
+
+type TmdbVideosResponse = {
+  results?: TmdbVideoItem[];
+};
+
+const resolvedTrailerCache = new Map<string, string | null>();
+const pendingTrailerCache = new Map<string, Promise<string | null>>();
+const SAFE_YOUTUBE_KEY_REGEX = /^[a-zA-Z0-9_-]{6,32}$/;
+
+function resolveTmdbEndpointAndId(titleId: string): { endpoint: MediaEndpoint; tmdbId: string } | null {
+  const match = /^tmdb-(movie|tv)-(\d+)$/.exec(titleId);
+  if (match) {
+    return { endpoint: match[1] as MediaEndpoint, tmdbId: match[2]! };
+  }
+  const staticArtwork = TMDB_ARTWORK[titleId];
+  if (staticArtwork) {
+    return { endpoint: staticArtwork.type, tmdbId: String(staticArtwork.tmdbId) };
+  }
+  return null;
+}
+
+function pickYoutubeTrailerKey(videos: readonly TmdbVideoItem[] | undefined): string | null {
+  if (!Array.isArray(videos) || videos.length === 0) return null;
+  const youtubeVideos = videos.filter(
+    (video) => video.site === 'YouTube' && typeof video.key === 'string' && SAFE_YOUTUBE_KEY_REGEX.test(video.key),
+  );
+  if (youtubeVideos.length === 0) return null;
+
+  const prioritized =
+    youtubeVideos.find((v) => v.type === 'Trailer' && v.official) ??
+    youtubeVideos.find((v) => v.type === 'Trailer') ??
+    youtubeVideos.find((v) => v.type === 'Teaser' && v.official) ??
+    youtubeVideos.find((v) => v.type === 'Teaser') ??
+    youtubeVideos[0];
+
+  return prioritized?.key ?? null;
+}
+
+export function getCachedTitleTrailerUrl(title: MediaTitle): string | null {
+  return resolvedTrailerCache.get(title.id) ?? null;
+}
+
+export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | null> {
+  if (resolvedTrailerCache.has(title.id)) {
+    return resolvedTrailerCache.get(title.id) ?? null;
+  }
+
+  const target = resolveTmdbEndpointAndId(title.id);
+  if (!target || !hasCatalogBackend() || upstreamUnavailable) {
+    return null;
+  }
+
+  const existingPromise = pendingTrailerCache.get(title.id);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const promise = getValidAccessToken()
+    .then(async (validToken) => {
+      if (!validToken) return null;
+
+      const ptRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
+        language: 'pt-BR',
+      }).catch(() => null);
+      let videoKey = pickYoutubeTrailerKey(ptRes?.results);
+
+      if (!videoKey) {
+        const enRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
+          language: 'en-US',
+        }).catch(() => null);
+        videoKey = pickYoutubeTrailerKey(enRes?.results);
+      }
+
+      const url = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
+      resolvedTrailerCache.set(title.id, url);
+      return url;
+    })
+    .catch(() => null)
+    .finally(() => {
+      pendingTrailerCache.delete(title.id);
+    });
+
+  pendingTrailerCache.set(title.id, promise);
   return promise;
 }
 

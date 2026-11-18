@@ -1,6 +1,58 @@
+import type MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import type { ComponentProps } from 'react';
+
 export type MediaKind = 'Filme' | 'Série' | 'Anime';
 export type MediaIcon = 'movie' | 'live-tv' | 'theaters';
+export type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 type RatingSource = 'IMDb' | 'TMDB';
+
+export const MIN_DRAW_RATING = 6.0;
+export const MIN_DRAW_VOTE_COUNT = 25;
+export const EXCLUDED_DRAW_GENRES: ReadonlySet<string> = new Set(['Notícias', 'Talk show', 'News', 'Talk']);
+
+export const KIND_ICONS: Record<'Todos' | MediaKind, MaterialIconName> = {
+  Todos: 'apps',
+  Filme: 'movie',
+  Série: 'live-tv',
+  Anime: 'theaters',
+};
+
+export const GENRE_ICONS: Record<string, MaterialIconName> = {
+  'Ficção científica': 'science',
+  'Ficção científica e fantasia': 'science',
+  Drama: 'theater-comedy',
+  Aventura: 'explore',
+  'Ação e aventura': 'explore',
+  Comédia: 'sentiment-very-satisfied',
+  Suspense: 'visibility',
+  Terror: 'local-fire-department',
+  Animação: 'animation',
+  História: 'history-edu',
+  Romance: 'favorite',
+  Ação: 'bolt',
+  Música: 'music-note',
+  Fantasia: 'auto-fix-high',
+  Faroeste: 'terrain',
+  Crime: 'gavel',
+  Documentário: 'videocam',
+  Mistério: 'search',
+  Família: 'family-restroom',
+  Guerra: 'shield',
+  'Guerra e política': 'military-tech',
+  'Filme para TV': 'tv',
+  Infantil: 'child-care',
+  Reality: 'star',
+  Novela: 'menu-book',
+  Outros: 'label',
+};
+
+export function getGenreIcon(genre: string): MaterialIconName {
+  return GENRE_ICONS[genre] ?? 'local-movies';
+}
+
+export function getKindIcon(kind: 'Todos' | MediaKind): MaterialIconName {
+  return KIND_ICONS[kind];
+}
 
 export type MediaTitle = {
   id: string;
@@ -42,6 +94,23 @@ export function sanitizeHexColor(color: unknown): string | undefined {
 
 export function getAllGenres(titles: readonly MediaTitle[]): string[] {
   return Array.from(new Set([...GENRES, ...titles.flatMap((title) => title.genres)]));
+}
+
+export function getDrawGenres(titles: readonly MediaTitle[]): string[] {
+  return getAllGenres(titles).filter((genre) => !EXCLUDED_DRAW_GENRES.has(genre));
+}
+
+export function isEligibleForDraw(title: MediaTitle): boolean {
+  if (title.genres.some((genre) => EXCLUDED_DRAW_GENRES.has(genre))) {
+    return false;
+  }
+  if (getTitleAverageRating(title) < MIN_DRAW_RATING) {
+    return false;
+  }
+  if (title.catalogSource === 'tmdb' && (title.voteCount ?? 0) < MIN_DRAW_VOTE_COUNT) {
+    return false;
+  }
+  return true;
 }
 
 export function isMediaTitle(value: unknown): value is MediaTitle {
