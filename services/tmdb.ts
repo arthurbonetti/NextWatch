@@ -6,7 +6,7 @@ import {
   type MediaIcon,
   type MediaTitle,
 } from '@/constants/catalog';
-import { getValidAccessToken, hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
+import { getValidAccessToken, fetchWithTimeout, hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
 import { quickSortByRandom } from '@/utils/quickSort';
 
 type TmdbProvider = {
@@ -54,10 +54,59 @@ type TmdbMediaResponse = {
   total_results: number;
 };
 
+type TmdbSeasonSummary = {
+  season_number?: number | null;
+  episode_count?: number | null;
+  air_date?: string | null;
+  name?: string | null;
+};
+
+type TmdbEpisodeGroupSummary = {
+  id: string;
+  name?: string | null;
+  type?: number | null;
+  group_count?: number | null;
+  episode_count?: number | null;
+};
+
+type TmdbEpisodeGroupDetails = {
+  id: string;
+  name?: string | null;
+  type?: number | null;
+  groups?: {
+    id: string;
+    name?: string | null;
+    order?: number | null;
+    episodes?: {
+      season_number?: number | null;
+      episode_number?: number | null;
+      air_date?: string | null;
+    }[];
+  }[];
+};
+
+type TmdbExternalIds = {
+  imdb_id?: string | null;
+  tvdb_id?: number | null;
+};
+
 type TmdbMediaDetails = {
   runtime?: number | null;
   number_of_seasons?: number | null;
   number_of_episodes?: number | null;
+  seasons?: TmdbSeasonSummary[] | null;
+  genres?: { id: number; name?: string }[] | null;
+  original_language?: string | null;
+  origin_country?: string[] | null;
+  episode_groups?: {
+    results?: TmdbEpisodeGroupSummary[];
+  } | null;
+  external_ids?: TmdbExternalIds | null;
+};
+
+type TvMazeSeason = {
+  number?: number | null;
+  premiereDate?: string | null;
 };
 
 type MediaEndpoint = 'movie' | 'tv';
@@ -471,6 +520,29 @@ function computeMetacriticScore(item: TmdbMediaResult): number | null {
 
 const resolvedDurationCache = new Map<string, string>();
 const pendingDurationCache = new Map<string, Promise<string>>();
+const tvMazeSeasonsCache = new Map<string, number | null>();
+const pendingTvMazeCache = new Map<string, Promise<number | null>>();
+
+const EPISODE_GROUP_TYPE_PRODUCTION = 6;
+const EPISODE_GROUP_TYPE_TV = 7;
+const TVMAZE_TIMEOUT_MS = 5000;
+
+const EXCLUDED_EPISODE_GROUP_NAME_REGEX =
+  /\b(director.?s?\s*cut|chronolog|absolute|arc|arcs|saga|sagas|dvd|blu-?ray|ova|specials?)\b/i;
+const EXACT_SEASON_EPISODE_GROUP_NAME_REGEX = /^(seasons?|temporadas?|剧集)$/i;
+const SEASON_EPISODE_GROUP_NAME_REGEX = /(seasons?|temporadas?|production|prod|tv\s*cours|剧集|季)/i;
+const SPECIALS_GROUP_NAME_REGEX =
+  /^(specials?|especia(?:is|les)|extras?|ovas?|recaps?|season\s*0|temporada\s*0|特别篇)$/i;
+const ANIME_ORIGIN_COUNTRIES = new Set(['JP', 'CN', 'KR']);
+const ANIME_ORIGINAL_LANGUAGES = new Set(['ja', 'zh', 'ko']);
+
+function getTodayIsoDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function formatMovieRuntime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -484,13 +556,229 @@ function formatSeasonsCount(seasons: number): string {
   return seasons === 1 ? '1 temporada' : `${seasons} temporadas`;
 }
 
-function computeFallbackDuration(item: TmdbMediaResult, endpoint: MediaEndpoint): string {
-  if (endpoint === 'tv') {
-    const seasons = (item.id % 4) + 1;
-    return formatSeasonsCount(seasons);
+export function computeBaseSeasonsCount(
+  details: Pick<TmdbMediaDetails, 'seasons' | 'number_of_seasons'>,
+  todayIso = getTodayIsoDate(),
+): number {
+  if (Array.isArray(details.seasons) && details.seasons.length > 0) {
+    const regularSeasons = details.seasons.filter(
+      (season) => (season.season_number ?? 0) > 0 && (season.episode_count ?? 0) > 0,
+    );
+    const airedSeasons = regularSeasons.filter(
+      (season) => typeof season.air_date === 'string' && season.air_date.length >= 10 && season.air_date <= todayIso,
+    );
+    if (airedSeasons.length > 0) {
+      return airedSeasons.length;
+    }
+    if (regularSeasons.length > 0) {
+      return regularSeasons.length;
+    }
   }
-  const minutes = 92 + ((item.id * 7) % 53);
-  return formatMovieRuntime(minutes);
+  return details.number_of_seasons && details.number_of_seasons > 0 ? details.number_of_seasons : 0;
+}
+
+export function pickSeasonEpisodeGroup(groups: readonly TmdbEpisodeGroupSummary[]): TmdbEpisodeGroupSummary | null {
+  const eligible = groups.filter(
+    (group) => Boolean(group.id) && (group.group_count ?? 0) > 1 && (group.episode_count ?? 0) > 0,
+  );
+  if (eligible.length === 0) return null;
+
+  const productionGroups = eligible
+    .filter((group) => group.type === EPISODE_GROUP_TYPE_PRODUCTION && !EXCLUDED_EPISODE_GROUP_NAME_REGEX.test(group.name ?? ''))
+    .sort((a, b) => {
+      const score = (group: TmdbEpisodeGroupSummary) => {
+        const name = (group.name ?? '').trim();
+        if (EXACT_SEASON_EPISODE_GROUP_NAME_REGEX.test(name)) return 3000;
+        if (/\b(seasons?|temporadas?)\b/i.test(name)) return 2000;
+        if (SEASON_EPISODE_GROUP_NAME_REGEX.test(name)) return 1000;
+        return 0;
+      };
+      return (
+        score(b) - score(a) ||
+        (b.episode_count ?? 0) - (a.episode_count ?? 0) ||
+        (b.group_count ?? 0) - (a.group_count ?? 0)
+      );
+    });
+
+  if (productionGroups.length > 0) {
+    return productionGroups[0]!;
+  }
+
+  const tvSeasonGroups = eligible
+    .filter(
+      (group) =>
+        group.type === EPISODE_GROUP_TYPE_TV &&
+        EXACT_SEASON_EPISODE_GROUP_NAME_REGEX.test((group.name ?? '').trim()),
+    )
+    .sort(
+      (a, b) =>
+        (b.episode_count ?? 0) - (a.episode_count ?? 0) ||
+        (b.group_count ?? 0) - (a.group_count ?? 0),
+    );
+
+  return tvSeasonGroups[0] ?? null;
+}
+
+export function countValidSeasonGroups(
+  groupDetails: TmdbEpisodeGroupDetails,
+  todayIso = getTodayIsoDate(),
+): number {
+  let count = 0;
+  for (const group of groupDetails.groups ?? []) {
+    const name = (group.name ?? '').trim();
+    if (SPECIALS_GROUP_NAME_REGEX.test(name)) continue;
+
+    const episodes = group.episodes ?? [];
+    if (episodes.length === 0) continue;
+    if (episodes.every((episode) => (episode.season_number ?? 0) === 0)) continue;
+
+    const datedEpisodes = episodes.filter(
+      (episode) => typeof episode.air_date === 'string' && episode.air_date.length >= 10,
+    );
+    if (datedEpisodes.length > 0 && datedEpisodes.every((episode) => episode.air_date! > todayIso)) {
+      continue;
+    }
+
+    count += 1;
+  }
+  return count;
+}
+
+export function countValidTvMazeSeasons(
+  seasons: readonly TvMazeSeason[],
+  todayIso = getTodayIsoDate(),
+): number | null {
+  if (!Array.isArray(seasons) || seasons.length === 0) return null;
+  if (seasons.some((season) => typeof season.number === 'number' && season.number >= 1900)) {
+    return null;
+  }
+
+  const airedRegularSeasons = seasons.filter(
+    (season) =>
+      typeof season.number === 'number' &&
+      season.number >= 1 &&
+      season.number < 1900 &&
+      typeof season.premiereDate === 'string' &&
+      season.premiereDate.length >= 10 &&
+      season.premiereDate <= todayIso,
+  );
+
+  return airedRegularSeasons.length > 0 ? airedRegularSeasons.length : null;
+}
+
+function isAnimeTitleOrDetails(title: MediaTitle, details: TmdbMediaDetails): boolean {
+  if (title.kind === 'Anime') return true;
+  const hasAnimationGenre = details.genres?.some((genre) => genre.id === 16) ?? false;
+  if (!hasAnimationGenre) return false;
+  if (details.original_language && ANIME_ORIGINAL_LANGUAGES.has(details.original_language)) return true;
+  return details.origin_country?.some((country) => ANIME_ORIGIN_COUNTRIES.has(country)) ?? false;
+}
+
+async function fetchTvMazeSeasonsCount(
+  externalIds: TmdbExternalIds | null | undefined,
+  todayIso: string,
+): Promise<number | null> {
+  const tvdbId = externalIds?.tvdb_id && externalIds.tvdb_id > 0 ? externalIds.tvdb_id : null;
+  const imdbId = externalIds?.imdb_id?.trim() || null;
+  if (!tvdbId && !imdbId) return null;
+
+  const cacheKey = tvdbId ? `tvdb:${tvdbId}` : `imdb:${imdbId}`;
+  if (tvMazeSeasonsCache.has(cacheKey)) {
+    return tvMazeSeasonsCache.get(cacheKey) ?? null;
+  }
+
+  const pending = pendingTvMazeCache.get(cacheKey);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    try {
+      const lookupUrls: string[] = [];
+      if (tvdbId) lookupUrls.push(`https://api.tvmaze.com/lookup/shows?thetvdb=${tvdbId}`);
+      if (imdbId) lookupUrls.push(`https://api.tvmaze.com/lookup/shows?imdb=${encodeURIComponent(imdbId)}`);
+
+      let tvMazeShowId: number | null = null;
+      for (const lookupUrl of lookupUrls) {
+        const showRes = await fetchWithTimeout(lookupUrl, { headers: { Accept: 'application/json' } }, TVMAZE_TIMEOUT_MS);
+        if (!showRes.ok) continue;
+        const showData = (await showRes.json()) as { id?: number };
+        if (typeof showData.id === 'number' && showData.id > 0) {
+          tvMazeShowId = showData.id;
+          break;
+        }
+      }
+
+      if (!tvMazeShowId) {
+        tvMazeSeasonsCache.set(cacheKey, null);
+        return null;
+      }
+
+      const seasonsRes = await fetchWithTimeout(
+        `https://api.tvmaze.com/shows/${tvMazeShowId}/seasons`,
+        { headers: { Accept: 'application/json' } },
+        TVMAZE_TIMEOUT_MS,
+      );
+      if (!seasonsRes.ok) return null;
+
+      const seasons = (await seasonsRes.json()) as TvMazeSeason[];
+      const count = countValidTvMazeSeasons(seasons, todayIso);
+      tvMazeSeasonsCache.set(cacheKey, count);
+      return count;
+    } catch {
+      return null;
+    } finally {
+      pendingTvMazeCache.delete(cacheKey);
+    }
+  })();
+
+  pendingTvMazeCache.set(cacheKey, promise);
+  return promise;
+}
+
+async function resolveTvDuration(title: MediaTitle, tmdbId: string, details: TmdbMediaDetails): Promise<string> {
+  const todayIso = getTodayIsoDate();
+  let resolvedSeasons = computeBaseSeasonsCount(details, todayIso);
+
+  if (resolvedSeasons <= 1) {
+    let episodeGroupSummaries = details.episode_groups?.results;
+    if (!episodeGroupSummaries) {
+      const egResponse = await request<{ results?: TmdbEpisodeGroupSummary[] }>(`/tv/${tmdbId}/episode_groups`, {})
+        .catch(() => null);
+      episodeGroupSummaries = egResponse?.results;
+    }
+
+    const seasonGroup = episodeGroupSummaries ? pickSeasonEpisodeGroup(episodeGroupSummaries) : null;
+    if (seasonGroup) {
+      const groupDetails = await request<TmdbEpisodeGroupDetails>(`/tv/episode_group/${seasonGroup.id}`, {})
+        .catch(() => null);
+      if (groupDetails) {
+        const groupSeasons = countValidSeasonGroups(groupDetails, todayIso);
+        if (groupSeasons > resolvedSeasons) {
+          resolvedSeasons = groupSeasons;
+        }
+      }
+    }
+
+    if (resolvedSeasons <= 1 && isAnimeTitleOrDetails(title, details)) {
+      let externalIds = details.external_ids;
+      if (!externalIds) {
+        externalIds = await request<TmdbExternalIds>(`/tv/${tmdbId}/external_ids`, {}).catch(() => null);
+      }
+      const tvMazeSeasons = await fetchTvMazeSeasonsCount(externalIds, todayIso);
+      if (tvMazeSeasons !== null && tvMazeSeasons > resolvedSeasons) {
+        resolvedSeasons = tvMazeSeasons;
+      }
+    }
+  }
+
+  if (resolvedSeasons > 0) {
+    return formatSeasonsCount(resolvedSeasons);
+  }
+  if (details.number_of_episodes && details.number_of_episodes > 0) {
+    return details.number_of_episodes === 1
+      ? '1 episódio'
+      : `${details.number_of_episodes} episódios`;
+  }
+  return title.duration;
 }
 
 export function getCachedTitleDuration(title: MediaTitle): string {
@@ -519,22 +807,22 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
   const promise = getValidAccessToken()
     .then((validToken) => {
       if (!validToken) return title.duration;
-      return request<TmdbMediaDetails>(`/${endpoint}/${tmdbId}`, { language: 'pt-BR' }).then((details) => {
+      const params: Record<string, string> = endpoint === 'tv'
+        ? { language: 'pt-BR', append_to_response: 'episode_groups,external_ids' }
+        : { language: 'pt-BR' };
+
+      return request<TmdbMediaDetails>(`/${endpoint}/${tmdbId}`, params).then(async (details) => {
         let formatted = title.duration;
         if (endpoint === 'movie') {
           if (details.runtime && details.runtime > 0) {
             formatted = formatMovieRuntime(details.runtime);
           }
         } else {
-          if (details.number_of_seasons && details.number_of_seasons > 0) {
-            formatted = formatSeasonsCount(details.number_of_seasons);
-          } else if (details.number_of_episodes && details.number_of_episodes > 0) {
-            formatted = details.number_of_episodes === 1
-              ? '1 episódio'
-              : `${details.number_of_episodes} episódios`;
-          }
+          formatted = await resolveTvDuration(title, tmdbId, details);
         }
-        resolvedDurationCache.set(title.id, formatted);
+        if (formatted) {
+          resolvedDurationCache.set(title.id, formatted);
+        }
         return formatted;
       });
     })
@@ -559,7 +847,7 @@ function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: stri
   const rating = item.vote_average ?? 0;
   const resolvedServices = services.length > 0 ? services : ['Netflix'];
   const id = `tmdb-${endpoint}-${item.id}`;
-  const duration = resolvedDurationCache.get(id) ?? computeFallbackDuration(item, endpoint);
+  const duration = resolvedDurationCache.get(id) ?? '';
 
   return {
     id,

@@ -3,7 +3,13 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 const ALLOWED_ENDPOINT_REGEX =
-  /^\/(watch\/providers\/(movie|tv)|discover\/(movie|tv)|search\/(movie|tv)|(movie|tv)\/\d+(\/watch\/providers)?)$/;
+  /^\/(watch\/providers\/(movie|tv)|discover\/(movie|tv)|search\/(movie|tv)|(movie|tv)\/\d+(\/watch\/providers)?|tv\/\d+\/(episode_groups|external_ids)|tv\/episode_group\/[a-zA-Z0-9]+)$/;
+
+const ALLOWED_APPEND_TO_RESPONSE = new Set([
+  'episode_groups',
+  'external_ids',
+  'episode_groups,external_ids',
+]);
 
 const ALLOWED_PARAMS = new Set([
   'language',
@@ -15,6 +21,7 @@ const ALLOWED_PARAMS = new Set([
   'include_adult',
   'page',
   'query',
+  'append_to_response',
 ]);
 
 const corsHeaders = {
@@ -100,6 +107,11 @@ Deno.serve(async (req: Request) => {
         const pageNum = Math.trunc(Number(value));
         if (!Number.isFinite(pageNum) || pageNum < 1 || pageNum > 50) continue;
         upstreamUrl.searchParams.set('page', String(pageNum));
+        continue;
+      }
+      if (key === 'append_to_response') {
+        if (!ALLOWED_APPEND_TO_RESPONSE.has(value)) continue;
+        upstreamUrl.searchParams.set('append_to_response', value);
         continue;
       }
       upstreamUrl.searchParams.set(key, value.slice(0, 100));

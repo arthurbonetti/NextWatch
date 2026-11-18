@@ -97,7 +97,7 @@ export function TitleDetailsBody({
         {title.title}
       </AppText>
       <AppText tipo="legenda" tabular style={styles.meta}>
-        {title.year || 'Ano não informado'}  ·  {title.kind}  ·  {duration}
+        {title.year || 'Ano não informado'}  ·  {title.kind}{duration ? `  ·  ${duration}` : ''}
       </AppText>
 
       <View style={styles.ratingRow}>

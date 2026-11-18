@@ -482,7 +482,7 @@ export const CATALOG: MediaTitle[] = [
     synopsis: 'Uma jovem enfrenta segredos familiares e manipulações enquanto tenta construir uma vida independente.',
   },
   {
-    id: 'jujutsu-kaisen', title: 'Jujutsu Kaisen', kind: 'Anime', year: 2020, duration: '2 temporadas',
+    id: 'jujutsu-kaisen', title: 'Jujutsu Kaisen', kind: 'Anime', year: 2020, duration: '3 temporadas',
     genres: ['Animação', 'Ação', 'Aventura'], service: 'Crunchyroll', imdbRating: '8,6', color: '#6b3fa0', icon: 'live-tv',
     synopsis: 'Yuji Itadori engole um talismã amaldiçoado para salvar seus amigos e passa a dividir o corpo com Sukuna, o Rei das Maldições.',
   },
@@ -497,7 +497,7 @@ export const CATALOG: MediaTitle[] = [
     synopsis: 'A humanidade vive cercada por enormes muralhas para se proteger dos Titãs, até que um ataque colossal muda o destino de Eren Yeager.',
   },
   {
-    id: 'frieren', title: 'Frieren e a Jornada para o Além', kind: 'Anime', year: 2023, duration: '1 temporada',
+    id: 'frieren', title: 'Frieren e a Jornada para o Além', kind: 'Anime', year: 2023, duration: '2 temporadas',
     genres: ['Animação', 'Aventura', 'Drama'], service: 'Crunchyroll', imdbRating: '8,9', color: '#4a7c8c', icon: 'live-tv',
     synopsis: 'Após derrotar o Rei Demônio ao lado de seu grupo de heróis, a maga elfa Frieren embarca em uma nova jornada para compreender os humanos e a passagem do tempo.',
   },

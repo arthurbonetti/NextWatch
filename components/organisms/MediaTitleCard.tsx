@@ -37,14 +37,16 @@ export const MediaTitleCard = memo(function MediaTitleCard({
   useEffect(() => {
     let active = true;
     void fetchTitleDuration(title).then((resolved) => {
-      if (active && resolved !== cachedDuration) {
-        setResolvedDuration({ id: title.id, value: resolved });
-      }
+      if (!active || !resolved) return;
+      setResolvedDuration((current) => {
+        if (current?.id === title.id && current.value === resolved) return current;
+        return { id: title.id, value: resolved };
+      });
     });
     return () => {
       active = false;
     };
-  }, [cachedDuration, title]);
+  }, [title]);
 
   const averageRating = formatAverageRating(title);
 
@@ -71,7 +73,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
           {title.title}
         </AppText>
         <AppText tipo="legenda" tabular style={styles.resultMeta}>
-          {title.year || 'Ano não informado'} · {title.kind} · {duration}
+          {title.year || 'Ano não informado'} · {title.kind}{duration ? ` · ${duration}` : ''}
         </AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>
           {title.genres.slice(0, 2).join(' · ')}
