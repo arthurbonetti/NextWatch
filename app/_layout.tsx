@@ -10,10 +10,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
+import { ModalPortalHost, ModalPortalProvider } from '@/components/atoms/ModalPortal';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CatalogProvider } from '@/contexts/CatalogContext';
 import { DrawHistoryProvider } from '@/contexts/DrawHistoryContext';
@@ -55,27 +57,38 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <SubscriptionsProvider>
-          <CatalogProvider>
-            <MyListProvider>
-              <DrawHistoryProvider>
-                <Stack>
-                  <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-                  <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
-                  <Stack.Screen name="my-list" options={{ headerShown: false }} />
-                  <Stack.Screen name="draw-history" options={{ headerShown: false }} />
-                  <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
-                </Stack>
-              </DrawHistoryProvider>
-            </MyListProvider>
-          </CatalogProvider>
-        </SubscriptionsProvider>
-      </AuthProvider>
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <SubscriptionsProvider>
+            <CatalogProvider>
+              <MyListProvider>
+                <DrawHistoryProvider>
+                  <ModalPortalProvider>
+                    <Stack>
+                      <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+                      <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                      <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
+                      <Stack.Screen name="my-list" options={{ headerShown: false }} />
+                      <Stack.Screen name="draw-history" options={{ headerShown: false }} />
+                      <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
+                    </Stack>
+                    <ModalPortalHost />
+                  </ModalPortalProvider>
+                </DrawHistoryProvider>
+              </MyListProvider>
+            </CatalogProvider>
+          </SubscriptionsProvider>
+        </AuthProvider>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});

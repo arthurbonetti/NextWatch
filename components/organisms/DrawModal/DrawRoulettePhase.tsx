@@ -54,7 +54,7 @@ type ReelPosterItemProps = {
 
 const ReelPosterItem = memo(function ReelPosterItem({ title, index, scrollX }: ReelPosterItemProps) {
   const animatedStyle = useAnimatedStyle(() => {
-    const distance = Math.abs(scrollX.value / STEP - index);
+    const distance = Math.abs(scrollX.get() / STEP - index);
     const scale = interpolate(distance, [0, 1, 2.2], [1.02, 0.91, 0.84], Extrapolation.CLAMP);
     const opacity = interpolate(distance, [0, 1, 2.5], [1, 0.72, 0.4], Extrapolation.CLAMP);
     return {
@@ -160,7 +160,7 @@ export function DrawRoulettePhase({
   }, [onFinish]);
 
   useAnimatedReaction(
-    () => Math.round(scrollX.value / STEP),
+    () => Math.round(scrollX.get() / STEP),
     (currentIndex, previousIndex) => {
       if (previousIndex !== null && currentIndex !== previousIndex && currentIndex > 0) {
         scheduleOnRN(handleTickHaptic);
@@ -178,32 +178,36 @@ export function DrawRoulettePhase({
       return;
     }
 
-    scrollX.value = 0;
-    lockHighlight.value = 0;
+    scrollX.set(0);
+    lockHighlight.set(0);
     lastHapticAtRef.current = 0;
 
     const targetX = TARGET_INDEX * STEP;
-    scrollX.value = withTiming(
-      targetX,
-      {
-        duration: SPIN_DURATION_MS,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (!finished) return;
-        scheduleOnRN(handleWheelStopped);
-        lockHighlight.value = withSequence(
-          withTiming(1, { duration: 110, easing: Easing.out(Easing.cubic) }),
-          withDelay(
-            DRAMATIC_PAUSE_MS,
-            withTiming(1, { duration: 1 }, (pauseFinished) => {
-              if (pauseFinished) {
-                scheduleOnRN(handleRevealAfterPause);
-              }
-            }),
-          ),
-        );
-      },
+    scrollX.set(
+      withTiming(
+        targetX,
+        {
+          duration: SPIN_DURATION_MS,
+          easing: Easing.out(Easing.cubic),
+        },
+        (finished) => {
+          if (!finished) return;
+          scheduleOnRN(handleWheelStopped);
+          lockHighlight.set(
+            withSequence(
+              withTiming(1, { duration: 110, easing: Easing.out(Easing.cubic) }),
+              withDelay(
+                DRAMATIC_PAUSE_MS,
+                withTiming(1, { duration: 1 }, (pauseFinished) => {
+                  if (pauseFinished) {
+                    scheduleOnRN(handleRevealAfterPause);
+                  }
+                }),
+              ),
+            ),
+          );
+        },
+      ),
     );
 
     return () => {
@@ -232,13 +236,16 @@ export function DrawRoulettePhase({
   const centerOffset = (viewportWidth - POSTER_WIDTH) / 2;
 
   const stripAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: centerOffset - scrollX.value }],
+    transform: [{ translateX: centerOffset - scrollX.get() }],
   }));
 
-  const frameAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + lockHighlight.value * 0.02 }],
-    borderColor: lockHighlight.value > 0.2 ? THEME.colors.gold : THEME.colors.goldLight,
-  }));
+  const frameAnimatedStyle = useAnimatedStyle(() => {
+    const highlight = lockHighlight.get();
+    return {
+      transform: [{ scale: 1 + highlight * 0.02 }],
+      borderColor: highlight > 0.2 ? THEME.colors.gold : THEME.colors.goldLight,
+    };
+  });
 
   return (
     <Pressable

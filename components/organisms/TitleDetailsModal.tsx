@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { TitleDetailCard } from '@/components/organisms/TitleDetailCard';
@@ -29,12 +29,19 @@ export function TitleDetailsModal({
   onDrawAnother,
 }: Props) {
   const { subscriptions } = useSubscriptions();
+  const [cachedTitle, setCachedTitle] = useState<MediaTitle | null>(title);
+
+  if (title && title !== cachedTitle) {
+    setCachedTitle(title);
+  }
+
+  const activeTitle = title ?? cachedTitle;
   const activeSubscriptions = useMemo(
     () => subscriptions.filter((subscription) => subscription.active),
     [subscriptions],
   );
 
-  if (!title) return null;
+  if (!activeTitle) return null;
 
   return (
     <AnimatedModalShell
@@ -45,7 +52,7 @@ export function TitleDetailsModal({
       maxHeight="90%"
       backdropAccessibilityLabel="Fechar detalhes">
       <TitleDetailCard
-        title={title}
+        title={activeTitle}
         eyebrow={eyebrow}
         activeSubscriptions={activeSubscriptions}
         onClose={onClose}

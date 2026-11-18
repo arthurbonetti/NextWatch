@@ -222,7 +222,12 @@ export default function SubscriptionsScreen() {
         )}
       </ScrollView>
 
-      {editorOpen && <SubscriptionEditorModal key={editingSubscription?.id ?? 'new-subscription'} initialSubscription={editingSubscription} onClose={() => setEditorOpen(false)} onSave={handleSaveSubscription} />}
+      <SubscriptionEditorModal
+        visible={editorOpen}
+        initialSubscription={editingSubscription}
+        onClose={() => setEditorOpen(false)}
+        onSave={handleSaveSubscription}
+      />
 
       <ConfirmDialog
         visible={deletingSubscription !== null}

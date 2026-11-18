@@ -11,6 +11,7 @@ import { THEME } from '@/constants/theme';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 
 type Props = {
+  visible?: boolean;
   initialSubscription?: Subscription;
   onClose: () => void;
   onSave: (subscription: Subscription) => void;
@@ -33,7 +34,7 @@ function generateSubscriptionId(providerName: string): string {
   return `${slug}-${Date.now().toString(36)}`;
 }
 
-export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }: Props) {
+export function SubscriptionEditorModal({ visible = true, initialSubscription, onClose, onSave }: Props) {
   const [provider, setProvider] = useState(initialSubscription?.provider ?? SUBSCRIPTION_PROVIDERS[0].name);
   const [monthlyPrice, setMonthlyPrice] = useState(initialSubscription?.monthlyPrice.toFixed(2).replace('.', ',') ?? '');
   const [billingDay, setBillingDay] = useState(initialSubscription?.billingDay.toString() ?? '');
@@ -45,6 +46,8 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
   const providersViewportWidthRef = useRef(0);
   const providerLayoutsRef = useRef<Record<string, { x: number; width: number }>>({});
   const hasInitialScrolledRef = useRef(false);
+  const prevVisibleRef = useRef(false);
+  const prevInitialIdRef = useRef<string | undefined>(initialSubscription?.id);
 
   const scrollToProvider = useCallback((providerName: string, animated: boolean) => {
     const layout = providerLayoutsRef.current[providerName];
@@ -58,14 +61,32 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
   }, []);
 
   useEffect(() => {
+    const justOpened = visible && !prevVisibleRef.current;
+    const switchedTarget = visible && prevInitialIdRef.current !== initialSubscription?.id;
+    prevVisibleRef.current = visible;
+    prevInitialIdRef.current = initialSubscription?.id;
+
+    if (!visible) return;
+
+    if (justOpened || switchedTarget) {
+      setProvider(initialSubscription?.provider ?? SUBSCRIPTION_PROVIDERS[0].name);
+      setMonthlyPrice(initialSubscription?.monthlyPrice.toFixed(2).replace('.', ',') ?? '');
+      setBillingDay(initialSubscription?.billingDay.toString() ?? '');
+      setRenewalAlert(initialSubscription?.renewalAlert ?? true);
+      setAlertDays(initialSubscription?.alertDays ?? 3);
+      setFocusedField(null);
+      setError('');
+      hasInitialScrolledRef.current = false;
+    }
+
     const timer = setTimeout(() => {
       if (!hasInitialScrolledRef.current) {
-        scrollToProvider(provider, false);
+        scrollToProvider(initialSubscription?.provider ?? SUBSCRIPTION_PROVIDERS[0].name, false);
         hasInitialScrolledRef.current = true;
       }
     }, 60);
     return () => clearTimeout(timer);
-  }, [provider, scrollToProvider]);
+  }, [initialSubscription, scrollToProvider, visible]);
 
   const save = () => {
     const parsedPrice = Number(monthlyPrice.replace(',', '.'));
@@ -96,7 +117,7 @@ export function SubscriptionEditorModal({ initialSubscription, onClose, onSave }
 
   return (
     <AnimatedModalShell
-      visible
+      visible={visible}
       onClose={onClose}
       variant="sheet"
       keyboardAvoiding

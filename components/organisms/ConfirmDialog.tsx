@@ -1,9 +1,18 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps } from 'react';
+import { ComponentProps, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
-import { AnimatedModalShell, useCenterEntranceStyle } from '@/components/atoms/AnimatedModalShell';
+import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
 import { THEME } from '@/constants/theme';
 
@@ -40,28 +49,174 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const inlineEntranceStyle = useCenterEntranceStyle(visible && inline);
+  const reducedMotion = useReducedMotion();
+  const [cachedCopy, setCachedCopy] = useState({
+    icon,
+    eyebrow,
+    title,
+    message,
+    confirmLabel,
+    confirmIcon,
+    cancelLabel,
+    tone,
+    cancelAccessibilityLabel,
+  });
 
-  if (!visible) return null;
-  const isWarning = tone === 'warning';
+  if (
+    visible &&
+    (cachedCopy.icon !== icon ||
+      cachedCopy.eyebrow !== eyebrow ||
+      cachedCopy.title !== title ||
+      cachedCopy.message !== message ||
+      cachedCopy.confirmLabel !== confirmLabel ||
+      cachedCopy.confirmIcon !== confirmIcon ||
+      cachedCopy.cancelLabel !== cancelLabel ||
+      cachedCopy.tone !== tone ||
+      cachedCopy.cancelAccessibilityLabel !== cancelAccessibilityLabel)
+  ) {
+    setCachedCopy({
+      icon,
+      eyebrow,
+      title,
+      message,
+      confirmLabel,
+      confirmIcon,
+      cancelLabel,
+      tone,
+      cancelAccessibilityLabel,
+    });
+  }
+
+  const shouldShowInline = inline && visible;
+  const [inlineRendered, setInlineRendered] = useState(shouldShowInline);
+  if (shouldShowInline && !inlineRendered) {
+    setInlineRendered(true);
+  } else if (!shouldShowInline && inlineRendered && reducedMotion) {
+    setInlineRendered(false);
+  }
+
+  const inlineBackdropOpacity = useSharedValue(0);
+  const inlineCardOpacity = useSharedValue(reducedMotion ? 1 : 0);
+  const inlineScale = useSharedValue(reducedMotion ? 1 : 0.92);
+  const inlineTranslateY = useSharedValue(reducedMotion ? 0 : 12);
+  const inlineTokenRef = useRef(0);
+  const isInlineVisibleRef = useRef(inline && visible);
+
+  useEffect(() => {
+    isInlineVisibleRef.current = inline && visible;
+  }, [inline, visible]);
+
+  const handleInlineExitComplete = useCallback((token: number) => {
+    if (token !== inlineTokenRef.current || isInlineVisibleRef.current) return;
+    setInlineRendered(false);
+  }, []);
+
+  useEffect(() => {
+    if (!inline || !inlineRendered) return;
+
+    cancelAnimation(inlineBackdropOpacity);
+    cancelAnimation(inlineCardOpacity);
+    cancelAnimation(inlineScale);
+    cancelAnimation(inlineTranslateY);
+
+    if (visible) {
+      inlineTokenRef.current += 1;
+      if (reducedMotion) {
+        inlineBackdropOpacity.set(1);
+        inlineCardOpacity.set(1);
+        inlineScale.set(1);
+        inlineTranslateY.set(0);
+        return;
+      }
+
+      inlineBackdropOpacity.set(0);
+      inlineCardOpacity.set(0);
+      inlineScale.set(0.92);
+      inlineTranslateY.set(12);
+
+      inlineBackdropOpacity.set(
+        withTiming(1, { duration: THEME.motion.backdropFadeMs, easing: Easing.out(Easing.cubic) }),
+      );
+      inlineCardOpacity.set(
+        withTiming(1, { duration: THEME.motion.backdropFadeMs, easing: Easing.out(Easing.cubic) }),
+      );
+      inlineScale.set(withSpring(1, THEME.motion.centerEnterSpring));
+      inlineTranslateY.set(withSpring(0, THEME.motion.centerEnterSpring));
+      return;
+    }
+
+    if (reducedMotion) {
+      return;
+    }
+
+    const token = ++inlineTokenRef.current;
+    const exitDuration = THEME.motion.modalExitMs;
+
+    inlineBackdropOpacity.set(
+      withTiming(0, { duration: exitDuration, easing: Easing.in(Easing.cubic) }),
+    );
+    inlineScale.set(withTiming(0.94, { duration: exitDuration, easing: Easing.in(Easing.cubic) }));
+    inlineTranslateY.set(withTiming(10, { duration: exitDuration, easing: Easing.in(Easing.cubic) }));
+    inlineCardOpacity.set(
+      withTiming(0, { duration: exitDuration, easing: Easing.in(Easing.cubic) }, (finished) => {
+        if (finished) {
+          scheduleOnRN(handleInlineExitComplete, token);
+        }
+      }),
+    );
+  }, [
+    handleInlineExitComplete,
+    inline,
+    inlineBackdropOpacity,
+    inlineCardOpacity,
+    inlineRendered,
+    inlineScale,
+    inlineTranslateY,
+    reducedMotion,
+    visible,
+  ]);
+
+  const inlineBackdropStyle = useAnimatedStyle(() => ({
+    opacity: inlineBackdropOpacity.get(),
+  }));
+
+  const inlineEntranceStyle = useAnimatedStyle(() => ({
+    opacity: inlineCardOpacity.get(),
+    transform: [{ translateY: inlineTranslateY.get() }, { scale: inlineScale.get() }],
+  }));
+
+  const activeCopy = visible
+    ? {
+        icon,
+        eyebrow,
+        title,
+        message,
+        confirmLabel,
+        confirmIcon,
+        cancelLabel,
+        tone,
+        cancelAccessibilityLabel,
+      }
+    : cachedCopy;
+  const isWarning = activeCopy.tone === 'warning';
 
   const cardBody = (
     <View style={styles.card}>
       <View style={[styles.iconBadge, isWarning ? styles.iconBadgeWarning : styles.iconBadgeDanger]}>
         <MaterialIcons
-          name={icon}
+          name={activeCopy.icon}
           size={24}
           color={isWarning ? THEME.colors.accentDeep : THEME.colors.mcRed}
         />
       </View>
       <AppText tipo="legenda" peso="forte" style={[styles.eyebrow, isWarning && styles.eyebrowWarning]}>
-        {eyebrow}
+        {activeCopy.eyebrow}
       </AppText>
       <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.title}>
-        {title}
+        {activeCopy.title}
       </AppText>
       <AppText tipo="legenda" style={styles.message}>
-        {message}
+        {activeCopy.message}
       </AppText>
       <View style={styles.actions}>
         <Pressable
@@ -72,9 +227,9 @@ export function ConfirmDialog({
           ]}
           onPress={onConfirm}
           accessibilityRole="button">
-          {confirmIcon && (
+          {activeCopy.confirmIcon && (
             <MaterialIcons
-              name={confirmIcon}
+              name={activeCopy.confirmIcon}
               size={18}
               color={isWarning ? THEME.colors.navy : THEME.colors.textOnNavy}
             />
@@ -83,7 +238,7 @@ export function ConfirmDialog({
             peso="forte"
             style={[styles.confirmText, isWarning ? styles.confirmTextWarning : styles.confirmTextDanger]}
             numberOfLines={1}>
-            {confirmLabel}
+            {activeCopy.confirmLabel}
           </AppText>
         </Pressable>
         <Pressable
@@ -91,7 +246,7 @@ export function ConfirmDialog({
           onPress={onCancel}
           accessibilityRole="button">
           <AppText peso="forte" style={styles.cancelText}>
-            {cancelLabel}
+            {activeCopy.cancelLabel}
           </AppText>
         </Pressable>
       </View>
@@ -99,17 +254,20 @@ export function ConfirmDialog({
   );
 
   if (inline) {
+    if (!inlineRendered) return null;
     return (
-      <View style={styles.inlineBackdrop}>
+      <Animated.View
+        style={[styles.inlineBackdrop, inlineBackdropStyle]}
+        pointerEvents={visible ? 'auto' : 'none'}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onCancel}
-          accessibilityLabel={cancelAccessibilityLabel}
+          accessibilityLabel={activeCopy.cancelAccessibilityLabel}
         />
         <Animated.View style={[styles.inlineCardWrap, inlineEntranceStyle]}>
           {cardBody}
         </Animated.View>
-      </View>
+      </Animated.View>
     );
   }
 
@@ -119,7 +277,7 @@ export function ConfirmDialog({
       onClose={onCancel}
       variant="center"
       maxWidth={360}
-      backdropAccessibilityLabel={cancelAccessibilityLabel}>
+      backdropAccessibilityLabel={activeCopy.cancelAccessibilityLabel}>
       {cardBody}
     </AnimatedModalShell>
   );

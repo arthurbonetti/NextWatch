@@ -75,7 +75,15 @@ function ConfettiParticle({
   const style = useAnimatedStyle(() => {
     const master = progress.get();
     if (master <= spec.delay || master >= 1) {
-      return { opacity: 0 };
+      return {
+        opacity: 0,
+        transform: [
+          { translateX: 0 },
+          { translateY: 0 },
+          { rotate: '0deg' },
+          { scale: 1 },
+        ],
+      };
     }
     const p = (master - spec.delay) / (1 - spec.delay);
     const opacity = p < 0.12 ? p / 0.12 : p < 0.72 ? 1 : (1 - p) / 0.28;
@@ -479,7 +487,6 @@ export function TitleDetailCard({
         <View style={styles.bodyPadding}>
           <View style={styles.headerOverlapRow}>
             <Animated.View
-              sharedTransitionTag={`title-poster-${title.id}`}
               style={[
                 styles.posterOverlap,
                 { backgroundColor: title.color, borderColor: THEME.colors.bgCard },

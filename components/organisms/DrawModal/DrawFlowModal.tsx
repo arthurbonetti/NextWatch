@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
-import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
+import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
@@ -234,8 +234,7 @@ export function DrawFlowModal({
       {phase === 'filtros' && (
         <Animated.View
           key="phase-filtros"
-          entering={reducedMotion ? undefined : FadeIn.duration(130)}
-          exiting={reducedMotion ? undefined : FadeOut.duration(80)}
+          entering={reducedMotion ? undefined : FadeIn.duration(150)}
           style={styles.phaseInner}>
           <DrawFiltersPhase
             activeSubscriptions={activeSubscriptions}
@@ -260,8 +259,7 @@ export function DrawFlowModal({
       {phase === 'sorteando' && spinSession && (
         <Animated.View
           key={`phase-sorteando-${spinSession.spinKey}`}
-          entering={reducedMotion ? undefined : FadeIn.duration(130)}
-          exiting={reducedMotion ? undefined : FadeOut.duration(80)}>
+          entering={reducedMotion ? undefined : FadeIn.duration(150)}>
           <DrawRoulettePhase
             winner={spinSession.winner}
             candidates={spinSession.candidates}
@@ -276,7 +274,7 @@ export function DrawFlowModal({
       {phase === 'resultado' && spinSession && (
         <Animated.View
           key={`phase-resultado-${spinSession.winner.id}-${spinSession.spinKey}`}
-          entering={reducedMotion ? undefined : FadeIn.duration(140)}
+          entering={reducedMotion ? undefined : FadeIn.duration(160)}
           style={styles.resultInner}>
           <DrawResultPhase
             title={spinSession.winner}

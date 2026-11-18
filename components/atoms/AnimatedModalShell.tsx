@@ -1,8 +1,7 @@
 import { BlurView } from 'expo-blur';
-import { ReactNode, useEffect, useMemo, useRef } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleProp,
@@ -11,8 +10,9 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   Easing,
   LinearTransition,
   useAnimatedStyle,
@@ -24,7 +24,11 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { ModalPortal } from '@/components/atoms/ModalPortal';
 import { THEME } from '@/constants/theme';
+
+const SHEET_ENTER_OFFSET = 72;
+const CENTER_ENTER_OFFSET = 14;
 
 export type ModalShellVariant = 'center' | 'sheet';
 
@@ -116,99 +120,229 @@ export function AnimatedModalShell({
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
+  const [rendered, setRendered] = useState(visible);
+  if (visible && !rendered) {
+    setRendered(true);
+  } else if (!visible && rendered && reducedMotion) {
+    setRendered(false);
+  }
+
   const backdropOpacity = useSharedValue(0);
-  const cardScale = useSharedValue(1);
-  const cardOpacity = useSharedValue(1);
-  const translateY = useSharedValue(0);
+  const cardScale = useSharedValue(reducedMotion ? 1 : variant === 'center' ? 0.92 : 1);
+  const cardOpacity = useSharedValue(reducedMotion ? 1 : 0);
+  const translateY = useSharedValue(
+    reducedMotion ? 0 : variant === 'sheet' ? SHEET_ENTER_OFFSET : CENTER_ENTER_OFFSET,
+  );
+  const dismissedBySwipe = useSharedValue(false);
+
   const wasVisibleRef = useRef(false);
   const prevVariantRef = useRef(variant);
+  const closeTokenRef = useRef(0);
+  const isVisibleRef = useRef(visible);
+
+  useEffect(() => {
+    isVisibleRef.current = visible;
+  }, [visible]);
+
+  const handleExitComplete = useCallback((token: number) => {
+    if (token !== closeTokenRef.current || isVisibleRef.current) return;
+    setRendered(false);
+  }, []);
+
+  const handleSwipeDismiss = useCallback(() => {
+    setRendered(false);
+    const dismissAction = onSheetDismiss ?? onClose;
+    dismissAction();
+  }, [onClose, onSheetDismiss]);
 
   useEffect(() => {
     if (!visible) {
       wasVisibleRef.current = false;
       prevVariantRef.current = variant;
-      return;
     }
+    if (!rendered) return;
 
-    const justOpened = !wasVisibleRef.current;
-    const variantChanged = prevVariantRef.current !== variant;
-    wasVisibleRef.current = true;
-    prevVariantRef.current = variant;
+    if (visible) {
+      const justOpened = !wasVisibleRef.current;
+      const variantChanged = prevVariantRef.current !== variant;
+      wasVisibleRef.current = true;
+      prevVariantRef.current = variant;
+      closeTokenRef.current += 1;
+      dismissedBySwipe.set(false);
 
-    if (reducedMotion) {
-      backdropOpacity.set(1);
-      cardScale.set(1);
-      cardOpacity.set(1);
-      translateY.set(0);
-      return;
-    }
+      cancelAnimation(backdropOpacity);
+      cancelAnimation(cardOpacity);
+      cancelAnimation(cardScale);
+      cancelAnimation(translateY);
 
-    if (justOpened) {
-      backdropOpacity.set(0);
-      backdropOpacity.set(withTiming(1, { duration: THEME.motion.backdropFadeMs }));
-
-      if (variant === 'sheet') {
+      if (reducedMotion) {
+        backdropOpacity.set(1);
         cardScale.set(1);
         cardOpacity.set(1);
-        translateY.set(30);
-        translateY.set(withSpring(0, THEME.motion.sheetEnterSpring));
-      } else {
-        translateY.set(10);
-        cardScale.set(0.94);
-        cardOpacity.set(0);
-        translateY.set(withSpring(0, THEME.motion.centerEnterSpring));
-        cardScale.set(withSpring(1, THEME.motion.centerEnterSpring));
-        cardOpacity.set(
+        translateY.set(0);
+        return;
+      }
+
+      if (justOpened) {
+        backdropOpacity.set(0);
+        backdropOpacity.set(
           withTiming(1, { duration: THEME.motion.backdropFadeMs, easing: Easing.out(Easing.cubic) }),
         );
+
+        if (variant === 'sheet') {
+          cardScale.set(1);
+          cardOpacity.set(0);
+          translateY.set(SHEET_ENTER_OFFSET);
+          cardOpacity.set(withTiming(1, { duration: 120, easing: Easing.out(Easing.cubic) }));
+          translateY.set(withSpring(0, THEME.motion.sheetEnterSpring));
+        } else {
+          translateY.set(CENTER_ENTER_OFFSET);
+          cardScale.set(0.92);
+          cardOpacity.set(0);
+          translateY.set(withSpring(0, THEME.motion.centerEnterSpring));
+          cardScale.set(withSpring(1, THEME.motion.centerEnterSpring));
+          cardOpacity.set(
+            withTiming(1, { duration: THEME.motion.backdropFadeMs, easing: Easing.out(Easing.cubic) }),
+          );
+        }
+        return;
+      }
+
+      if (variantChanged) {
+        translateY.set(0);
+        cardOpacity.set(1);
+        cardScale.set(0.96);
+        cardScale.set(withSpring(1, THEME.motion.centerEnterSpring));
       }
       return;
     }
 
-    if (variantChanged) {
-      translateY.set(0);
-      cardOpacity.set(1);
-      cardScale.set(0.96);
-      cardScale.set(withSpring(1, THEME.motion.centerEnterSpring));
+    wasVisibleRef.current = false;
+    prevVariantRef.current = variant;
+
+    if (reducedMotion) {
+      return;
     }
-  }, [backdropOpacity, cardOpacity, cardScale, reducedMotion, translateY, variant, visible]);
+
+    const token = ++closeTokenRef.current;
+
+    if (dismissedBySwipe.get()) {
+      dismissedBySwipe.set(false);
+      backdropOpacity.set(
+        withTiming(0, { duration: 1 }, (finished) => {
+          if (finished) {
+            scheduleOnRN(handleExitComplete, token);
+          }
+        }),
+      );
+      return;
+    }
+
+    const exitDuration = THEME.motion.modalExitMs;
+
+    cancelAnimation(backdropOpacity);
+    cancelAnimation(cardOpacity);
+    cancelAnimation(cardScale);
+    cancelAnimation(translateY);
+
+    backdropOpacity.set(withTiming(0, { duration: exitDuration, easing: Easing.in(Easing.cubic) }));
+
+    if (variant === 'sheet') {
+      const exitOffset = Math.max(140, Math.round(windowHeight * 0.28));
+      translateY.set(withTiming(exitOffset, { duration: exitDuration, easing: Easing.in(Easing.cubic) }));
+      cardOpacity.set(
+        withTiming(0, { duration: exitDuration, easing: Easing.in(Easing.cubic) }, (finished) => {
+          if (finished) {
+            scheduleOnRN(handleExitComplete, token);
+          }
+        }),
+      );
+    } else {
+      translateY.set(withTiming(10, { duration: exitDuration, easing: Easing.in(Easing.cubic) }));
+      cardScale.set(withTiming(0.94, { duration: exitDuration, easing: Easing.in(Easing.cubic) }));
+      cardOpacity.set(
+        withTiming(0, { duration: exitDuration, easing: Easing.in(Easing.cubic) }, (finished) => {
+          if (finished) {
+            scheduleOnRN(handleExitComplete, token);
+          }
+        }),
+      );
+    }
+  }, [
+    backdropOpacity,
+    cardOpacity,
+    cardScale,
+    dismissedBySwipe,
+    handleExitComplete,
+    reducedMotion,
+    rendered,
+    translateY,
+    variant,
+    visible,
+    windowHeight,
+  ]);
 
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(variant === 'sheet' && enableSheetDrag)
+        .enabled(variant === 'sheet' && enableSheetDrag && visible)
         .onUpdate((event) => {
           if (event.translationY > 0) {
             translateY.set(event.translationY);
+            if (!isExpanded) {
+              backdropOpacity.set(Math.max(0.2, 1 - event.translationY / 420));
+            }
           } else {
             translateY.set(event.translationY * 0.25);
           }
         })
         .onEnd((event) => {
           if (onSwipeExpandChange && (event.translationY < -55 || event.velocityY < -500)) {
+            backdropOpacity.set(withTiming(1, { duration: 120 }));
             translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
             scheduleOnRN(onSwipeExpandChange, true);
             return;
           }
           if (onSwipeExpandChange && isExpanded && (event.translationY > 55 || event.velocityY > 450)) {
+            backdropOpacity.set(withTiming(1, { duration: 120 }));
             translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
             scheduleOnRN(onSwipeExpandChange, false);
             return;
           }
           if (!isExpanded && (event.translationY > 110 || event.velocityY > 650)) {
-            const dismissAction = onSheetDismiss ?? onClose;
+            dismissedBySwipe.set(true);
+            const dismissDistance = Math.max(480, Math.round(windowHeight * 0.65));
+            backdropOpacity.set(
+              withTiming(0, { duration: THEME.motion.modalExitMs, easing: Easing.in(Easing.cubic) }),
+            );
             translateY.set(
-              withTiming(420, { duration: THEME.motion.backdropFadeMs }, (finished) => {
-                if (finished) {
-                  scheduleOnRN(dismissAction);
-                }
-              }),
+              withTiming(
+                dismissDistance,
+                { duration: THEME.motion.modalExitMs, easing: Easing.in(Easing.cubic) },
+                (finished) => {
+                  if (finished) {
+                    scheduleOnRN(handleSwipeDismiss);
+                  }
+                },
+              ),
             );
             return;
           }
+          backdropOpacity.set(withTiming(1, { duration: 120 }));
           translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
         }),
-    [enableSheetDrag, isExpanded, onClose, onSheetDismiss, onSwipeExpandChange, translateY, variant],
+    [
+      backdropOpacity,
+      dismissedBySwipe,
+      enableSheetDrag,
+      handleSwipeDismiss,
+      isExpanded,
+      onSwipeExpandChange,
+      translateY,
+      variant,
+      visible,
+      windowHeight,
+    ],
   );
 
   const backdropStyle = useAnimatedStyle(() => ({
@@ -221,7 +355,11 @@ export function AnimatedModalShell({
   }));
 
   const resolvedMaxWidth = maxWidth ?? (variant === 'sheet' ? 640 : 460);
-  const resolvedMaxHeight = maxHeight ?? (variant === 'sheet' ? Math.round(windowHeight * 0.88) : '90%');
+  const rawMaxHeight = maxHeight ?? (variant === 'sheet' ? Math.round(windowHeight * 0.88) : '90%');
+  const resolvedMaxHeight =
+    typeof rawMaxHeight === 'number'
+      ? rawMaxHeight
+      : Math.round((windowHeight * Number.parseFloat(rawMaxHeight)) / 100);
 
   const layoutTransition =
     layoutAnimated && !reducedMotion
@@ -230,6 +368,53 @@ export function AnimatedModalShell({
           .stiffness(THEME.motion.layoutSpring.stiffness)
           .mass(THEME.motion.layoutSpring.mass)
       : undefined;
+
+  if (!rendered) return null;
+
+  const cardNode = (
+    <Animated.View
+      style={[
+        variant === 'sheet'
+          ? [
+              styles.sheetContainer,
+              {
+                maxWidth: resolvedMaxWidth,
+                maxHeight: resolvedMaxHeight,
+                paddingBottom: Math.max(THEME.spacing.s24, insets.bottom + THEME.spacing.base),
+              },
+              sheetStyle,
+            ]
+          : [
+              styles.centerContainer,
+              {
+                maxWidth: resolvedMaxWidth,
+                maxHeight: resolvedMaxHeight,
+              },
+            ],
+        contentContainerStyle,
+        motionStyle,
+      ]}>
+      {variant === 'sheet' && showSheetHandle && (
+        enableSheetDrag ? (
+          <GestureDetector gesture={panGesture}>
+            <Pressable
+              onPress={onToggleExpand}
+              disabled={!onToggleExpand}
+              style={styles.dragZone}
+              accessibilityRole={onToggleExpand ? 'button' : undefined}
+              accessibilityLabel={onToggleExpand ? handleAccessibilityLabel : undefined}>
+              <View style={styles.sheetHandle} />
+            </Pressable>
+          </GestureDetector>
+        ) : (
+          <View style={styles.dragZone}>
+            <View style={styles.sheetHandle} />
+          </View>
+        )
+      )}
+      {children}
+    </Animated.View>
+  );
 
   const stageBody = (
     <View style={[styles.stage, variant === 'sheet' ? styles.stageBottom : styles.stageCenter]}>
@@ -241,63 +426,32 @@ export function AnimatedModalShell({
         />
       )}
 
-      <Animated.View
-        layout={layoutTransition}
-        style={[
-          variant === 'sheet'
-            ? [
-                styles.sheetContainer,
-                {
-                  maxWidth: resolvedMaxWidth,
-                  maxHeight: resolvedMaxHeight,
-                  paddingBottom: Math.max(THEME.spacing.s24, insets.bottom + THEME.spacing.base),
-                },
-                sheetStyle,
-              ]
-            : [
-                styles.centerContainer,
-                {
-                  maxWidth: resolvedMaxWidth,
-                  maxHeight: resolvedMaxHeight,
-                },
-              ],
-          contentContainerStyle,
-          motionStyle,
-        ]}>
-        {variant === 'sheet' && showSheetHandle && (
-          enableSheetDrag ? (
-            <GestureDetector gesture={panGesture}>
-              <Pressable
-                onPress={onToggleExpand}
-                disabled={!onToggleExpand}
-                style={styles.dragZone}
-                accessibilityRole={onToggleExpand ? 'button' : undefined}
-                accessibilityLabel={onToggleExpand ? handleAccessibilityLabel : undefined}>
-                <View style={styles.sheetHandle} />
-              </Pressable>
-            </GestureDetector>
-          ) : (
-            <View style={styles.dragZone}>
-              <View style={styles.sheetHandle} />
-            </View>
-          )
-        )}
-        {children}
-      </Animated.View>
+      {layoutTransition ? (
+        <Animated.View
+          layout={layoutTransition}
+          style={[styles.layoutWrapper, { maxWidth: resolvedMaxWidth, maxHeight: resolvedMaxHeight }]}>
+          {cardNode}
+        </Animated.View>
+      ) : (
+        cardNode
+      )}
     </View>
   );
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onRequestClose ?? onClose}
-      statusBarTranslucent>
-      <GestureHandlerRootView style={styles.root}>
-        <Animated.View style={[styles.backdropContainer, backdropStyle]}>
-          <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, styles.backdropScrim]} />
+    <ModalPortal onBackPress={visible ? (onRequestClose ?? onClose) : undefined}>
+      <View style={styles.root} pointerEvents={visible ? 'auto' : 'none'}>
+        <Animated.View style={[styles.backdropContainer, backdropStyle]} pointerEvents="none">
+          {Platform.OS !== 'android' && (
+            <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFill} />
+          )}
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              styles.backdropScrim,
+              Platform.OS === 'android' && styles.backdropScrimSolid,
+            ]}
+          />
         </Animated.View>
 
         {keyboardAvoiding ? (
@@ -311,8 +465,8 @@ export function AnimatedModalShell({
         )}
 
         {overlayChildren}
-      </GestureHandlerRootView>
-    </Modal>
+      </View>
+    </ModalPortal>
   );
 }
 
@@ -326,6 +480,9 @@ const styles = StyleSheet.create({
   backdropScrim: {
     backgroundColor: THEME.colors.backdropOverlay,
   },
+  backdropScrimSolid: {
+    backgroundColor: 'rgba(18, 26, 38, 0.66)',
+  },
   stage: {
     flex: 1,
   },
@@ -337,6 +494,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: THEME.spacing.xxl,
     paddingVertical: THEME.spacing.s20,
+  },
+  layoutWrapper: {
+    width: '100%',
+    alignSelf: 'center',
+    flexShrink: 1,
   },
   sheetContainer: {
     width: '100%',
