@@ -211,7 +211,7 @@ export function DrawFlowModal({
       handleAccessibilityLabel={
         expandedSheet ? 'Reduzir painel de filtros' : 'Expandir painel de filtros'
       }
-      layoutAnimated
+      layoutAnimated={phase === 'filtros'}
       overlayChildren={
         <ConfirmDialog
           visible={incompleteConfirmVisible}

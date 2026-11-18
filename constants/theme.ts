@@ -115,6 +115,8 @@ export const THEME = {
   motion: {
     backdropFadeMs: 180,
     modalExitMs: 150,
+    disclosureOpenMs: 250,
+    disclosureCloseMs: 195,
     centerEnterSpring: { damping: 24, stiffness: 360, mass: 0.78 },
     sheetEnterSpring: { damping: 26, stiffness: 340, mass: 0.8 },
     sheetDragSnapSpring: { damping: 28, stiffness: 360 },

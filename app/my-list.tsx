@@ -1,6 +1,12 @@
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeOutLeft,
+  LinearTransition,
+  useReducedMotion,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
@@ -13,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMyList } from '@/contexts/MyListContext';
 
 export default function MyListScreen() {
+  const reducedMotion = useReducedMotion();
   const { user, authReady } = useAuth();
   const { savedTitles, storageReady, removeFromMyList, refreshMyList } = useMyList();
 
@@ -45,10 +52,21 @@ export default function MyListScreen() {
           </View>
         </FadeInBlock>
 
-        {savedTitles.length > 0 ? (
-          <View>
-            {savedTitles.map((title, index) => (
-              <FadeInBlock key={title.id} delay={Math.min(index + 1, 7) * 30}>
+        <View>
+          {savedTitles.map((title, index) => (
+            <Animated.View
+              key={title.id}
+              layout={
+                reducedMotion
+                  ? undefined
+                  : LinearTransition.duration(240).easing(Easing.bezier(0.22, 1, 0.36, 1))
+              }
+              exiting={
+                reducedMotion
+                  ? undefined
+                  : FadeOutLeft.duration(200).easing(Easing.out(Easing.cubic))
+              }>
+              <FadeInBlock delay={Math.min(index + 1, 7) * 30}>
                 <MediaTitleCard
                   title={title}
                   onOpen={() => openTitle(title)}
@@ -59,10 +77,12 @@ export default function MyListScreen() {
                   actionIconColor="#e58c34"
                 />
               </FadeInBlock>
-            ))}
-          </View>
-        ) : storageReady ? (
-          <FadeInBlock delay={40}>
+            </Animated.View>
+          ))}
+        </View>
+
+        {savedTitles.length === 0 && storageReady && (
+          <FadeInBlock delay={120}>
             <EmptyStateCard
               icon="bookmark-border"
               iconColor="#d77c29"
@@ -73,7 +93,7 @@ export default function MyListScreen() {
               onAction={() => router.push('/(tabs)/tab2')}
             />
           </FadeInBlock>
-        ) : null}
+        )}
       </ScrollView>
     </SafeAreaView>
   );

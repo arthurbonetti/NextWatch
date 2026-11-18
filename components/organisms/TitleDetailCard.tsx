@@ -1,13 +1,12 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
   interpolateColor,
-  LinearTransition,
   SharedValue,
   useAnimatedStyle,
   useReducedMotion,
@@ -18,6 +17,8 @@ import Animated, {
 
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
+import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
+import { ExpandableText } from '@/components/atoms/ExpandableText';
 import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import {
@@ -53,7 +54,6 @@ type TitleDetailCardProps = {
   onDrawAnother?: () => void;
 };
 
-const SYNOPSIS_PREVIEW_LIMIT = 280;
 let hasShownSessionConfetti = false;
 
 type ConfettiSpec = {
@@ -205,7 +205,6 @@ export function TitleDetailCard({
   const [scrollLayoutHeight, setScrollLayoutHeight] = useState(0);
   const [scrollContentHeight, setScrollContentHeight] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (prevTitleId !== title.id) {
     setPrevTitleId(title.id);
@@ -247,7 +246,6 @@ export function TitleDetailCard({
   const matchedSubscription = orderedUserSubscriptions[0] ?? null;
   const primaryProvider = watchOptions[0]?.provider ?? 'Netflix';
 
-  const isLongSynopsis = title.synopsis.length > SYNOPSIS_PREVIEW_LIMIT;
   const metacritic = getMetacriticScore(title);
   const averageRating = formatAverageRating(title);
   const ratingSourceName = title.ratingSource ?? 'IMDb';
@@ -258,14 +256,7 @@ export function TitleDetailCard({
   const ratingGlow = useSharedValue(0);
   const saveProgress = useSharedValue(saved ? 1 : 0);
   const diceRotation = useSharedValue(0);
-  const chevronRotation = useSharedValue(0);
   const drawerChevronRotation = useSharedValue(0);
-
-  useEffect(() => {
-    return () => {
-      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -320,22 +311,15 @@ export function TitleDetailCard({
   }, [reducedMotion, saveProgress, saved]);
 
   useEffect(() => {
-    chevronRotation.set(
-      reducedMotion
-        ? expanded
-          ? 180
-          : 0
-        : withTiming(expanded ? 180 : 0, { duration: 160 }),
-    );
-  }, [chevronRotation, expanded, reducedMotion]);
-
-  useEffect(() => {
     drawerChevronRotation.set(
       reducedMotion
         ? streamingDrawerOpen
           ? 90
           : 0
-        : withTiming(streamingDrawerOpen ? 90 : 0, { duration: 150 }),
+        : withTiming(streamingDrawerOpen ? 90 : 0, {
+            duration: 240,
+            easing: Easing.bezier(0.22, 1, 0.36, 1),
+          }),
     );
   }, [drawerChevronRotation, reducedMotion, streamingDrawerOpen]);
 
@@ -368,13 +352,13 @@ export function TitleDetailCard({
     transform: [{ rotate: `${diceRotation.get()}deg` }],
   }));
 
-  const chevronAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${chevronRotation.get()}deg` }],
-  }));
-
   const drawerChevronAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${drawerChevronRotation.get()}deg` }],
   }));
+
+  const handleDrawerOpenEnd = useCallback(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: !reducedMotion });
+  }, [reducedMotion]);
 
   const handleSavePress = () => {
     const nextSaved = !saved;
@@ -394,12 +378,6 @@ export function TitleDetailCard({
       const nextOpen = !streamingDrawerOpen;
       triggerSelectionHaptic();
       setStreamingDrawerOpen(nextOpen);
-      if (nextOpen) {
-        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-        scrollTimerRef.current = setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: !reducedMotion });
-        }, 90);
-      }
       return;
     }
     handleOpenProvider(primaryProvider);
@@ -442,8 +420,7 @@ export function TitleDetailCard({
 
   const isOverflowing =
     scrollLayoutHeight > 0 && scrollContentHeight > scrollLayoutHeight + THEME.spacing.xs;
-  const scrollEnabled =
-    (isLongSynopsis && expanded) || showRatingInfo || streamingDrawerOpen || isOverflowing;
+  const scrollEnabled = expanded || showRatingInfo || streamingDrawerOpen || isOverflowing;
 
   return (
     <View style={styles.card}>
@@ -533,7 +510,10 @@ export function TitleDetailCard({
 
           <View style={styles.ratingRow}>
             <Pressable
-              onPress={() => setShowRatingInfo((prev) => !prev)}
+              onPress={() => {
+                triggerSelectionHaptic();
+                setShowRatingInfo((prev) => !prev);
+              }}
               accessibilityRole="button"
               accessibilityLabel={`Nota do público ${title.imdbRating} de 10 no ${ratingSourceName}. Toque para entender.`}>
               <Animated.View style={[styles.ratingBadge, ratingAnimatedStyle]}>
@@ -554,7 +534,10 @@ export function TitleDetailCard({
                   metacritic >= 61 ? styles.mcGreen : metacritic >= 40 ? styles.mcYellow : styles.mcRed,
                   pressed && styles.pressed,
                 ]}
-                onPress={() => setShowRatingInfo((prev) => !prev)}
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  setShowRatingInfo((prev) => !prev);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={`Nota ${metacritic} de 100 no Metacritic`}>
                 <AppText peso="forte" tabular style={styles.metacriticScore}>
@@ -587,20 +570,32 @@ export function TitleDetailCard({
                   maxVisible={2}
                   overflowSize={28}
                   overflowExpanded={showAllProviders}
-                  onPressOverflow={() => setShowAllProviders((prev) => !prev)}
+                  onPressOverflow={() => {
+                    triggerSelectionHaptic();
+                    setShowAllProviders((prev) => !prev);
+                  }}
                 />
               </View>
             )}
           </View>
 
-          {showRatingInfo && (
+          <CollapsibleSection
+            key={`rating-${title.id}`}
+            expanded={showRatingInfo}
+            slideOffset={-6}
+            openDuration={230}
+            closeDuration={180}
+            contentContainerStyle={styles.ratingTooltipSpacer}>
             <View style={styles.ratingTooltip}>
               <View style={styles.ratingTooltipHeader}>
                 <AppText tipo="legenda" peso="forte" style={styles.ratingTooltipTitle}>
                   Fontes das avaliações
                 </AppText>
                 <Pressable
-                  onPress={() => setShowRatingInfo(false)}
+                  onPress={() => {
+                    triggerSelectionHaptic();
+                    setShowRatingInfo(false);
+                  }}
                   style={styles.tooltipCloseButton}
                   accessibilityRole="button"
                   accessibilityLabel="Fechar explicação das notas">
@@ -619,12 +614,18 @@ export function TitleDetailCard({
                 {`• ★ ${averageRating}: média exibida nas listas e filtros.`}
               </AppText>
             </View>
-          )}
+          </CollapsibleSection>
 
-          {orderedUserSubscriptions.length === 0 && showAllProviders && uniqueTitleServices.length > 2 && (
-            <Animated.View
-              entering={reducedMotion ? undefined : FadeIn.duration(160)}
-              style={styles.allProvidersRow}>
+          <CollapsibleSection
+            key={`providers-${title.id}`}
+            expanded={
+              orderedUserSubscriptions.length === 0 && showAllProviders && uniqueTitleServices.length > 2
+            }
+            slideOffset={-6}
+            openDuration={220}
+            closeDuration={170}
+            contentContainerStyle={styles.allProvidersSpacer}>
+            <View style={styles.allProvidersRow}>
               {uniqueTitleServices.map((serviceName) => (
                 <View key={serviceName} style={styles.providerPill}>
                   <ServiceLogo name={serviceName} size={18} />
@@ -633,8 +634,8 @@ export function TitleDetailCard({
                   </AppText>
                 </View>
               ))}
-            </Animated.View>
-          )}
+            </View>
+          </CollapsibleSection>
 
           {orderedUserSubscriptions.length > 1 ? (
             <View style={styles.subscriptionBanner}>
@@ -661,121 +662,128 @@ export function TitleDetailCard({
             {title.genres.join(' · ')}
           </AppText>
 
-          <Animated.View layout={reducedMotion ? undefined : LinearTransition.duration(200)}>
+          <View>
             <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>
               Sinopse
             </AppText>
-            <AppText
-              tipo="texto"
-              style={[styles.synopsis, isLongSynopsis && styles.synopsisWithToggle]}
-              numberOfLines={isLongSynopsis && !expanded ? 4 : undefined}>
-              {title.synopsis}
-            </AppText>
-            {isLongSynopsis && (
-              <Pressable
-                style={({ pressed }) => [styles.expandButton, pressed && styles.pressed]}
-                onPress={() => setExpanded((prev) => !prev)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded }}>
-                <AppText tipo="legenda" peso="forte" style={styles.expandButtonText}>
-                  {expanded ? 'Mostrar menos' : 'Mostrar mais'}
-                </AppText>
-                <Animated.View style={chevronAnimatedStyle}>
-                  <MaterialIcons name="expand-more" size={18} color={THEME.colors.accentText} />
-                </Animated.View>
-              </Pressable>
-            )}
-          </Animated.View>
+            <ExpandableText
+              key={title.id}
+              text={title.synopsis}
+              expanded={expanded}
+              onToggle={() => {
+                triggerSelectionHaptic();
+                setExpanded((prev) => !prev);
+              }}
+              collapsedLines={4}
+              fadeColor={THEME.colors.bgCard}
+              textStyle={styles.synopsis}
+              staticBottomSpacing={THEME.spacing.xxl}
+              buttonStyle={styles.expandButton}
+              buttonTextStyle={styles.expandButtonText}
+            />
+          </View>
 
-          <Animated.View
-            layout={reducedMotion ? undefined : LinearTransition.duration(180)}
-            style={styles.actionsBlock}>
-            <View style={styles.primaryActionsRow}>
-              <Pressable
-                onPress={handleSavePress}
-                accessibilityRole="button"
-                accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
-                accessibilityState={{ selected: saved }}>
-                <Animated.View style={[styles.saveButton, saveAnimatedStyle]}>
-                  <BookmarkIcon
-                    saved={saved}
-                    itemKey={title.id}
-                    size={22}
-                    color={THEME.colors.gold}
-                    inactiveColor={THEME.colors.navy}
-                    badgeBorderColor={THEME.colors.navy}
-                  />
-                </Animated.View>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [styles.primaryCta, pressed && styles.pressed]}
-                onPress={handlePrimaryWatchPress}
-                accessibilityRole="button"
-                accessibilityState={hasMultipleWatchOptions ? { expanded: streamingDrawerOpen } : undefined}
-                accessibilityLabel={
-                  hasMultipleWatchOptions
-                    ? orderedUserSubscriptions.length > 1
-                      ? 'Assistir em um dos seus streamings'
-                      : 'Escolher onde assistir'
-                    : `Assistir no ${primaryProvider}`
-                }>
-                {!hasMultipleWatchOptions && <ServiceLogo name={primaryProvider} size={22} />}
-                <AppText
-                  peso="forte"
-                  numberOfLines={2}
-                  style={[
-                    styles.primaryCtaText,
-                    hasMultipleWatchOptions && styles.primaryCtaMultiText,
-                  ]}>
-                  {hasMultipleWatchOptions
-                    ? orderedUserSubscriptions.length > 1
-                      ? 'Assistir em um dos seus streamings'
-                      : 'Escolha onde assistir'
-                    : `Assistir no ${primaryProvider}`}
-                </AppText>
-                {hasMultipleWatchOptions ? (
-                  <Animated.View style={drawerChevronAnimatedStyle}>
-                    <MaterialIcons name="chevron-right" size={21} color={THEME.colors.navy} />
+          <View style={styles.actionsBlock}>
+            <View>
+              <View style={styles.primaryActionsRow}>
+                <Pressable
+                  onPress={handleSavePress}
+                  accessibilityRole="button"
+                  accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
+                  accessibilityState={{ selected: saved }}>
+                  <Animated.View style={[styles.saveButton, saveAnimatedStyle]}>
+                    <BookmarkIcon
+                      saved={saved}
+                      itemKey={title.id}
+                      size={22}
+                      color={THEME.colors.gold}
+                      inactiveColor={THEME.colors.navy}
+                      badgeBorderColor={THEME.colors.navy}
+                    />
                   </Animated.View>
-                ) : (
-                  <MaterialIcons name="open-in-new" size={18} color={THEME.colors.navy} />
-                )}
-              </Pressable>
-            </View>
+                </Pressable>
 
-            {hasMultipleWatchOptions && streamingDrawerOpen && (
-              <Animated.View
-                entering={reducedMotion ? undefined : FadeIn.duration(140)}
-                style={styles.streamingDrawer}>
-                <AppText tipo="legenda" peso="forte" style={styles.streamingDrawerLabel}>
-                  Escolha qual app abrir:
-                </AppText>
-                <View style={styles.streamingDrawerList}>
-                  {watchOptions.map((option) => (
-                    <Pressable
-                      key={option.provider}
-                      style={({ pressed }) => [styles.streamingOptionRow, pressed && styles.pressed]}
-                      onPress={() => handleOpenProvider(option.provider)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Abrir no ${option.provider}`}>
-                      <ServiceLogo name={option.provider} size={28} />
-                      <View style={styles.streamingOptionCopy}>
-                        <AppText tipo="legenda" peso="forte" style={styles.streamingOptionName}>
-                          Abrir no {option.provider}
-                        </AppText>
-                        {option.monthlyPrice !== null && (
-                          <AppText tipo="legenda" tabular style={styles.streamingOptionMeta}>
-                            Incluído · {formatCurrency(option.monthlyPrice)}/mês
-                          </AppText>
-                        )}
-                      </View>
-                      <MaterialIcons name="open-in-new" size={18} color={THEME.colors.accentText} />
-                    </Pressable>
-                  ))}
+                <Pressable
+                  style={({ pressed }) => [styles.primaryCta, pressed && styles.pressed]}
+                  onPress={handlePrimaryWatchPress}
+                  accessibilityRole="button"
+                  accessibilityState={hasMultipleWatchOptions ? { expanded: streamingDrawerOpen } : undefined}
+                  accessibilityLabel={
+                    hasMultipleWatchOptions
+                      ? orderedUserSubscriptions.length > 1
+                        ? 'Assistir em um dos seus streamings'
+                        : 'Escolher onde assistir'
+                      : `Assistir no ${primaryProvider}`
+                  }>
+                  {!hasMultipleWatchOptions && <ServiceLogo name={primaryProvider} size={22} />}
+                  <AppText
+                    peso="forte"
+                    numberOfLines={2}
+                    style={[
+                      styles.primaryCtaText,
+                      hasMultipleWatchOptions && styles.primaryCtaMultiText,
+                    ]}>
+                    {hasMultipleWatchOptions
+                      ? orderedUserSubscriptions.length > 1
+                        ? 'Assistir em um dos seus streamings'
+                        : 'Escolha onde assistir'
+                      : `Assistir no ${primaryProvider}`}
+                  </AppText>
+                  {hasMultipleWatchOptions ? (
+                    <Animated.View style={drawerChevronAnimatedStyle}>
+                      <MaterialIcons name="chevron-right" size={21} color={THEME.colors.navy} />
+                    </Animated.View>
+                  ) : (
+                    <MaterialIcons name="open-in-new" size={18} color={THEME.colors.navy} />
+                  )}
+                </Pressable>
+              </View>
+
+              <CollapsibleSection
+                key={`drawer-${title.id}`}
+                expanded={hasMultipleWatchOptions && streamingDrawerOpen}
+                slideOffset={-8}
+                openDuration={260}
+                closeDuration={200}
+                contentContainerStyle={styles.streamingDrawerSpacer}
+                onOpenEnd={handleDrawerOpenEnd}>
+                <View style={styles.streamingDrawer}>
+                  <AppText tipo="legenda" peso="forte" style={styles.streamingDrawerLabel}>
+                    Escolha qual app abrir:
+                  </AppText>
+                  <View style={styles.streamingDrawerList}>
+                    {watchOptions.map((option, index) => (
+                      <Animated.View
+                        key={option.provider}
+                        entering={
+                          reducedMotion
+                            ? undefined
+                            : FadeIn.delay(Math.min(index, 4) * 35).duration(180)
+                        }>
+                        <Pressable
+                          style={({ pressed }) => [styles.streamingOptionRow, pressed && styles.pressed]}
+                          onPress={() => handleOpenProvider(option.provider)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Abrir no ${option.provider}`}>
+                          <ServiceLogo name={option.provider} size={28} />
+                          <View style={styles.streamingOptionCopy}>
+                            <AppText tipo="legenda" peso="forte" style={styles.streamingOptionName}>
+                              Abrir no {option.provider}
+                            </AppText>
+                            {option.monthlyPrice !== null && (
+                              <AppText tipo="legenda" tabular style={styles.streamingOptionMeta}>
+                                Incluído · {formatCurrency(option.monthlyPrice)}/mês
+                              </AppText>
+                            )}
+                          </View>
+                          <MaterialIcons name="open-in-new" size={18} color={THEME.colors.accentText} />
+                        </Pressable>
+                      </Animated.View>
+                    ))}
+                  </View>
                 </View>
-              </Animated.View>
-            )}
+              </CollapsibleSection>
+            </View>
 
             {(onMarkWatched || onDrawAnother) && (
               <View style={styles.secondaryActionsRow}>
@@ -821,7 +829,7 @@ export function TitleDetailCard({
                 )}
               </View>
             )}
-          </Animated.View>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -1015,6 +1023,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  ratingTooltipSpacer: {
+    paddingBottom: THEME.spacing.lg,
+  },
   ratingTooltip: {
     borderRadius: THEME.radius.md,
     borderWidth: 1,
@@ -1022,7 +1033,6 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.bgSubtle,
     paddingHorizontal: THEME.spacing.lg,
     paddingVertical: THEME.spacing.base,
-    marginBottom: THEME.spacing.lg,
     gap: THEME.spacing.xs,
   },
   ratingTooltipHeader: {
@@ -1046,11 +1056,13 @@ const styles = StyleSheet.create({
     fontSize: THEME.fontSizes.caption,
     lineHeight: THEME.lineHeights.caption,
   },
+  allProvidersSpacer: {
+    paddingBottom: THEME.spacing.lg,
+  },
   allProvidersRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: THEME.spacing.sm,
-    marginBottom: THEME.spacing.lg,
   },
   providerPill: {
     flexDirection: 'row',
@@ -1099,10 +1111,6 @@ const styles = StyleSheet.create({
     color: THEME.colors.textBody,
     fontSize: THEME.fontSizes.body,
     lineHeight: THEME.lineHeights.sub,
-    marginBottom: THEME.spacing.xxl,
-  },
-  synopsisWithToggle: {
-    marginBottom: THEME.spacing.xs,
   },
   expandButton: {
     minHeight: THEME.touchTarget.min,
@@ -1110,6 +1118,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: THEME.spacing.xs,
+    marginTop: THEME.spacing.xs,
     marginBottom: THEME.spacing.md,
   },
   expandButtonText: {
@@ -1154,6 +1163,9 @@ const styles = StyleSheet.create({
     fontSize: THEME.fontSizes.bodyMd,
     lineHeight: THEME.lineHeights.bodySm,
     textAlign: 'center',
+  },
+  streamingDrawerSpacer: {
+    paddingTop: THEME.spacing.base,
   },
   streamingDrawer: {
     borderRadius: THEME.radius.lg,

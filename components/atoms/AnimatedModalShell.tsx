@@ -426,15 +426,11 @@ export function AnimatedModalShell({
         />
       )}
 
-      {layoutTransition ? (
-        <Animated.View
-          layout={layoutTransition}
-          style={[styles.layoutWrapper, { maxWidth: resolvedMaxWidth, maxHeight: resolvedMaxHeight }]}>
-          {cardNode}
-        </Animated.View>
-      ) : (
-        cardNode
-      )}
+      <Animated.View
+        layout={layoutTransition}
+        style={[styles.layoutWrapper, { maxWidth: resolvedMaxWidth, maxHeight: resolvedMaxHeight }]}>
+        {cardNode}
+      </Animated.View>
     </View>
   );
 

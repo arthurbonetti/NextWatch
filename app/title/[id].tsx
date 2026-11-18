@@ -1,5 +1,4 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -8,7 +7,6 @@ import Animated, {
   Easing,
   FadeIn,
   interpolateColor,
-  LinearTransition,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useReducedMotion,
@@ -19,6 +17,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
+import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
+import { ExpandableText } from '@/components/atoms/ExpandableText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { RatingInfoSheet } from '@/components/organisms/RatingInfoSheet';
 import { CastCarousel } from '@/components/organisms/TitleDetails/CastCarousel';
@@ -50,8 +50,6 @@ import {
 } from '@/services/tmdb';
 import { formatCount } from '@/utils/format';
 import { triggerLightImpactHaptic, triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
-
-const SYNOPSIS_PREVIEW_LIMIT = 280;
 
 export default function TitleDetailsScreen() {
   const { user, token, authReady } = useAuth();
@@ -122,7 +120,10 @@ export default function TitleDetailsScreen() {
         ? streamingDrawerOpen
           ? 90
           : 0
-        : withTiming(streamingDrawerOpen ? 90 : 0, { duration: 150 }),
+        : withTiming(streamingDrawerOpen ? 90 : 0, {
+            duration: 240,
+            easing: Easing.bezier(0.22, 1, 0.36, 1),
+          }),
     );
   }, [drawerChevronRotation, reducedMotion, streamingDrawerOpen]);
 
@@ -211,7 +212,6 @@ export default function TitleDetailsScreen() {
   const voteCount = richDetails?.voteCount ?? title.voteCount ?? null;
   const formattedVotes = typeof voteCount === 'number' && voteCount > 0 ? formatCount(voteCount) : null;
   const synopsisText = title.synopsis.trim() || 'Sinopse indisponível para este título no momento.';
-  const isLongSynopsis = synopsisText.length > SYNOPSIS_PREVIEW_LIMIT;
   const isSerialTitle = title.kind === 'Série' || title.kind === 'Anime';
   // shortcut: reuses season 0 / ep 1 in user_series_progress for movies; split into its own column only if partial movie timestamps are ever added
   const movieWatched = !isSerialTitle && seriesProgress.isEpisodeWatched(0, 1);
@@ -408,55 +408,29 @@ export default function TitleDetailsScreen() {
             </View>
           )}
 
-          <Animated.View
-            layout={reducedMotion ? undefined : LinearTransition.duration(200)}
-            style={styles.synopsisSection}>
+          <View style={styles.synopsisSection}>
             <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>
               Sinopse
             </AppText>
 
-            <View style={styles.synopsisBox}>
-              <AppText
-                tipo="texto"
-                style={styles.synopsisText}
-                numberOfLines={isLongSynopsis && !synopsisExpanded ? 4 : undefined}>
-                {synopsisText}
-              </AppText>
-              {isLongSynopsis && !synopsisExpanded && (
-                <LinearGradient
-                  colors={[
-                    THEME.colors.canvasFadeTransparent,
-                    THEME.colors.canvasFadeMid,
-                    THEME.colors.bgCanvas,
-                  ]}
-                  locations={[0, 0.55, 1]}
-                  style={styles.synopsisFade}
-                  pointerEvents="none"
-                />
-              )}
-            </View>
-
-            {isLongSynopsis && (
-              <Pressable
-                onPress={() => {
-                  triggerSelectionHaptic();
-                  setSynopsisExpanded((prev) => !prev);
-                }}
-                style={({ pressed }) => [styles.expandButton, pressed && styles.pressed]}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={synopsisExpanded ? 'Mostrar menos da sinopse' : 'Mostrar mais da sinopse'}>
-                <AppText tipo="legenda" peso="forte" style={styles.expandButtonText}>
-                  {synopsisExpanded ? 'Mostrar menos' : 'Mostrar mais'}
-                </AppText>
-                <MaterialIcons
-                  name={synopsisExpanded ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
-                  size={17}
-                  color={THEME.colors.accentText}
-                />
-              </Pressable>
-            )}
-          </Animated.View>
+            <ExpandableText
+              key={title.id}
+              text={synopsisText}
+              expanded={synopsisExpanded}
+              onToggle={() => {
+                triggerSelectionHaptic();
+                setSynopsisExpanded((prev) => !prev);
+              }}
+              collapsedLines={4}
+              fadeColor={THEME.colors.bgCanvas}
+              textStyle={styles.synopsisText}
+              expandAccessibilityLabel="Mostrar mais da sinopse"
+              collapseAccessibilityLabel="Mostrar menos da sinopse"
+              buttonStyle={styles.expandButton}
+              buttonTextStyle={styles.expandButtonText}
+              chevronSize={17}
+            />
+          </View>
 
           <StreamingAvailabilitySection
             services={allServices}
@@ -583,31 +557,42 @@ export default function TitleDetailsScreen() {
           styles.fixedFooter,
           { paddingBottom: Math.max(insets.bottom, THEME.spacing.md) },
         ]}>
-        {streamingDrawerOpen && hasMultipleWatchOptions && (
-          <Animated.View
-            entering={reducedMotion ? undefined : FadeIn.duration(160)}
-            style={styles.streamingDrawer}>
+        <CollapsibleSection
+          key={`footer-drawer-${title.id}`}
+          expanded={streamingDrawerOpen && hasMultipleWatchOptions}
+          slideOffset={8}
+          openDuration={240}
+          closeDuration={190}
+          contentContainerStyle={styles.streamingDrawerSpacer}>
+          <View style={styles.streamingDrawer}>
             <AppText tipo="legenda" peso="forte" style={styles.drawerTitle}>
               Escolha onde abrir
             </AppText>
             <View style={styles.drawerButtonsRow}>
-              {watchOptions.map((serviceName) => (
-                <Pressable
+              {watchOptions.map((serviceName, index) => (
+                <Animated.View
                   key={serviceName}
-                  onPress={() => handleOpenService(serviceName)}
-                  style={({ pressed }) => [styles.drawerServiceChip, pressed && styles.pressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Assistir no ${serviceName}`}>
-                  <ServiceLogo name={serviceName} size={22} />
-                  <AppText tipo="legenda" peso="forte" style={styles.drawerServiceName}>
-                    {serviceName}
-                  </AppText>
-                  <MaterialIcons name="open-in-new" size={13} color={THEME.colors.textMuted} />
-                </Pressable>
+                  entering={
+                    reducedMotion
+                      ? undefined
+                      : FadeIn.delay(Math.min(index, 4) * 30).duration(170)
+                  }>
+                  <Pressable
+                    onPress={() => handleOpenService(serviceName)}
+                    style={({ pressed }) => [styles.drawerServiceChip, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Assistir no ${serviceName}`}>
+                    <ServiceLogo name={serviceName} size={22} />
+                    <AppText tipo="legenda" peso="forte" style={styles.drawerServiceName}>
+                      {serviceName}
+                    </AppText>
+                    <MaterialIcons name="open-in-new" size={13} color={THEME.colors.textMuted} />
+                  </Pressable>
+                </Animated.View>
               ))}
             </View>
-          </Animated.View>
-        )}
+          </View>
+        </CollapsibleSection>
 
         <View style={styles.footerActionsRow}>
           <Animated.View style={[styles.saveButtonShell, saveButtonAnimatedStyle]}>
@@ -783,21 +768,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 2,
   },
-  synopsisBox: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
   synopsisText: {
     color: THEME.colors.textStrongBody,
     fontSize: 15,
     lineHeight: 23,
-  },
-  synopsisFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 30,
   },
   expandButton: {
     flexDirection: 'row',
@@ -805,6 +779,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 3,
     paddingVertical: 4,
+    marginTop: THEME.spacing.xs,
   },
   expandButtonText: {
     color: THEME.colors.accentText,
@@ -879,10 +854,12 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.bgCard,
     paddingHorizontal: THEME.spacing.lg,
     paddingTop: THEME.spacing.sm,
-    gap: THEME.spacing.sm,
     width: '100%',
     maxWidth: 640,
     alignSelf: 'center',
+  },
+  streamingDrawerSpacer: {
+    paddingBottom: THEME.spacing.sm,
   },
   streamingDrawer: {
     backgroundColor: THEME.colors.bgSubtle,

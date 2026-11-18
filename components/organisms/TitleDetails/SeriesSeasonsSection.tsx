@@ -4,7 +4,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
-  LinearTransition,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -12,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
+import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import { THEME, withAlpha } from '@/constants/theme';
 import {
@@ -67,6 +67,25 @@ function SeasonAccordion({
   const episodes = cachedEpisodes ?? (loadedKey === requestKey ? fetchedEpisodes : null);
   const loadingEpisodes = expanded && episodes === null;
 
+  const chevronRotation = useSharedValue(expanded ? 180 : 0);
+
+  useEffect(() => {
+    chevronRotation.set(
+      reducedMotion
+        ? expanded
+          ? 180
+          : 0
+        : withTiming(expanded ? 180 : 0, {
+            duration: 240,
+            easing: Easing.bezier(0.22, 1, 0.36, 1),
+          }),
+    );
+  }, [chevronRotation, expanded, reducedMotion]);
+
+  const chevronAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${chevronRotation.get()}deg` }],
+  }));
+
   useEffect(() => {
     if (!expanded) return;
     const cached = getCachedTvSeasonEpisodes(titleId, season.seasonNumber);
@@ -117,8 +136,7 @@ function SeasonAccordion({
       : null;
 
   return (
-    <Animated.View
-      layout={reducedMotion ? undefined : LinearTransition.duration(200)}
+    <View
       style={[
         styles.seasonCard,
         completed && { borderColor: withAlpha(THEME.colors.successText, 0.42) },
@@ -133,11 +151,9 @@ function SeasonAccordion({
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           accessibilityLabel={`${seasonLabel}, ${season.episodeCount} episódios`}>
-          <MaterialIcons
-            name={expanded ? 'expand-less' : 'expand-more'}
-            size={20}
-            color={THEME.colors.textSecondary}
-          />
+          <Animated.View style={chevronAnimatedStyle}>
+            <MaterialIcons name="expand-more" size={20} color={THEME.colors.textSecondary} />
+          </Animated.View>
           <View style={styles.seasonInfo}>
             <View style={styles.seasonTitleRow}>
               <AppText tipo="texto" peso="forte" style={styles.seasonTitle} numberOfLines={1}>
@@ -192,10 +208,12 @@ function SeasonAccordion({
         </Pressable>
       </View>
 
-      {expanded && (
-        <Animated.View
-          entering={reducedMotion ? undefined : FadeIn.duration(180)}
-          style={styles.episodesList}>
+      <CollapsibleSection
+        expanded={expanded}
+        slideOffset={-6}
+        openDuration={250}
+        closeDuration={200}>
+        <View style={styles.episodesList}>
           {loadingEpisodes ? (
             <View style={styles.episodesSkeleton}>
               <SkeletonBox width="100%" height={36} borderRadius={THEME.radius.sm} />
@@ -203,56 +221,62 @@ function SeasonAccordion({
               <SkeletonBox width="85%" height={36} borderRadius={THEME.radius.sm} />
             </View>
           ) : episodes && episodes.length > 0 ? (
-            episodes.map((ep) => {
-              const watched = isEpisodeWatched(season.seasonNumber, ep.episodeNumber);
-              const epRating =
-                typeof ep.voteAverage === 'number' && ep.voteAverage > 0
-                  ? ep.voteAverage.toFixed(1).replace('.', ',')
-                  : null;
-              return (
-                <Pressable
-                  key={ep.episodeNumber}
-                  onPress={() => {
-                    triggerSelectionHaptic();
-                    onToggleEpisode(season.seasonNumber, ep.episodeNumber);
-                  }}
-                  style={({ pressed }) => [
-                    styles.episodeRow,
-                    watched && styles.episodeRowWatched,
-                    pressed && styles.pressed,
-                  ]}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: watched }}
-                  accessibilityLabel={`Episódio ${ep.episodeNumber}: ${ep.name}`}>
-                  <MaterialIcons
-                    name={watched ? 'check-circle' : 'radio-button-unchecked'}
-                    size={19}
-                    color={watched ? THEME.colors.successText : THEME.colors.textMuted}
-                  />
-                  <View style={styles.episodeTextCol}>
-                    <AppText
-                      tipo="legenda"
-                      peso="forte"
-                      style={[styles.episodeName, watched && styles.episodeNameWatched]}
-                      numberOfLines={1}>
-                      {ep.episodeNumber}. {ep.name}
-                    </AppText>
-                    {(ep.runtime || epRating) && (
-                      <AppText tipo="legenda" style={styles.episodeSub}>
-                        {[
-                          ep.runtime ? `${ep.runtime}min` : null,
-                          epRating ? `★ ${epRating}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
+            <Animated.View
+              entering={reducedMotion ? undefined : FadeIn.duration(200)}
+              style={styles.episodesItems}>
+              {episodes.map((ep) => {
+                const watched = isEpisodeWatched(season.seasonNumber, ep.episodeNumber);
+                const epRating =
+                  typeof ep.voteAverage === 'number' && ep.voteAverage > 0
+                    ? ep.voteAverage.toFixed(1).replace('.', ',')
+                    : null;
+                return (
+                  <Pressable
+                    key={ep.episodeNumber}
+                    onPress={() => {
+                      triggerSelectionHaptic();
+                      onToggleEpisode(season.seasonNumber, ep.episodeNumber);
+                    }}
+                    style={({ pressed }) => [
+                      styles.episodeRow,
+                      watched && styles.episodeRowWatched,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: watched }}
+                    accessibilityLabel={`Episódio ${ep.episodeNumber}: ${ep.name}`}>
+                    <MaterialIcons
+                      name={watched ? 'check-circle' : 'radio-button-unchecked'}
+                      size={19}
+                      color={watched ? THEME.colors.successText : THEME.colors.textMuted}
+                    />
+                    <View style={styles.episodeTextCol}>
+                      <AppText
+                        tipo="legenda"
+                        peso="forte"
+                        style={[styles.episodeName, watched && styles.episodeNameWatched]}
+                        numberOfLines={1}>
+                        {ep.episodeNumber}. {ep.name}
                       </AppText>
-                    )}
-                  </View>
-                </Pressable>
-              );
-            })
+                      {(ep.runtime || epRating) && (
+                        <AppText tipo="legenda" style={styles.episodeSub}>
+                          {[
+                            ep.runtime ? `${ep.runtime}min` : null,
+                            epRating ? `★ ${epRating}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </AppText>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
           ) : (
-            <View style={styles.fallbackEpisodesWrap}>
+            <Animated.View
+              entering={reducedMotion ? undefined : FadeIn.duration(200)}
+              style={styles.fallbackEpisodesWrap}>
               {fallbackEpisodeNumbers.map((epNum) => {
                 const watched = isEpisodeWatched(season.seasonNumber, epNum);
                 return (
@@ -282,11 +306,11 @@ function SeasonAccordion({
                   </Pressable>
                 );
               })}
-            </View>
+            </Animated.View>
           )}
-        </Animated.View>
-      )}
-    </Animated.View>
+        </View>
+      </CollapsibleSection>
+    </View>
   );
 }
 
@@ -520,6 +544,9 @@ const styles = StyleSheet.create({
     paddingVertical: THEME.spacing.sm,
     gap: 6,
     backgroundColor: THEME.colors.bgSubtle,
+  },
+  episodesItems: {
+    gap: 6,
   },
   episodesSkeleton: {
     gap: 6,
