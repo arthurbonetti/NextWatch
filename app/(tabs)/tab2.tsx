@@ -450,7 +450,7 @@ export default function ExploreScreen() {
         visible={filtersVisible}
         onClose={() => setFiltersVisible(false)}
         variant="sheet"
-        maxHeight="84%"
+        expandableSheet
         backdropAccessibilityLabel="Fechar filtros">
         <View style={styles.sheetHeader}>
               <View>
@@ -470,18 +470,14 @@ export default function ExploreScreen() {
                     <AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar</AppText>
                   </Pressable>
                 )}
-                <Pressable
-                  onPress={() => setFiltersVisible(false)}
-                  hitSlop={8}
-                  style={({ pressed }) => [styles.sheetCloseButton, pressed && styles.pressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Fechar">
-                  <MaterialIcons name="close" size={20} color="#182230" />
-                </Pressable>
               </View>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator style={styles.sheetScroll} contentContainerStyle={styles.sheetScrollContent}>
+            <ScrollView
+              showsVerticalScrollIndicator
+              bounces={false}
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetScrollContent}>
               <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>ORDENAÇÃO</AppText>
               <View style={styles.filterChips}>
                 {SORT_OPTIONS.map((option) => {
@@ -704,7 +700,6 @@ const styles = StyleSheet.create({
   sheetTitle: { color: '#182230', fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
   sheetHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   clearHeaderBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 12, backgroundColor: '#f1eee7' },
-  sheetCloseButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1eee7', alignItems: 'center', justifyContent: 'center' },
   sheetScroll: { flexShrink: 1, marginBottom: 14 },
   sheetScrollContent: { paddingBottom: 6 },
   applyButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', alignItems: 'center', justifyContent: 'center' },

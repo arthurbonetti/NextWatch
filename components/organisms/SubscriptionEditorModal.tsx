@@ -120,8 +120,8 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
       visible={visible}
       onClose={onClose}
       variant="sheet"
+      expandableSheet
       keyboardAvoiding
-      maxHeight="94%"
       backdropAccessibilityLabel="Fechar formulário">
       <ScrollView
         style={styles.formScroll}
@@ -137,14 +137,6 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
               {initialSubscription ? 'Atualize os dados' : 'Adicionar serviço'}
             </AppText>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.close, pressed && styles.pressed]}
-            onPress={onClose}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Fechar">
-            <MaterialIcons name="close" size={21} color={THEME.colors.textPrimary} />
-          </Pressable>
         </View>
 
         <AppText tipo="legenda" peso="forte" style={styles.label}>SERVIÇO DE STREAMING</AppText>
@@ -290,7 +282,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: THEME.spacing.s20 },
   eyebrow: { color: THEME.colors.accent, letterSpacing: 1.4, marginBottom: 5 },
   title: { color: THEME.colors.textPrimary, fontSize: THEME.fontSizes.title, lineHeight: THEME.lineHeights.title, letterSpacing: -0.35 },
-  close: { width: THEME.touchTarget.min, height: THEME.touchTarget.min, borderRadius: THEME.radius.full, backgroundColor: THEME.colors.bgSubtle, alignItems: 'center', justifyContent: 'center' },
   label: { color: THEME.colors.textSubtle, letterSpacing: 0.8, marginBottom: THEME.spacing.base },
   providers: { gap: THEME.spacing.md, paddingBottom: THEME.spacing.s22 },
   providerChip: { minHeight: THEME.touchTarget.min, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: THEME.colors.borderMedium, borderRadius: THEME.radius.lg, backgroundColor: THEME.colors.bgCard, paddingHorizontal: 11, paddingVertical: 9 },

@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
@@ -23,6 +23,7 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
       visible={visible}
       variant="sheet"
       onClose={onClose}
+      dragEntireSheet
       sheetStyle={styles.card}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
@@ -31,13 +32,6 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
             Fontes das avaliações
           </AppText>
         </View>
-        <Pressable
-          onPress={onClose}
-          style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Fechar informações da nota">
-          <MaterialIcons name="close" size={18} color={THEME.colors.textPrimary} />
-        </Pressable>
       </View>
 
       <View style={styles.scoreHero}>
@@ -91,7 +85,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: THEME.radius.xl,
     borderTopRightRadius: THEME.radius.xl,
     paddingHorizontal: THEME.spacing.lg,
-    paddingBottom: THEME.spacing.xxl,
     gap: THEME.spacing.md,
   },
   header: {
@@ -108,17 +101,6 @@ const styles = StyleSheet.create({
   title: {
     color: THEME.colors.textPrimary,
     fontSize: 17,
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: THEME.colors.bgSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.72,
   },
   scoreHero: {
     flexDirection: 'row',

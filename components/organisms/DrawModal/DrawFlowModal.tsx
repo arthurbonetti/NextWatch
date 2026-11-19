@@ -251,7 +251,6 @@ export function DrawFlowModal({
             onToggleHideWatched={onToggleHideWatched}
             onResetFilters={onResetFilters}
             onDraw={handleDrawPress}
-            onClose={handleClose}
           />
         </Animated.View>
       )}

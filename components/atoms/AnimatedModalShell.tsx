@@ -47,6 +47,8 @@ type AnimatedModalShellProps = {
   keyboardAvoiding?: boolean;
   showSheetHandle?: boolean;
   enableSheetDrag?: boolean;
+  expandableSheet?: boolean;
+  dragEntireSheet?: boolean;
   onSwipeExpandChange?: (expanded: boolean) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
@@ -108,6 +110,8 @@ export function AnimatedModalShell({
   keyboardAvoiding = false,
   showSheetHandle = true,
   enableSheetDrag = true,
+  expandableSheet = false,
+  dragEntireSheet = false,
   onSwipeExpandChange,
   isExpanded = false,
   onToggleExpand,
@@ -119,6 +123,7 @@ export function AnimatedModalShell({
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+  const [internalExpanded, setInternalExpanded] = useState(false);
 
   const [rendered, setRendered] = useState(visible);
   if (visible && !rendered) {
@@ -126,6 +131,17 @@ export function AnimatedModalShell({
   } else if (!visible && rendered && reducedMotion) {
     setRendered(false);
   }
+  if (!visible && internalExpanded) {
+    setInternalExpanded(false);
+  }
+
+  const effectiveExpanded = onSwipeExpandChange ? isExpanded : expandableSheet && internalExpanded;
+  const effectiveSwipeExpandChange =
+    onSwipeExpandChange ?? (expandableSheet ? setInternalExpanded : undefined);
+  const effectiveToggleExpand =
+    onToggleExpand ??
+    (expandableSheet ? () => setInternalExpanded((prev) => !prev) : undefined);
+  const effectiveLayoutAnimated = layoutAnimated || expandableSheet;
 
   const backdropOpacity = useSharedValue(0);
   const cardScale = useSharedValue(reducedMotion ? 1 : variant === 'center' ? 0.92 : 1);
@@ -287,10 +303,12 @@ export function AnimatedModalShell({
       Gesture.Pan()
         .enabled(variant === 'sheet' && enableSheetDrag && visible)
         .activeOffsetY([-6, 6])
+        .hitSlop(dragEntireSheet ? 0 : { top: 16, bottom: 36 })
         .onUpdate((event) => {
+          'worklet';
           if (event.translationY > 0) {
             translateY.set(event.translationY);
-            if (!isExpanded) {
+            if (!effectiveExpanded) {
               backdropOpacity.set(Math.max(0.2, 1 - event.translationY / 420));
             }
           } else {
@@ -298,19 +316,24 @@ export function AnimatedModalShell({
           }
         })
         .onEnd((event) => {
-          if (onSwipeExpandChange && (event.translationY < -55 || event.velocityY < -500)) {
+          'worklet';
+          if (effectiveSwipeExpandChange && (event.translationY < -55 || event.velocityY < -500)) {
             backdropOpacity.set(withTiming(1, { duration: 120 }));
             translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
-            scheduleOnRN(onSwipeExpandChange, true);
+            scheduleOnRN(effectiveSwipeExpandChange, true);
             return;
           }
-          if (onSwipeExpandChange && isExpanded && (event.translationY > 55 || event.velocityY > 450)) {
+          if (
+            effectiveSwipeExpandChange &&
+            effectiveExpanded &&
+            (event.translationY > 55 || event.velocityY > 450)
+          ) {
             backdropOpacity.set(withTiming(1, { duration: 120 }));
             translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
-            scheduleOnRN(onSwipeExpandChange, false);
+            scheduleOnRN(effectiveSwipeExpandChange, false);
             return;
           }
-          if (!isExpanded && (event.translationY > 80 || event.velocityY > 550)) {
+          if (!effectiveExpanded && (event.translationY > 80 || event.velocityY > 550)) {
             dismissedBySwipe.set(true);
             const dismissDistance = Math.max(480, Math.round(windowHeight * 0.65));
             backdropOpacity.set(
@@ -335,10 +358,11 @@ export function AnimatedModalShell({
     [
       backdropOpacity,
       dismissedBySwipe,
+      dragEntireSheet,
+      effectiveExpanded,
+      effectiveSwipeExpandChange,
       enableSheetDrag,
       handleSwipeDismiss,
-      isExpanded,
-      onSwipeExpandChange,
       translateY,
       variant,
       visible,
@@ -356,14 +380,24 @@ export function AnimatedModalShell({
   }));
 
   const resolvedMaxWidth = maxWidth ?? (variant === 'sheet' ? 640 : 460);
-  const rawMaxHeight = maxHeight ?? (variant === 'sheet' ? Math.round(windowHeight * 0.88) : '90%');
+  const expandableDefaultHeight = Math.min(Math.round(windowHeight * 0.78), 660);
+  const expandableFullHeight = Math.min(Math.round(windowHeight * 0.92), 780);
+  const rawMaxHeight =
+    maxHeight ??
+    (variant === 'sheet'
+      ? expandableSheet
+        ? effectiveExpanded
+          ? expandableFullHeight
+          : expandableDefaultHeight
+        : Math.round(windowHeight * 0.88)
+      : '90%');
   const resolvedMaxHeight =
     typeof rawMaxHeight === 'number'
       ? rawMaxHeight
       : Math.round((windowHeight * Number.parseFloat(rawMaxHeight)) / 100);
 
   const layoutTransition =
-    layoutAnimated && !reducedMotion
+    effectiveLayoutAnimated && !reducedMotion
       ? LinearTransition.springify()
           .damping(THEME.motion.layoutSpring.damping)
           .stiffness(THEME.motion.layoutSpring.stiffness)
@@ -372,18 +406,38 @@ export function AnimatedModalShell({
 
   if (!rendered) return null;
 
+  const handleNode =
+    variant === 'sheet' && showSheetHandle ? (
+      effectiveToggleExpand ? (
+        <Pressable
+          onPress={effectiveToggleExpand}
+          style={styles.dragZone}
+          accessibilityRole="button"
+          accessibilityLabel={handleAccessibilityLabel}>
+          <View style={styles.sheetHandle} />
+        </Pressable>
+      ) : (
+        <View style={styles.dragZone}>
+          <View style={styles.sheetHandle} />
+        </View>
+      )
+    ) : null;
+
+  const sheetGestureOnCard = variant === 'sheet' && enableSheetDrag && dragEntireSheet;
+  const sheetGestureOnHandle = variant === 'sheet' && enableSheetDrag && !dragEntireSheet;
+
   const cardNode = (
     <Animated.View
       style={[
         variant === 'sheet'
           ? [
               styles.sheetContainer,
+              sheetStyle,
               {
                 maxWidth: resolvedMaxWidth,
                 maxHeight: resolvedMaxHeight,
                 paddingBottom: Math.max(THEME.spacing.s24, insets.bottom + THEME.spacing.base),
               },
-              sheetStyle,
             ]
           : [
               styles.centerContainer,
@@ -395,26 +449,19 @@ export function AnimatedModalShell({
         contentContainerStyle,
         motionStyle,
       ]}>
-      {variant === 'sheet' && showSheetHandle && (
-        enableSheetDrag ? (
-          <GestureDetector gesture={panGesture}>
-            <Pressable
-              onPress={onToggleExpand}
-              disabled={!onToggleExpand}
-              style={styles.dragZone}
-              accessibilityRole={onToggleExpand ? 'button' : undefined}
-              accessibilityLabel={onToggleExpand ? handleAccessibilityLabel : undefined}>
-              <View style={styles.sheetHandle} />
-            </Pressable>
-          </GestureDetector>
-        ) : (
-          <View style={styles.dragZone}>
-            <View style={styles.sheetHandle} />
-          </View>
-        )
+      {sheetGestureOnHandle && handleNode ? (
+        <GestureDetector gesture={panGesture}>{handleNode}</GestureDetector>
+      ) : (
+        handleNode
       )}
       {children}
     </Animated.View>
+  );
+
+  const stageCard = sheetGestureOnCard ? (
+    <GestureDetector gesture={panGesture}>{cardNode}</GestureDetector>
+  ) : (
+    cardNode
   );
 
   const stageBody = (
@@ -430,7 +477,7 @@ export function AnimatedModalShell({
       <Animated.View
         layout={layoutTransition}
         style={[styles.layoutWrapper, { maxWidth: resolvedMaxWidth, maxHeight: resolvedMaxHeight }]}>
-        {cardNode}
+        {stageCard}
       </Animated.View>
     </View>
   );

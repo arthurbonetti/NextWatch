@@ -34,7 +34,6 @@ type DrawFiltersPhaseProps = {
   onToggleHideWatched: (nextValue: boolean) => void;
   onResetFilters: () => void;
   onDraw: () => void;
-  onClose: () => void;
 };
 
 const KIND_OPTIONS: { value: DrawKindFilter; label: string }[] = [
@@ -96,7 +95,6 @@ export function DrawFiltersPhase({
   onToggleHideWatched,
   onResetFilters,
   onDraw,
-  onClose,
 }: DrawFiltersPhaseProps) {
   const reducedMotion = useReducedMotion();
   const ctaScale = useSharedValue(1);
@@ -145,13 +143,6 @@ export function DrawFiltersPhase({
               </AppText>
             </Pressable>
           )}
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Fechar">
-            <MaterialIcons name="close" size={21} color={THEME.colors.textPrimary} />
-          </Pressable>
         </View>
       </View>
 
@@ -374,14 +365,6 @@ const styles = StyleSheet.create({
   resetButtonText: {
     color: THEME.colors.accentText,
     fontSize: THEME.fontSizes.bodySm,
-  },
-  closeButton: {
-    width: THEME.touchTarget.min,
-    height: THEME.touchTarget.min,
-    borderRadius: THEME.radius.full,
-    backgroundColor: THEME.colors.bgSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   description: {
     color: THEME.colors.textSecondary,
