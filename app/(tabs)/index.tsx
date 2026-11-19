@@ -152,14 +152,24 @@ export default function HomeScreen() {
               <NextWatchLogo size={38} />
               <AppText tipo="subtitulo" peso="forte" style={styles.brandTitle}>NEXTWATCH</AppText>
             </View>
-            <Pressable
-              style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-              onPress={() => router.push('/(tabs)/tab3')}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel="Abrir perfil">
-              <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
-            </Pressable>
+            <View style={styles.topbarActions}>
+              <Pressable
+                style={({ pressed }) => [styles.listsButton, pressed && styles.pressed]}
+                onPress={() => router.push('/my-list')}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Abrir Minhas Listas">
+                <MaterialIcons name="bookmark-border" size={28} color="#a3520d" />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+                onPress={() => router.push('/(tabs)/tab3')}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Abrir perfil">
+                <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
+              </Pressable>
+            </View>
           </View>
         </FadeInBlock>
 
@@ -394,6 +404,8 @@ const styles = StyleSheet.create({
   topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   brandTitle: { color: '#182230', fontSize: 17, lineHeight: 22, letterSpacing: 2.1 },
+  topbarActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  listsButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#182230', borderWidth: 2, borderColor: '#e8e2d5' },
   avatarText: { color: '#f3b43f', fontSize: 17 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.98 }] },
