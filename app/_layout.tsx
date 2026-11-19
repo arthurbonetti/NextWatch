@@ -21,7 +21,9 @@ import { CatalogProvider } from '@/contexts/CatalogContext';
 import { DrawHistoryProvider } from '@/contexts/DrawHistoryContext';
 import { MyListProvider } from '@/contexts/MyListContext';
 import { SubscriptionsProvider } from '@/contexts/SubscriptionsContext';
+import { patchWebScrollViewRejectionWarning } from '@/utils/patchWebScrollView';
 
+patchWebScrollViewRejectionWarning();
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export const unstable_settings = {
