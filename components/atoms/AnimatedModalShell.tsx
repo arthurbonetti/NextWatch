@@ -286,6 +286,7 @@ export function AnimatedModalShell({
     () =>
       Gesture.Pan()
         .enabled(variant === 'sheet' && enableSheetDrag && visible)
+        .activeOffsetY([-6, 6])
         .onUpdate((event) => {
           if (event.translationY > 0) {
             translateY.set(event.translationY);
@@ -309,7 +310,7 @@ export function AnimatedModalShell({
             scheduleOnRN(onSwipeExpandChange, false);
             return;
           }
-          if (!isExpanded && (event.translationY > 110 || event.velocityY > 650)) {
+          if (!isExpanded && (event.translationY > 80 || event.velocityY > 550)) {
             dismissedBySwipe.set(true);
             const dismissDistance = Math.max(480, Math.round(windowHeight * 0.65));
             backdropOpacity.set(
@@ -513,7 +514,7 @@ const styles = StyleSheet.create({
   },
   dragZone: {
     paddingTop: THEME.spacing.lg,
-    paddingBottom: THEME.spacing.md,
+    paddingBottom: THEME.spacing.base,
     alignItems: 'center',
     justifyContent: 'center',
   },

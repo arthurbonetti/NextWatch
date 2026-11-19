@@ -43,15 +43,23 @@ export default function ProfileTabScreen() {
     () => activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0),
     [activeSubscriptions],
   );
-  const watchedCount = useMemo(() => {
+  const watchedIds = useMemo(() => {
     const ids = new Set(
       history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId),
     );
     for (const id of progressTitleIds) {
       ids.add(id);
     }
-    return ids.size;
+    return ids;
   }, [history, progressTitleIds]);
+  const watchedCount = watchedIds.size;
+  const myListsCount = useMemo(() => {
+    const ids = new Set(watchedIds);
+    for (const title of savedTitles) {
+      ids.add(title.id);
+    }
+    return ids.size;
+  }, [savedTitles, watchedIds]);
   const previewHistory = useMemo(
     () => history.slice(0, PREVIEW_HISTORY_LIMIT),
     [history],
@@ -106,10 +114,10 @@ export default function ProfileTabScreen() {
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             onPress={() => router.push('/my-list')}
             accessibilityRole="button">
-            <MaterialIcons name="bookmark" size={22} color="#a3520d" />
-            <AppText peso="forte" style={styles.rowText}>Minha Lista</AppText>
+            <MaterialIcons name="bookmarks" size={22} color="#a3520d" />
+            <AppText peso="forte" style={styles.rowText}>Minhas Listas</AppText>
             <AppText tipo="legenda" peso="forte" tabular style={styles.rowCount}>
-              {savedTitles.length}
+              {myListsCount}
             </AppText>
             <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
           </Pressable>

@@ -77,6 +77,14 @@ export type MediaTitle = {
   voteCount?: number;
 };
 
+export function isSerialTitle(title: Pick<MediaTitle, 'id' | 'kind' | 'icon'>): boolean {
+  return (
+    (title.kind === 'Série' || title.kind === 'Anime') &&
+    !title.id.startsWith('tmdb-movie-') &&
+    title.icon === 'live-tv'
+  );
+}
+
 const VALID_MEDIA_KINDS: ReadonlySet<string> = new Set<MediaKind>(['Filme', 'Série', 'Anime']);
 const VALID_MEDIA_ICONS: ReadonlySet<string> = new Set<MediaIcon>(['movie', 'live-tv', 'theaters']);
 const SAFE_HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;

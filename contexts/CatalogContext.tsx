@@ -157,6 +157,7 @@ export function CatalogProvider({ children }: PropsWithChildren) {
 
   const titlesById = useMemo(() => {
     const map = new Map<string, MediaTitle>();
+    for (const title of CATALOG) map.set(title.id, title);
     for (const title of searchedTitles) map.set(title.id, title);
     for (const title of activeTitles) map.set(title.id, title);
     return map;

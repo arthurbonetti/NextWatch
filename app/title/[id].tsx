@@ -32,6 +32,7 @@ import {
   getGenreIcon,
   getMetacriticScore,
   getTitleServices,
+  isSerialTitle as checkIsSerialTitle,
   MediaTitle,
 } from '@/constants/catalog';
 import { openStreamingService } from '@/constants/subscriptions';
@@ -43,6 +44,7 @@ import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 import { useSeriesProgress } from '@/hooks/useSeriesProgress';
 import {
   fetchRichTitleDetails,
+  fetchTitleById,
   findCachedRelatedTitle,
   getCachedRichTitleDetails,
   getCachedTitleDuration,
@@ -62,11 +64,22 @@ export default function TitleDetailsScreen() {
 
   const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
   const [savedSnapshot, setSavedSnapshot] = useState<MediaTitle | null>(null);
+  const [resolvedFallback, setResolvedFallback] = useState<{
+    id: string;
+    title: MediaTitle | null;
+    done: boolean;
+  }>({ id: '', title: null, done: false });
 
   const liveTitle = normalizedId
     ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId) ?? findCachedRelatedTitle(normalizedId))
     : undefined;
-  const title = liveTitle ?? (savedSnapshot?.id === normalizedId ? savedSnapshot : undefined);
+  const fallbackTitle =
+    resolvedFallback.id === normalizedId ? (resolvedFallback.title ?? undefined) : undefined;
+  const title =
+    liveTitle ?? (savedSnapshot?.id === normalizedId ? savedSnapshot : undefined) ?? fallbackTitle;
+  const resolvingFallback = Boolean(
+    normalizedId && !title && (resolvedFallback.id !== normalizedId || !resolvedFallback.done),
+  );
   const saved = title ? isSaved(title.id) : false;
 
   const [richState, setRichState] = useState<{ id: string; details: RichTitleDetails | null }>({
@@ -88,6 +101,20 @@ export default function TitleDetailsScreen() {
   const richDetails =
     cachedRichDetails ?? (title && richState.id === title.id ? richState.details : null);
   const loadingRichDetails = Boolean(title && !richDetails);
+
+  useEffect(() => {
+    if (!normalizedId || liveTitle || savedSnapshot?.id === normalizedId) return;
+
+    let cancelled = false;
+    void fetchTitleById(normalizedId).then((fetched) => {
+      if (cancelled) return;
+      setResolvedFallback({ id: normalizedId, title: fetched, done: true });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [liveTitle, normalizedId, savedSnapshot?.id]);
 
   useEffect(() => {
     if (!title) return;
@@ -184,7 +211,9 @@ export default function TitleDetailsScreen() {
         <View style={styles.notFound}>
           <MaterialIcons name="movie-filter" size={40} color={THEME.colors.accentDeep} />
           <AppText tipo="subtitulo" peso="forte" style={styles.notFoundTitle}>
-            {status === 'loading' || !storageReady ? 'Carregando título…' : 'Título não encontrado'}
+            {status === 'loading' || !storageReady || resolvingFallback
+              ? 'Carregando título…'
+              : 'Título não encontrado'}
           </AppText>
           <Pressable
             onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/tab2'))}
@@ -198,21 +227,21 @@ export default function TitleDetailsScreen() {
     );
   }
 
+  const isSerialTitle = checkIsSerialTitle(title);
   const accentColor = resolveTitleAccentColor(title.color);
   const cachedDuration = getCachedTitleDuration(title);
   const rawDuration = richDetails?.duration ?? cachedDuration ?? title.duration;
   const safeDuration =
     rawDuration && rawDuration !== 'Duração não informada' && rawDuration !== title.kind
       ? rawDuration
-      : title.kind === 'Filme'
-        ? 'Filme'
-        : '1 temporada';
+      : isSerialTitle
+        ? '1 temporada'
+        : 'Filme';
 
   const metacritic = getMetacriticScore(title);
   const voteCount = richDetails?.voteCount ?? title.voteCount ?? null;
   const formattedVotes = typeof voteCount === 'number' && voteCount > 0 ? formatCount(voteCount) : null;
   const synopsisText = title.synopsis.trim() || 'Sinopse indisponível para este título no momento.';
-  const isSerialTitle = title.kind === 'Série' || title.kind === 'Anime';
   // shortcut: reuses season 0 / ep 1 in user_series_progress for movies; split into its own column only if partial movie timestamps are ever added
   const movieWatched = !isSerialTitle && seriesProgress.isEpisodeWatched(0, 1);
   const hasMultipleWatchOptions = watchOptions.length > 1;
@@ -600,7 +629,7 @@ export default function TitleDetailsScreen() {
               onPress={handleToggleSaved}
               style={({ pressed }) => [styles.saveButtonInner, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}>
+              accessibilityLabel={saved ? 'Remover da sua fila' : 'Salvar na sua fila'}>
               <BookmarkIcon
                 saved={saved}
                 itemKey={title.id}
@@ -615,7 +644,7 @@ export default function TitleDetailsScreen() {
                 peso="forte"
                 style={[styles.saveButtonText, saved && styles.saveButtonTextActive]}
                 numberOfLines={1}>
-                {saved ? 'Na sua lista' : 'Salvar'}
+                {saved ? 'Na sua Fila' : 'Salvar'}
               </AppText>
             </Pressable>
           </Animated.View>

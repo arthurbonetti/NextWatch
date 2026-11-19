@@ -8,8 +8,11 @@ import {
   supabaseRestFetch,
   type SupabaseOutcome,
 } from '@/services/authApi';
-
-type SeriesProgressMap = Record<string, number[]>;
+import {
+  mergeWatchedProgress,
+  type RemoteProgressEntry,
+  type SeriesProgressMap,
+} from '@/utils/watchedProgress';
 
 type DbSeriesProgressRow = {
   user_id: string;
@@ -330,24 +333,40 @@ export function useSeriesProgress(
   };
 }
 
-/** Lista IDs de filmes/séries que possuem ao menos um registro marcado em progresso (local + nuvem). */
+const EMPTY_BY_TITLE: Record<string, SeriesProgressMap> = {};
+
+/** Lista IDs e mapas de progresso de obras com registros marcados (local + nuvem). */
 export function useWatchedProgressIds(userId: string | null, token: string | null) {
   const scope = userId ?? 'guest';
   const localPrefix = `${BASE_STORAGE_KEY}:${scope}:`;
-  const [state, setState] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] });
+  const pendingPrefix = `${PENDING_SYNC_PREFIX}:${scope}:`;
+  const requestIdRef = useRef(0);
+  const [state, setState] = useState<{
+    scope: string;
+    ids: string[];
+    byTitleId: Record<string, SeriesProgressMap>;
+    ready: boolean;
+  }>({ scope, ids: [], byTitleId: EMPTY_BY_TITLE, ready: false });
 
   const refresh = useCallback(async () => {
-    const collected = new Set<string>();
+    const requestId = ++requestIdRef.current;
+    const localById: Record<string, SeriesProgressMap> = {};
+    const pendingIds = new Set<string>();
 
     try {
       const allKeys = await AsyncStorage.getAllKeys();
-      const matchingKeys = allKeys.filter((k) => k.startsWith(localPrefix));
-      if (matchingKeys.length > 0) {
-        const entries = await AsyncStorage.multiGet(matchingKeys);
+      const relevantKeys = allKeys.filter(
+        (k) => k.startsWith(localPrefix) || k.startsWith(pendingPrefix),
+      );
+      if (relevantKeys.length > 0) {
+        const entries = await AsyncStorage.multiGet(relevantKeys);
         for (const [key, raw] of entries) {
-          const parsed = parseProgressMap(raw);
-          if (Object.keys(parsed).length > 0) {
-            collected.add(key.slice(localPrefix.length));
+          if (key.startsWith(pendingPrefix)) {
+            if (raw === '1') {
+              pendingIds.add(key.slice(pendingPrefix.length));
+            }
+          } else if (key.startsWith(localPrefix)) {
+            localById[key.slice(localPrefix.length)] = parseProgressMap(raw);
           }
         }
       }
@@ -355,10 +374,26 @@ export function useWatchedProgressIds(userId: string | null, token: string | nul
       // ignora erro de leitura local
     }
 
-    if (userId && token && hasSupabaseConfig()) {
+    if (requestIdRef.current !== requestId) return;
+
+    const canFetchRemote = Boolean(userId && token && hasSupabaseConfig());
+    if (canFetchRemote) {
+      const localOnly = mergeWatchedProgress(localById, [], pendingIds);
+      if (localOnly.ids.length > 0) {
+        setState((prev) => ({
+          scope,
+          ids: localOnly.ids,
+          byTitleId: localOnly.byTitleId,
+          ready: prev.scope === scope ? prev.ready : false,
+        }));
+      }
+    }
+
+    const remoteRows: RemoteProgressEntry[] = [];
+    if (canFetchRemote && userId && token) {
       try {
         const response = await supabaseRestFetch(
-          `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&select=title_id`,
+          `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&select=title_id,progress&order=updated_at.desc`,
           {},
           token,
           SYNC_TIMEOUT_MS,
@@ -366,20 +401,26 @@ export function useWatchedProgressIds(userId: string | null, token: string | nul
         if (response?.ok) {
           const rows: unknown = await response.json();
           if (Array.isArray(rows)) {
-            for (const row of rows as Array<{ title_id?: unknown }>) {
+            for (const row of rows as Array<{ title_id?: unknown; progress?: unknown }>) {
               if (typeof row?.title_id === 'string' && row.title_id.length > 0) {
-                collected.add(row.title_id);
+                remoteRows.push({
+                  titleId: row.title_id,
+                  progress: sanitizeProgressObject(row.progress),
+                });
               }
             }
           }
         }
       } catch {
-        // fallback para os IDs locais já coletados
+        // fallback para os dados locais já coletados
       }
     }
 
-    setState({ scope, ids: Array.from(collected) });
-  }, [localPrefix, scope, token, userId]);
+    if (requestIdRef.current !== requestId) return;
+
+    const merged = mergeWatchedProgress(localById, remoteRows, pendingIds);
+    setState({ scope, ids: merged.ids, byTitleId: merged.byTitleId, ready: true });
+  }, [localPrefix, pendingPrefix, scope, token, userId]);
 
   useEffect(() => {
     void refresh();
@@ -391,6 +432,16 @@ export function useWatchedProgressIds(userId: string | null, token: string | nul
     () => (state.scope === scope ? state.ids : []),
     [scope, state.ids, state.scope],
   );
+  const byTitleId = useMemo(
+    () => (state.scope === scope ? state.byTitleId : EMPTY_BY_TITLE),
+    [scope, state.byTitleId, state.scope],
+  );
+  const ready = state.scope === scope && state.ready;
 
-  return { progressTitleIds: ids, refreshProgressIds: refresh };
+  return {
+    progressTitleIds: ids,
+    progressByTitleId: byTitleId,
+    progressReady: ready,
+    refreshProgressIds: refresh,
+  };
 }

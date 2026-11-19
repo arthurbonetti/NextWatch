@@ -64,7 +64,8 @@ type TmdbSeasonSummary = {
   poster_path?: string | null;
 };
 
-type TmdbMediaDetails = {
+type TmdbMediaDetails = Partial<TmdbMediaResult> & {
+  genres?: { id?: number; name?: string }[] | null;
   runtime?: number | null;
   episode_run_time?: number[] | null;
   last_episode_to_air?: { runtime?: number | null } | null;
@@ -502,6 +503,25 @@ function findProviderIds(activeNames: string[], providers: TmdbProvider[]) {
 
 const resolvedDurationCache = new Map<string, string>();
 const pendingDurationCache = new Map<string, Promise<string>>();
+const resolvedTotalEpisodesCache = new Map<string, number>();
+
+function cacheTvTotalEpisodes(
+  titleId: string,
+  details: Pick<TmdbMediaDetails, 'seasons' | 'number_of_episodes'>,
+  regularSeasons = extractRegularTmdbSeasons(details),
+): number | null {
+  const fromSeasons = regularSeasons.reduce((acc, s) => acc + Math.max(0, s.episode_count ?? 0), 0);
+  const total = fromSeasons > 0 ? fromSeasons : (details.number_of_episodes ?? 0);
+  if (total > 0) {
+    resolvedTotalEpisodesCache.set(titleId, total);
+    return total;
+  }
+  return null;
+}
+
+export function getCachedTitleTotalEpisodes(titleId: string): number | null {
+  return resolvedTotalEpisodesCache.get(titleId) ?? null;
+}
 
 function formatMovieRuntime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -582,7 +602,9 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
             formatted = formatMovieRuntime(details.runtime);
           }
         } else {
-          formatted = resolveTvDuration(title, details);
+          const regularSeasons = extractRegularTmdbSeasons(details);
+          cacheTvTotalEpisodes(title.id, details, regularSeasons);
+          formatted = resolveTvDuration(title, details, regularSeasons);
         }
         if (formatted) {
           resolvedDurationCache.set(title.id, formatted);
@@ -776,8 +798,63 @@ function extractProvidersFromDetails(details: TmdbMediaDetails): string[] | null
   return matchedNames;
 }
 
+const pendingTitleByIdCache = new Map<string, Promise<MediaTitle | null>>();
+
 export function findCachedRelatedTitle(id: string): MediaTitle | undefined {
   return relatedTitlesById.get(id);
+}
+
+export async function fetchTitleById(titleId: string): Promise<MediaTitle | null> {
+  const cached = relatedTitlesById.get(titleId);
+  if (cached) return cached;
+
+  const target = resolveTmdbEndpointAndId(titleId);
+  if (!target || !hasCatalogBackend() || upstreamUnavailable) {
+    return null;
+  }
+
+  const pending = pendingTitleByIdCache.get(titleId);
+  if (pending) return pending;
+
+  const promise = getValidAccessToken()
+    .then(async (validToken) => {
+      if (!validToken) return null;
+      const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+        language: 'pt-BR',
+        append_to_response: 'watch/providers',
+      });
+      if (target.endpoint === 'movie') {
+        if (details.runtime && details.runtime > 0) {
+          resolvedDurationCache.set(titleId, formatMovieRuntime(details.runtime));
+        }
+      } else {
+        const regularSeasons = extractRegularTmdbSeasons(details);
+        cacheTvTotalEpisodes(titleId, details, regularSeasons);
+        const formatted = resolveTvDuration({ duration: '' } as MediaTitle, details, regularSeasons);
+        if (formatted) {
+          resolvedDurationCache.set(titleId, formatted);
+        }
+      }
+      const genreIds = (details.genres ?? [])
+        .map((g) => g.id)
+        .filter((id): id is number => typeof id === 'number');
+      const providers = extractProvidersFromDetails(details) ?? [];
+      const mapped = mapMedia(
+        { ...details, id: details.id ?? Number(target.tmdbId), genre_ids: genreIds },
+        target.endpoint,
+        providers,
+      );
+      const resolved = mapped.id === titleId ? mapped : { ...mapped, id: titleId };
+      relatedTitlesById.set(titleId, resolved);
+      return resolved;
+    })
+    .catch(() => null)
+    .finally(() => {
+      pendingTitleByIdCache.delete(titleId);
+    });
+
+  pendingTitleByIdCache.set(titleId, promise);
+  return promise;
 }
 
 export function getCachedRichTitleDetails(titleId: string): RichTitleDetails | null {
@@ -819,6 +896,7 @@ export async function fetchRichTitleDetails(title: MediaTitle): Promise<RichTitl
           duration = formatMovieRuntime(details.runtime);
         }
       } else {
+        cacheTvTotalEpisodes(title.id, details, regularSeasons);
         duration = resolveTvDuration(title, details, regularSeasons);
       }
       if (duration) {

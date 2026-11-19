@@ -23,9 +23,7 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
       visible={visible}
       variant="sheet"
       onClose={onClose}
-      showSheetHandle={false}
       sheetStyle={styles.card}>
-      <View style={styles.handle} />
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <MaterialIcons name="star" size={18} color={THEME.colors.gold} />
@@ -93,17 +91,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: THEME.radius.xl,
     borderTopRightRadius: THEME.radius.xl,
     paddingHorizontal: THEME.spacing.lg,
-    paddingTop: THEME.spacing.sm,
     paddingBottom: THEME.spacing.xxl,
     gap: THEME.spacing.md,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: THEME.colors.handle,
-    marginBottom: 4,
   },
   header: {
     flexDirection: 'row',
