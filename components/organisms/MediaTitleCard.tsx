@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps, memo, useEffect, useState } from 'react';
+import { ComponentProps, memo } from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -8,12 +8,12 @@ import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, getTitleServices, MediaTitle } from '@/constants/catalog';
-import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 type MediaTitleCardProps = {
   title: MediaTitle;
+  duration?: string;
   onOpen: () => void;
   actionIcon: MaterialIconName;
   actionLabel: string;
@@ -24,6 +24,7 @@ type MediaTitleCardProps = {
 
 export const MediaTitleCard = memo(function MediaTitleCard({
   title,
+  duration,
   onOpen,
   actionIcon,
   actionLabel,
@@ -31,24 +32,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
   actionButtonStyle,
   actionIconColor = '#657078',
 }: MediaTitleCardProps) {
-  const [resolvedDuration, setResolvedDuration] = useState<{ id: string; value: string } | null>(null);
-  const cachedDuration = getCachedTitleDuration(title);
-  const duration = resolvedDuration?.id === title.id ? resolvedDuration.value : cachedDuration;
-
-  useEffect(() => {
-    let active = true;
-    void fetchTitleDuration(title).then((resolved) => {
-      if (!active || !resolved) return;
-      setResolvedDuration((current) => {
-        if (current?.id === title.id && current.value === resolved) return current;
-        return { id: title.id, value: resolved };
-      });
-    });
-    return () => {
-      active = false;
-    };
-  }, [title]);
-
+  const displayDuration = duration || title.duration;
   const averageRating = formatAverageRating(title);
 
   return (
@@ -76,7 +60,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
           {title.title}
         </AppText>
         <AppText tipo="legenda" tabular style={styles.resultMeta}>
-          {title.year || 'Ano não informado'} · {title.kind}{duration ? ` · ${duration}` : ''}
+          {title.year || 'Ano não informado'} · {title.kind}{displayDuration ? ` · ${displayDuration}` : ''}
         </AppText>
         <AppText tipo="legenda" style={styles.resultGenres} numberOfLines={1}>
           {title.genres.slice(0, 2).join(' · ')}

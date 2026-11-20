@@ -1,5 +1,7 @@
 import {
+  CATALOG,
   getSearchRelevanceScore,
+  matchesSearchQuery,
   normalizeSearchText,
   rankTitlesBySearchRelevance,
   sanitizeTmdbPath,
@@ -7,8 +9,29 @@ import {
   type MediaTitle,
 } from '@/constants/catalog';
 import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
-import { getValidAccessToken, hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
+import { getSupabaseAnonKey, getSupabaseUrl, hasSupabaseConfig, supabase } from '@/services/supabase';
+import type {
+  CastMember,
+  EpisodeSummary,
+  RichTitleDetails,
+  SeasonSummary,
+} from '@/types/media';
+import { fetchWithTimeout } from '@/utils/http';
 import { quickSortByRandom } from '@/utils/quickSort';
+import {
+  getDynamicProviderLogo,
+  setDynamicProviderLogo,
+  tmdbImageUri,
+} from '@/utils/tmdbImage';
+
+export type {
+  CastMember,
+  EpisodeSummary,
+  RichTitleDetails,
+  SeasonSummary,
+  TmdbImageSize,
+} from '@/types/media';
+export { getDynamicProviderLogo, tmdbImageUri };
 
 type TmdbProvider = {
   provider_id: number;
@@ -104,7 +127,13 @@ type MediaEndpoint = 'movie' | 'tv';
 
 export type TmdbCatalogBatchCallback = (titles: MediaTitle[]) => void;
 
-const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
+export type CatalogFetchResult = {
+  titles: MediaTitle[];
+  source: 'tmdb' | 'static-fallback';
+  reason?: 'not-configured' | 'error';
+  errorMessage?: string;
+};
+
 const MAX_PAGES_PER_ENDPOINT = 60;
 const REQUEST_CONCURRENCY = 8;
 const REQUEST_TIMEOUT_MS = 15000;
@@ -121,10 +150,7 @@ export class CatalogBackendNotConfiguredError extends Error {
   }
 }
 
-export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
-
 let cachedProvidersPromise: Promise<TmdbProvider[]> | null = null;
-const dynamicProviderLogos = new Map<string, string>();
 
 const PROVIDER_ALIASES: Record<string, string[]> = {
   'Netflix': ['netflix', 'netflix standard with ads', 'netflix basic with ads'],
@@ -184,8 +210,13 @@ export function hasCatalogBackend() {
   return hasSupabaseConfig();
 }
 
-export function getDynamicProviderLogo(providerName: string): string | undefined {
-  return dynamicProviderLogos.get(providerName);
+function buildStaticFallbackCatalog(): MediaTitle[] {
+  return quickSortByRandom(CATALOG);
+}
+
+function searchStaticCatalog(encodedQuery: string): MediaTitle[] {
+  const matched = CATALOG.filter((title) => matchesSearchQuery(title, encodedQuery));
+  return rankTitlesBySearchRelevance(matched, encodedQuery);
 }
 
 async function getWatchProviders(): Promise<TmdbProvider[]> {
@@ -199,8 +230,8 @@ async function getWatchProviders(): Promise<TmdbProvider[]> {
         for (const provider of list) {
           if (!provider.logo_path) continue;
           const canonical = matchCanonicalProviderName(provider.provider_name);
-          if (canonical && !dynamicProviderLogos.has(canonical)) {
-            dynamicProviderLogos.set(canonical, provider.logo_path);
+          if (canonical) {
+            setDynamicProviderLogo(canonical, provider.logo_path);
           }
         }
         return list;
@@ -245,171 +276,206 @@ export async function fetchAllCatalogForProviders(
   providerNames: string[],
   onBatch?: TmdbCatalogBatchCallback,
   shouldAbort?: () => boolean,
-): Promise<void> {
+): Promise<CatalogFetchResult> {
   if (!hasCatalogBackend()) {
-    throw new CatalogBackendNotConfiguredError();
+    const fallback = buildStaticFallbackCatalog();
+    if (!shouldAbort?.()) {
+      onBatch?.(fallback);
+    }
+    return { titles: fallback, source: 'static-fallback', reason: 'not-configured' };
   }
   upstreamUnavailable = false;
   if (providerNames.length === 0) {
-    onBatch?.([]);
-    return;
-  }
-
-  const allProviders = await getWatchProviders();
-  const resolvedProviders = providerNames
-    .map((providerName) => ({
-      providerName,
-      ids: findProviderIds([providerName], allProviders),
-    }))
-    .filter((entry) => entry.ids.length > 0);
-
-  if (resolvedProviders.length === 0) {
-    throw new Error(`Não encontrei no TMDB os serviços ativos: ${providerNames.join(', ')}.`);
-  }
-
-  const catalogById = new Map<string, MediaTitle>();
-  const idByNameKey = new Map<string, string>();
-  const remainingTasks: (() => Promise<MediaTitle[]>)[] = [];
-
-  const firstPages = await Promise.all(
-    resolvedProviders.flatMap(({ providerName, ids }) => {
-      const baseParams: Record<string, string> = {
-        language: 'pt-BR',
-        watch_region: 'BR',
-        with_watch_providers: ids.join('|'),
-        with_watch_monetization_types: 'flatrate|free|ads',
-        sort_by: 'popularity.desc',
-      };
-      const movieParams: Record<string, string> = {
-        ...baseParams,
-        region: 'BR',
-        include_adult: 'false',
-      };
-
-      return [
-        request<TmdbMediaResponse>('/discover/movie', { ...movieParams, page: '1' }).then((res) => ({
-          endpoint: 'movie' as const,
-          providerName,
-          params: movieParams,
-          response: res,
-        })),
-        request<TmdbMediaResponse>('/discover/tv', { ...baseParams, page: '1' }).then((res) => ({
-          endpoint: 'tv' as const,
-          providerName,
-          params: baseParams,
-          response: res,
-        })),
-      ];
-    }),
-  );
-
-  if (shouldAbort?.()) return;
-
-  const firstBatchItems: MediaTitle[] = [];
-  for (const { endpoint, providerName, params, response } of firstPages) {
-    for (const item of response.results) {
-      firstBatchItems.push(mapMedia(item, endpoint, [providerName]));
+    if (!shouldAbort?.()) {
+      onBatch?.([]);
     }
-    const maxPages = Math.min(response.total_pages, MAX_PAGES_PER_ENDPOINT);
-    for (let page = 2; page <= maxPages; page++) {
-      remainingTasks.push(async () => {
-        try {
-          const pageRes = await request<TmdbMediaResponse>(`/discover/${endpoint}`, {
-            ...params,
-            page: String(page),
-          });
-          return pageRes.results.map((item) => mapMedia(item, endpoint, [providerName]));
-        } catch {
-          return [];
+    return { titles: [], source: 'tmdb' };
+  }
+
+  try {
+    const allProviders = await getWatchProviders();
+    const resolvedProviders = providerNames
+      .map((providerName) => ({
+        providerName,
+        ids: findProviderIds([providerName], allProviders),
+      }))
+      .filter((entry) => entry.ids.length > 0);
+
+    if (resolvedProviders.length === 0) {
+      throw new Error(`Não encontrei no TMDB os serviços ativos: ${providerNames.join(', ')}.`);
+    }
+
+    const catalogById = new Map<string, MediaTitle>();
+    const idByNameKey = new Map<string, string>();
+    const remainingTasks: (() => Promise<MediaTitle[]>)[] = [];
+
+    const firstPages = await Promise.all(
+      resolvedProviders.flatMap(({ providerName, ids }) => {
+        const baseParams: Record<string, string> = {
+          language: 'pt-BR',
+          watch_region: 'BR',
+          with_watch_providers: ids.join('|'),
+          with_watch_monetization_types: 'flatrate|free|ads',
+          sort_by: 'popularity.desc',
+        };
+        const movieParams: Record<string, string> = {
+          ...baseParams,
+          region: 'BR',
+          include_adult: 'false',
+        };
+
+        return [
+          request<TmdbMediaResponse>('/discover/movie', { ...movieParams, page: '1' }).then((res) => ({
+            endpoint: 'movie' as const,
+            providerName,
+            params: movieParams,
+            response: res,
+          })),
+          request<TmdbMediaResponse>('/discover/tv', { ...baseParams, page: '1' }).then((res) => ({
+            endpoint: 'tv' as const,
+            providerName,
+            params: baseParams,
+            response: res,
+          })),
+        ];
+      }),
+    );
+
+    if (shouldAbort?.()) {
+      return { titles: [], source: 'tmdb' };
+    }
+
+    const firstBatchItems: MediaTitle[] = [];
+    for (const { endpoint, providerName, params, response } of firstPages) {
+      for (const item of response.results) {
+        firstBatchItems.push(mapMedia(item, endpoint, [providerName]));
+      }
+      const maxPages = Math.min(response.total_pages, MAX_PAGES_PER_ENDPOINT);
+      for (let page = 2; page <= maxPages; page++) {
+        remainingTasks.push(async () => {
+          try {
+            const pageRes = await request<TmdbMediaResponse>(`/discover/${endpoint}`, {
+              ...params,
+              page: String(page),
+            });
+            return pageRes.results.map((item) => mapMedia(item, endpoint, [providerName]));
+          } catch {
+            return [];
+          }
+        });
+      }
+    }
+
+    for (const title of quickSortByRandom(firstBatchItems)) {
+      mergeTitleIntoCatalog(catalogById, idByNameKey, title);
+    }
+
+    onBatch?.(Array.from(catalogById.values()));
+
+    if (remainingTasks.length > 0) {
+      let taskIndex = 0;
+      let completedSinceEmit = 0;
+
+      const workers = Array.from({ length: Math.min(REQUEST_CONCURRENCY, remainingTasks.length) }, async () => {
+        while (taskIndex < remainingTasks.length) {
+          if (shouldAbort?.()) return;
+          const currentTask = remainingTasks[taskIndex++];
+          if (!currentTask) break;
+          const pageTitles = await currentTask();
+          if (shouldAbort?.()) return;
+          for (const title of quickSortByRandom(pageTitles)) {
+            mergeTitleIntoCatalog(catalogById, idByNameKey, title);
+          }
+          completedSinceEmit += 1;
+          if (completedSinceEmit >= 20) {
+            completedSinceEmit = 0;
+            onBatch?.(Array.from(catalogById.values()));
+          }
         }
       });
+
+      await Promise.all(workers);
     }
+
+    if (shouldAbort?.()) {
+      return { titles: [], source: 'tmdb' };
+    }
+
+    const finalTitles = Array.from(catalogById.values());
+    onBatch?.(finalTitles);
+    return { titles: finalTitles, source: 'tmdb' };
+  } catch (error) {
+    if (shouldAbort?.()) {
+      return { titles: [], source: 'tmdb' };
+    }
+    const fallback = buildStaticFallbackCatalog();
+    onBatch?.(fallback);
+    if (error instanceof CatalogBackendNotConfiguredError) {
+      return { titles: fallback, source: 'static-fallback', reason: 'not-configured' };
+    }
+    return {
+      titles: fallback,
+      source: 'static-fallback',
+      reason: 'error',
+      errorMessage: error instanceof Error ? error.message : 'Não foi possível atualizar o catálogo.',
+    };
   }
-
-  for (const title of quickSortByRandom(firstBatchItems)) {
-    mergeTitleIntoCatalog(catalogById, idByNameKey, title);
-  }
-
-  onBatch?.(Array.from(catalogById.values()));
-
-  if (remainingTasks.length > 0) {
-    let taskIndex = 0;
-    let completedSinceEmit = 0;
-
-    const workers = Array.from({ length: Math.min(REQUEST_CONCURRENCY, remainingTasks.length) }, async () => {
-      while (taskIndex < remainingTasks.length) {
-        if (shouldAbort?.()) return;
-        const currentTask = remainingTasks[taskIndex++];
-        if (!currentTask) break;
-        const pageTitles = await currentTask();
-        if (shouldAbort?.()) return;
-        for (const title of quickSortByRandom(pageTitles)) {
-          mergeTitleIntoCatalog(catalogById, idByNameKey, title);
-        }
-        completedSinceEmit += 1;
-        if (completedSinceEmit >= 20) {
-          completedSinceEmit = 0;
-          onBatch?.(Array.from(catalogById.values()));
-        }
-      }
-    });
-
-    await Promise.all(workers);
-  }
-
-  if (shouldAbort?.()) return;
-
-  onBatch?.(Array.from(catalogById.values()));
 }
 
 export async function searchCatalogTitles(query: string, fallbackProviders: string[] = []): Promise<MediaTitle[]> {
   const encodedQuery = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
-  if (!hasCatalogBackend() || encodedQuery.length < 2) return [];
-  upstreamUnavailable = false;
-
-  const [movies, shows] = await Promise.all([
-    request<TmdbMediaResponse>('/search/movie', {
-      language: 'pt-BR',
-      region: 'BR',
-      query: encodedQuery,
-      include_adult: 'false',
-      page: '1',
-    }),
-    request<TmdbMediaResponse>('/search/tv', {
-      language: 'pt-BR',
-      query: encodedQuery,
-      include_adult: 'false',
-      page: '1',
-    }),
-  ]);
-
-  const rawItems: { item: TmdbMediaResult; endpoint: MediaEndpoint; preliminaryScore: number }[] = [
-    ...movies.results.map((item) => ({
-      item,
-      endpoint: 'movie' as const,
-      preliminaryScore: getSearchRelevanceScore(mapMedia(item, 'movie', fallbackProviders), encodedQuery),
-    })),
-    ...shows.results.map((item) => ({
-      item,
-      endpoint: 'tv' as const,
-      preliminaryScore: getSearchRelevanceScore(mapMedia(item, 'tv', fallbackProviders), encodedQuery),
-    })),
-  ].sort((a, b) => b.preliminaryScore - a.preliminaryScore);
-
-  const mappedTitles = await Promise.all(
-    rawItems.map(async ({ item, endpoint }, index) => {
-      const providers = index < 16 ? await fetchTitleProvidersInBrazil(endpoint, item.id) : [];
-      const services = providers.length > 0 ? providers : fallbackProviders;
-      return mapMedia(item, endpoint, services);
-    }),
-  );
-
-  const deduplicated = new Map<string, MediaTitle>();
-  const idByNameKey = new Map<string, string>();
-  for (const title of mappedTitles) {
-    mergeTitleIntoCatalog(deduplicated, idByNameKey, title);
+  if (encodedQuery.length < 2) return [];
+  if (!hasCatalogBackend() || upstreamUnavailable) {
+    return searchStaticCatalog(encodedQuery);
   }
-  return rankTitlesBySearchRelevance(Array.from(deduplicated.values()), encodedQuery);
+
+  try {
+    const [movies, shows] = await Promise.all([
+      request<TmdbMediaResponse>('/search/movie', {
+        language: 'pt-BR',
+        region: 'BR',
+        query: encodedQuery,
+        include_adult: 'false',
+        page: '1',
+      }),
+      request<TmdbMediaResponse>('/search/tv', {
+        language: 'pt-BR',
+        query: encodedQuery,
+        include_adult: 'false',
+        page: '1',
+      }),
+    ]);
+
+    const rawItems: { item: TmdbMediaResult; endpoint: MediaEndpoint; preliminaryScore: number }[] = [
+      ...movies.results.map((item) => ({
+        item,
+        endpoint: 'movie' as const,
+        preliminaryScore: getSearchRelevanceScore(mapMedia(item, 'movie', fallbackProviders), encodedQuery),
+      })),
+      ...shows.results.map((item) => ({
+        item,
+        endpoint: 'tv' as const,
+        preliminaryScore: getSearchRelevanceScore(mapMedia(item, 'tv', fallbackProviders), encodedQuery),
+      })),
+    ].sort((a, b) => b.preliminaryScore - a.preliminaryScore);
+
+    const mappedTitles = await Promise.all(
+      rawItems.map(async ({ item, endpoint }, index) => {
+        const providers = index < 16 ? await fetchTitleProvidersInBrazil(endpoint, item.id) : [];
+        const services = providers.length > 0 ? providers : fallbackProviders;
+        return mapMedia(item, endpoint, services);
+      }),
+    );
+
+    const deduplicated = new Map<string, MediaTitle>();
+    const idByNameKey = new Map<string, string>();
+    for (const title of mappedTitles) {
+      mergeTitleIntoCatalog(deduplicated, idByNameKey, title);
+    }
+    return rankTitlesBySearchRelevance(Array.from(deduplicated.values()), encodedQuery);
+  } catch {
+    return searchStaticCatalog(encodedQuery);
+  }
 }
 
 async function fetchTitleProvidersInBrazil(endpoint: MediaEndpoint, tmdbId: number): Promise<string[]> {
@@ -442,30 +508,47 @@ function matchCanonicalProviderName(rawProviderName: string): string | null {
   return null;
 }
 
-export function tmdbImageUri(path: string | null | undefined, size: TmdbImageSize): string | null {
-  const safePath = sanitizeTmdbPath(path);
-  return safePath ? `${IMAGE_BASE_URL}/${size}${safePath}` : null;
-}
-
-async function request<T>(endpoint: string, params: Record<string, string>, retries = 3): Promise<T> {
-  if (!hasCatalogBackend()) {
+async function request<T>(
+  endpoint: string,
+  params: Record<string, string>,
+  retries = 3,
+  authMode: 'session' | 'refreshed' | 'anon' = 'session',
+): Promise<T> {
+  const baseUrl = getSupabaseUrl();
+  const anonKey = getSupabaseAnonKey();
+  if (!baseUrl || !anonKey) {
     throw new CatalogBackendNotConfiguredError();
   }
 
-  const retryRequest = async () => {
+  let accessToken: string | null = null;
+  if (supabase && authMode !== 'anon') {
+    try {
+      const { data } = await supabase.auth.getSession();
+      accessToken = data.session?.access_token ?? null;
+    } catch {
+      accessToken = null;
+    }
+  }
+
+  const retryRequest = async (nextAuthMode = authMode) => {
     await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
-    return request<T>(endpoint, params, retries - 1);
+    return request<T>(endpoint, params, retries - 1, nextAuthMode);
   };
 
-  let response: Response | null;
+  let response: Response;
   try {
-    response = await supabaseRestFetch(
-      '/functions/v1/tmdb-proxy',
+    response = await fetchWithTimeout(
+      `${baseUrl}/functions/v1/tmdb-proxy`,
       {
         method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          apikey: anonKey,
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ endpoint, params }),
       },
-      undefined,
       REQUEST_TIMEOUT_MS,
     );
   } catch (error) {
@@ -473,8 +556,16 @@ async function request<T>(endpoint: string, params: Record<string, string>, retr
     throw error;
   }
 
-  if (!response) {
-    throw new Error('Faça login para consultar o catálogo.');
+  if (response.status === 401 && accessToken) {
+    if (authMode === 'session' && supabase) {
+      const refreshed = await supabase.auth.refreshSession().catch(() => null);
+      if (refreshed?.data?.session?.access_token) {
+        return request<T>(endpoint, params, retries, 'refreshed');
+      }
+    }
+    if (authMode !== 'anon') {
+      return request<T>(endpoint, params, retries, 'anon');
+    }
   }
 
   if (response.status === 503) {
@@ -589,28 +680,24 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
     return existingPromise;
   }
 
-  const promise = getValidAccessToken()
-    .then((validToken) => {
-      if (!validToken) return title.duration;
-
-      return request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
-        language: 'pt-BR',
-      }).then((details) => {
-        let formatted = title.duration;
-        if (target.endpoint === 'movie') {
-          if (details.runtime && details.runtime > 0) {
-            formatted = formatMovieRuntime(details.runtime);
-          }
-        } else {
-          const regularSeasons = extractRegularTmdbSeasons(details);
-          cacheTvTotalEpisodes(title.id, details, regularSeasons);
-          formatted = resolveTvDuration(title, details, regularSeasons);
+  const promise = request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+    language: 'pt-BR',
+  })
+    .then((details) => {
+      let formatted = title.duration;
+      if (target.endpoint === 'movie') {
+        if (details.runtime && details.runtime > 0) {
+          formatted = formatMovieRuntime(details.runtime);
         }
-        if (formatted) {
-          resolvedDurationCache.set(title.id, formatted);
-        }
-        return formatted;
-      });
+      } else {
+        const regularSeasons = extractRegularTmdbSeasons(details);
+        cacheTvTotalEpisodes(title.id, details, regularSeasons);
+        formatted = resolveTvDuration(title, details, regularSeasons);
+      }
+      if (formatted) {
+        resolvedDurationCache.set(title.id, formatted);
+      }
+      return formatted;
     })
     .catch(() => title.duration)
     .finally(() => {
@@ -684,26 +771,23 @@ export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | 
     return existingPromise;
   }
 
-  const promise = getValidAccessToken()
-    .then(async (validToken) => {
-      if (!validToken) return null;
+  const promise = (async () => {
+    const ptRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
+      language: 'pt-BR',
+    }).catch(() => null);
+    let videoKey = pickYoutubeTrailerKey(ptRes?.results);
 
-      const ptRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
-        language: 'pt-BR',
+    if (!videoKey) {
+      const enRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
+        language: 'en-US',
       }).catch(() => null);
-      let videoKey = pickYoutubeTrailerKey(ptRes?.results);
+      videoKey = pickYoutubeTrailerKey(enRes?.results);
+    }
 
-      if (!videoKey) {
-        const enRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
-          language: 'en-US',
-        }).catch(() => null);
-        videoKey = pickYoutubeTrailerKey(enRes?.results);
-      }
-
-      const url = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
-      resolvedTrailerCache.set(title.id, url);
-      return url;
-    })
+    const url = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
+    resolvedTrailerCache.set(title.id, url);
+    return url;
+  })()
     .catch(() => null)
     .finally(() => {
       pendingTrailerCache.delete(title.id);
@@ -712,43 +796,6 @@ export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | 
   pendingTrailerCache.set(title.id, promise);
   return promise;
 }
-
-export type CastMember = {
-  id: number;
-  name: string;
-  character: string;
-  profilePath: string | null;
-};
-
-export type SeasonSummary = {
-  seasonNumber: number;
-  name: string;
-  episodeCount: number;
-  voteAverage: number | null;
-  airDate: string | null;
-  posterPath: string | null;
-};
-
-export type EpisodeSummary = {
-  episodeNumber: number;
-  name: string;
-  runtime: number | null;
-  airDate: string | null;
-  voteAverage: number | null;
-};
-
-export type RichTitleDetails = {
-  duration: string;
-  episodeDuration: string | null;
-  statusLabel: string | null;
-  certification: string | null;
-  voteCount: number | null;
-  trailerUrl: string | null;
-  providers: string[] | null;
-  cast: CastMember[];
-  seasons: SeasonSummary[];
-  similarTitles: MediaTitle[];
-};
 
 const richDetailsCache = new Map<string, RichTitleDetails>();
 const pendingRichDetailsCache = new Map<string, Promise<RichTitleDetails | null>>();
@@ -808,21 +855,20 @@ export async function fetchTitleById(titleId: string): Promise<MediaTitle | null
   const cached = relatedTitlesById.get(titleId);
   if (cached) return cached;
 
+  const staticMatch = CATALOG.find((item) => item.id === titleId) ?? null;
   const target = resolveTmdbEndpointAndId(titleId);
   if (!target || !hasCatalogBackend() || upstreamUnavailable) {
-    return null;
+    return staticMatch;
   }
 
   const pending = pendingTitleByIdCache.get(titleId);
   if (pending) return pending;
 
-  const promise = getValidAccessToken()
-    .then(async (validToken) => {
-      if (!validToken) return null;
-      const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
-        language: 'pt-BR',
-        append_to_response: 'watch/providers',
-      });
+  const promise = request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+    language: 'pt-BR',
+    append_to_response: 'watch/providers',
+  })
+    .then((details) => {
       if (target.endpoint === 'movie') {
         if (details.runtime && details.runtime > 0) {
           resolvedDurationCache.set(titleId, formatMovieRuntime(details.runtime));
@@ -848,7 +894,7 @@ export async function fetchTitleById(titleId: string): Promise<MediaTitle | null
       relatedTitlesById.set(titleId, resolved);
       return resolved;
     })
-    .catch(() => null)
+    .catch(() => staticMatch)
     .finally(() => {
       pendingTitleByIdCache.delete(titleId);
     });
@@ -861,7 +907,10 @@ export function getCachedRichTitleDetails(titleId: string): RichTitleDetails | n
   return richDetailsCache.get(titleId) ?? null;
 }
 
-export async function fetchRichTitleDetails(title: MediaTitle): Promise<RichTitleDetails | null> {
+export async function fetchRichTitleDetails(
+  title: MediaTitle,
+  options?: { throwOnError?: boolean },
+): Promise<RichTitleDetails | null> {
   const cached = richDetailsCache.get(title.id);
   if (cached) return cached;
 
@@ -870,13 +919,9 @@ export async function fetchRichTitleDetails(title: MediaTitle): Promise<RichTitl
     return null;
   }
 
-  const pending = pendingRichDetailsCache.get(title.id);
-  if (pending) return pending;
-
-  const promise = getValidAccessToken()
-    .then(async (validToken) => {
-      if (!validToken) return null;
-
+  let pending = pendingRichDetailsCache.get(title.id);
+  if (!pending) {
+    pending = (async () => {
       const append =
         target.endpoint === 'tv'
           ? 'videos,credits,recommendations,similar,content_ratings,watch/providers'
@@ -910,7 +955,7 @@ export async function fetchRichTitleDetails(title: MediaTitle): Promise<RichTitl
           : null);
       const episodeDuration = rawEpRuntime ? `${rawEpRuntime}min/ep` : null;
 
-      let videoKey = pickYoutubeTrailerKey(details.videos?.results);
+      const videoKey = pickYoutubeTrailerKey(details.videos?.results);
       let trailerUrl = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
       if (trailerUrl) {
         resolvedTrailerCache.set(title.id, trailerUrl);
@@ -971,14 +1016,17 @@ export async function fetchRichTitleDetails(title: MediaTitle): Promise<RichTitl
 
       richDetailsCache.set(title.id, rich);
       return rich;
-    })
-    .catch(() => null)
-    .finally(() => {
+    })().finally(() => {
       pendingRichDetailsCache.delete(title.id);
     });
 
-  pendingRichDetailsCache.set(title.id, promise);
-  return promise;
+    pendingRichDetailsCache.set(title.id, pending);
+  }
+
+  if (options?.throwOnError) {
+    return pending;
+  }
+  return pending.catch(() => null);
 }
 
 type TmdbSeasonDetailsResponse = {
@@ -998,6 +1046,7 @@ export function getCachedTvSeasonEpisodes(titleId: string, seasonNumber: number)
 export async function fetchTvSeasonEpisodes(
   titleId: string,
   seasonNumber: number,
+  options?: { throwOnError?: boolean },
 ): Promise<EpisodeSummary[]> {
   const cacheKey = `${titleId}:s${seasonNumber}`;
   const cached = seasonEpisodesCache.get(cacheKey);
@@ -1008,38 +1057,39 @@ export async function fetchTvSeasonEpisodes(
     return [];
   }
 
-  const pending = pendingSeasonEpisodesCache.get(cacheKey);
-  if (pending) return pending;
+  let pending = pendingSeasonEpisodesCache.get(cacheKey);
+  if (!pending) {
+    pending = request<TmdbSeasonDetailsResponse>(
+      `/tv/${target.tmdbId}/season/${seasonNumber}`,
+      { language: 'pt-BR' },
+    )
+      .then((res) => {
+        const episodes: EpisodeSummary[] = (res.episodes ?? [])
+          .filter((ep) => typeof ep.episode_number === 'number' && ep.episode_number > 0)
+          .map((ep) => ({
+            episodeNumber: ep.episode_number!,
+            name: ep.name?.trim() || `Episódio ${ep.episode_number}`,
+            runtime: typeof ep.runtime === 'number' && ep.runtime > 0 ? ep.runtime : null,
+            airDate: ep.air_date ?? null,
+            voteAverage:
+              typeof ep.vote_average === 'number' && ep.vote_average > 0
+                ? Number(ep.vote_average.toFixed(1))
+                : null,
+          }));
+        seasonEpisodesCache.set(cacheKey, episodes);
+        return episodes;
+      })
+      .finally(() => {
+        pendingSeasonEpisodesCache.delete(cacheKey);
+      });
 
-  const promise = getValidAccessToken()
-    .then(async (validToken) => {
-      if (!validToken) return [];
-      const res = await request<TmdbSeasonDetailsResponse>(
-        `/tv/${target.tmdbId}/season/${seasonNumber}`,
-        { language: 'pt-BR' },
-      );
-      const episodes: EpisodeSummary[] = (res.episodes ?? [])
-        .filter((ep) => typeof ep.episode_number === 'number' && ep.episode_number > 0)
-        .map((ep) => ({
-          episodeNumber: ep.episode_number!,
-          name: ep.name?.trim() || `Episódio ${ep.episode_number}`,
-          runtime: typeof ep.runtime === 'number' && ep.runtime > 0 ? ep.runtime : null,
-          airDate: ep.air_date ?? null,
-          voteAverage:
-            typeof ep.vote_average === 'number' && ep.vote_average > 0
-              ? Number(ep.vote_average.toFixed(1))
-              : null,
-        }));
-      seasonEpisodesCache.set(cacheKey, episodes);
-      return episodes;
-    })
-    .catch(() => [])
-    .finally(() => {
-      pendingSeasonEpisodesCache.delete(cacheKey);
-    });
+    pendingSeasonEpisodesCache.set(cacheKey, pending);
+  }
 
-  pendingSeasonEpisodesCache.set(cacheKey, promise);
-  return promise;
+  if (options?.throwOnError) {
+    return pending;
+  }
+  return pending.catch(() => []);
 }
 
 function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: string[]): MediaTitle {

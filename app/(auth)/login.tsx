@@ -10,7 +10,7 @@ import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { useAuth } from '@/contexts/AuthContext';
-import { isValidEmail, MAX_PASSWORD_LENGTH, MIN_LOGIN_PASSWORD_LENGTH } from '@/services/authApi';
+import { isValidEmail, MAX_PASSWORD_LENGTH, MIN_LOGIN_PASSWORD_LENGTH } from '@/types/auth';
 
 const SHOWCASE_SERVICES = ['Netflix', 'Max', 'Disney+', 'Prime Video', 'Crunchyroll'];
 

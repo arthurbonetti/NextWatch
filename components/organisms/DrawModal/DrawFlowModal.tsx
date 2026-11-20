@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
@@ -9,196 +9,121 @@ import { DrawResultPhase } from '@/components/organisms/DrawModal/DrawResultPhas
 import { DrawRoulettePhase } from '@/components/organisms/DrawModal/DrawRoulettePhase';
 import { MediaTitle } from '@/constants/catalog';
 import { Subscription } from '@/constants/subscriptions';
-import { DrawAction, useDrawHistory } from '@/contexts/DrawHistoryContext';
 import { DrawFiltersState, DrawKindFilter } from '@/hooks/usePersistedDrawFilters';
-import { fetchTitleDuration, fetchTitleTrailerUrl } from '@/services/tmdb';
-import { quickSortByRandom } from '@/utils/quickSort';
+import type { DrawPhase, SpinSession } from '@/hooks/useRouletteFlow';
 
-export type DrawPhase = 'filtros' | 'sorteando' | 'resultado';
-
-type SpinSession = {
-  winner: MediaTitle;
-  candidates: MediaTitle[];
-  eligibleCount: number;
-  spinKey: number;
-};
+export type { DrawPhase } from '@/hooks/useRouletteFlow';
 
 type DrawFlowModalProps = {
   visible: boolean;
-  onClose: () => void;
+  phase: DrawPhase;
+  spinSession: SpinSession | null;
+  incompleteConfirmVisible: boolean;
   activeSubscriptions: Subscription[];
   availableGenres: string[];
   hasAnyAvailableTitle: boolean;
   eligibleTitles: MediaTitle[];
   watchedCount: number;
-  isFetchingCatalog: boolean;
   filters: DrawFiltersState;
   enabledServices: string[];
+  winnerDuration: string;
+  winnerTrailerUrl: string | null;
+  isWinnerSaved: boolean;
+  onClose: () => void;
+  onDismissFromSheet: () => void;
   onSelectKind: (kind: DrawKindFilter) => void;
   onToggleGenre: (genre: string) => void;
   onClearGenres: () => void;
   onToggleService: (provider: string) => void;
   onToggleHideWatched: (nextValue: boolean) => void;
   onResetFilters: () => void;
-  autoSpinNonce?: number;
+  onDrawPress: () => void;
+  onConfirmIncompleteDraw: () => void;
+  onCancelIncompleteDraw: () => void;
+  onRouletteDone: () => void;
+  onDrawAnother: () => void;
+  onWatchWinner: () => void;
+  onMarkWinnerWatched: () => void;
+  onToggleWinnerSaved: () => void;
 };
 
 /**
- * Modal único e contínuo que orquestra as 3 fases do sorteio:
+ * Modal único e contínuo que apresenta as 3 fases do sorteio:
  * 'filtros' (bottom sheet com snap points) -> 'sorteando' (roleta) -> 'resultado',
  * compartilhando o container global AnimatedModalShell.
  */
 export function DrawFlowModal({
   visible,
-  onClose,
+  phase,
+  spinSession,
+  incompleteConfirmVisible,
   activeSubscriptions,
   availableGenres,
   hasAnyAvailableTitle,
   eligibleTitles,
   watchedCount,
-  isFetchingCatalog,
   filters,
   enabledServices,
+  winnerDuration,
+  winnerTrailerUrl,
+  isWinnerSaved,
+  onClose,
+  onDismissFromSheet,
   onSelectKind,
   onToggleGenre,
   onClearGenres,
   onToggleService,
   onToggleHideWatched,
   onResetFilters,
-  autoSpinNonce,
+  onDrawPress,
+  onConfirmIncompleteDraw,
+  onCancelIncompleteDraw,
+  onRouletteDone,
+  onDrawAnother,
+  onWatchWinner,
+  onMarkWinnerWatched,
+  onToggleWinnerSaved,
 }: DrawFlowModalProps) {
   const reducedMotion = useReducedMotion();
   const { height: windowHeight } = useWindowDimensions();
-  const { recordDrawAction, updateDrawAction } = useDrawHistory();
-
-  const [phase, setPhase] = useState<DrawPhase>('filtros');
   const [expandedSheet, setExpandedSheet] = useState(false);
-  const [incompleteConfirmVisible, setIncompleteConfirmVisible] = useState(false);
-  const [lastDrawnId, setLastDrawnId] = useState<string | null>(null);
-  const [spinSession, setSpinSession] = useState<SpinSession | null>(null);
 
-  const drawEntryPromiseRef = useRef<Promise<string | null> | null>(null);
-  const drawHandledRef = useRef(false);
-  const handledAutoSpinNonceRef = useRef<number>(0);
+  if (!visible && expandedSheet) {
+    setExpandedSheet(false);
+  }
 
   const defaultSheetHeight = Math.min(Math.round(windowHeight * 0.78), 660);
   const expandedSheetHeight = Math.min(Math.round(windowHeight * 0.92), 780);
   const activeSheetMaxHeight = expandedSheet ? expandedSheetHeight : defaultSheetHeight;
 
-  const commitDrawAction = useCallback(
-    (title: MediaTitle, action: DrawAction) => {
-      drawHandledRef.current = true;
-      const existingPromise = drawEntryPromiseRef.current;
-      if (!existingPromise) {
-        drawEntryPromiseRef.current = recordDrawAction(title, action);
-        return;
-      }
-      void existingPromise.then((entryId) => {
-        if (entryId) void updateDrawAction(entryId, action);
-      });
-    },
-    [recordDrawAction, updateDrawAction],
-  );
-
-  const dismissFromSheet = useCallback(() => {
-    setIncompleteConfirmVisible(false);
-    setPhase('filtros');
+  const handleSheetDismiss = useCallback(() => {
     setExpandedSheet(false);
-    setSpinSession(null);
+    onDismissFromSheet();
+  }, [onDismissFromSheet]);
+
+  const handleClose = useCallback(() => {
+    setExpandedSheet(false);
     onClose();
   }, [onClose]);
 
-  const handleClose = useCallback(() => {
-    if (phase === 'resultado' && spinSession?.winner && !drawHandledRef.current) {
-      drawHandledRef.current = true;
-      void recordDrawAction(spinSession.winner, 'ignorou');
-    }
-    drawEntryPromiseRef.current = null;
-    drawHandledRef.current = false;
-    dismissFromSheet();
-  }, [dismissFromSheet, phase, recordDrawAction, spinSession]);
-
-  const startDraw = useCallback(() => {
-    if (eligibleTitles.length === 0) return;
-
-    const candidates =
-      eligibleTitles.length > 1
-        ? eligibleTitles.filter((title) => title.id !== lastDrawnId)
-        : eligibleTitles;
-    const winner = quickSortByRandom(candidates)[0];
-    if (!winner) return;
-
-    void fetchTitleDuration(winner);
-    void fetchTitleTrailerUrl(winner);
-
-    drawEntryPromiseRef.current = null;
-    drawHandledRef.current = false;
-    setLastDrawnId(winner.id);
-    setSpinSession((prev) => ({
-      winner,
-      candidates: eligibleTitles,
-      eligibleCount: eligibleTitles.length,
-      spinKey: (prev?.spinKey ?? 0) + 1,
-    }));
-
-    if (reducedMotion) {
-      setPhase('resultado');
-    } else {
-      setPhase('sorteando');
-    }
-  }, [eligibleTitles, lastDrawnId, reducedMotion]);
-
-  useEffect(() => {
-    if (!visible || !autoSpinNonce || autoSpinNonce <= 0) return;
-    if (handledAutoSpinNonceRef.current === autoSpinNonce) return;
-    if (eligibleTitles.length === 0) return;
-
-    handledAutoSpinNonceRef.current = autoSpinNonce;
-    const frame = requestAnimationFrame(() => {
-      startDraw();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [autoSpinNonce, eligibleTitles.length, startDraw, visible]);
-
-  const handleDrawPress = useCallback(() => {
-    if (eligibleTitles.length === 0) return;
-    if (isFetchingCatalog) {
-      setIncompleteConfirmVisible(true);
-      return;
-    }
-    startDraw();
-  }, [eligibleTitles.length, isFetchingCatalog, startDraw]);
-
-  const handleRouletteDone = useCallback(() => {
-    setPhase('resultado');
-  }, []);
-
-  const handleDrawAnother = useCallback(() => {
-    if (spinSession?.winner && !drawHandledRef.current) {
-      drawHandledRef.current = true;
-      void recordDrawAction(spinSession.winner, 'sorteou outro');
-    }
-    startDraw();
-  }, [recordDrawAction, spinSession, startDraw]);
-
   const handleRequestClose = useCallback(() => {
     if (incompleteConfirmVisible) {
-      setIncompleteConfirmVisible(false);
+      onCancelIncompleteDraw();
       return;
     }
     if (phase === 'sorteando') {
-      handleRouletteDone();
+      onRouletteDone();
       return;
     }
     handleClose();
-  }, [handleClose, handleRouletteDone, incompleteConfirmVisible, phase]);
+  }, [handleClose, incompleteConfirmVisible, onCancelIncompleteDraw, onRouletteDone, phase]);
 
   return (
     <AnimatedModalShell
       visible={visible}
       variant={phase === 'filtros' ? 'sheet' : 'center'}
       onClose={handleClose}
-      onSheetDismiss={dismissFromSheet}
+      onSheetDismiss={handleSheetDismiss}
       onRequestClose={handleRequestClose}
       maxWidth={phase === 'filtros' ? 640 : 440}
       maxHeight={phase === 'filtros' ? activeSheetMaxHeight : Math.round(windowHeight * 0.9)}
@@ -224,11 +149,8 @@ export function DrawFlowModal({
           confirmLabel="Sortear mesmo assim"
           confirmIcon="auto-awesome"
           cancelAccessibilityLabel="Fechar aviso de carregamento"
-          onConfirm={() => {
-            setIncompleteConfirmVisible(false);
-            startDraw();
-          }}
-          onCancel={() => setIncompleteConfirmVisible(false)}
+          onConfirm={onConfirmIncompleteDraw}
+          onCancel={onCancelIncompleteDraw}
         />
       }>
       {phase === 'filtros' && (
@@ -250,7 +172,7 @@ export function DrawFlowModal({
             onToggleService={onToggleService}
             onToggleHideWatched={onToggleHideWatched}
             onResetFilters={onResetFilters}
-            onDraw={handleDrawPress}
+            onDraw={onDrawPress}
           />
         </Animated.View>
       )}
@@ -264,8 +186,8 @@ export function DrawFlowModal({
             candidates={spinSession.candidates}
             eligibleCount={spinSession.eligibleCount}
             spinKey={spinSession.spinKey}
-            onFinish={handleRouletteDone}
-            onSkip={handleRouletteDone}
+            onFinish={onRouletteDone}
+            onSkip={onRouletteDone}
           />
         </Animated.View>
       )}
@@ -277,23 +199,17 @@ export function DrawFlowModal({
           style={styles.resultInner}>
           <DrawResultPhase
             title={spinSession.winner}
+            duration={winnerDuration}
+            trailerUrl={winnerTrailerUrl}
+            saved={isWinnerSaved}
             activeSubscriptions={activeSubscriptions}
             enabledServices={enabledServices}
             canDrawAnother={eligibleTitles.length > 1}
             onClose={handleClose}
-            onWatch={() => {
-              commitDrawAction(spinSession.winner, 'assistiu');
-              handleClose();
-            }}
-            onMarkWatched={() => {
-              commitDrawAction(spinSession.winner, 'assistiu');
-            }}
-            onSaveChange={(nextSaved) => {
-              if (nextSaved) {
-                commitDrawAction(spinSession.winner, 'salvou');
-              }
-            }}
-            onDrawAnother={handleDrawAnother}
+            onWatch={onWatchWinner}
+            onToggleSave={onToggleWinnerSaved}
+            onMarkWatched={onMarkWinnerWatched}
+            onDrawAnother={onDrawAnother}
           />
         </Animated.View>
       )}

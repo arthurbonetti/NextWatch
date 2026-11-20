@@ -27,6 +27,7 @@ import {
   fetchTitleById,
   fetchTitleDuration,
   findCachedRelatedTitle,
+  getCachedTitleDuration,
   getCachedTitleTotalEpisodes,
 } from '@/services/tmdb';
 import { triggerSelectionHaptic } from '@/utils/haptics';
@@ -188,7 +189,28 @@ export default function MyListScreen() {
 
   const [activeTab, setActiveTab] = useState<ListsTab>('fila');
   const [fetchedTitles, setFetchedTitles] = useState<Record<string, MediaTitle>>({});
+  const [savedDurationsById, setSavedDurationsById] = useState<Record<string, string>>({});
   const attemptedFetchRef = useRef(new Set<string>());
+  const attemptedDurationRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    let active = true;
+    for (const title of savedTitles) {
+      if (title.duration || getCachedTitleDuration(title) || attemptedDurationRef.current.has(title.id)) {
+        continue;
+      }
+      attemptedDurationRef.current.add(title.id);
+      void fetchTitleDuration(title).then((resolved) => {
+        if (!active || !resolved) return;
+        setSavedDurationsById((prev) =>
+          prev[title.id] === resolved ? prev : { ...prev, [title.id]: resolved },
+        );
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [savedTitles]);
 
   useFocusEffect(
     useCallback(() => {
@@ -368,6 +390,7 @@ export default function MyListScreen() {
                   <FadeInBlock delay={Math.min(index + 1, 7) * 30}>
                     <MediaTitleCard
                       title={title}
+                      duration={savedDurationsById[title.id] ?? getCachedTitleDuration(title)}
                       onOpen={() => openTitleById(title.id)}
                       actionIcon="bookmark"
                       actionLabel={`Remover ${title.title} da fila`}

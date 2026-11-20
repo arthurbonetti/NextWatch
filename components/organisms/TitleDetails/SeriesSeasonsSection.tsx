@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -14,18 +14,18 @@ import { AppText } from '@/components/atoms/AppText';
 import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import { THEME, withAlpha } from '@/constants/theme';
-import {
-  EpisodeSummary,
-  fetchTvSeasonEpisodes,
-  getCachedTvSeasonEpisodes,
-  SeasonSummary,
-} from '@/services/tmdb';
+import type { EpisodeSummary, SeasonSummary } from '@/types/media';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
 type SeriesSeasonsSectionProps = {
-  titleId: string;
   seasons: SeasonSummary[];
   accentColor: string;
+  expandedSeason: number | null;
+  episodesBySeason: Partial<Record<number, EpisodeSummary[]>>;
+  loadingSeasonNumber: number | null;
+  seasonEpisodesError?: string | null;
+  onToggleExpandSeason: (seasonNumber: number) => void;
+  onRetrySeasonEpisodes?: (seasonNumber: number) => void;
   totalWatchedEpisodes: number;
   isEpisodeWatched: (seasonNumber: number, episodeNumber: number) => boolean;
   getSeasonWatchedCount: (seasonNumber: number) => number;
@@ -35,37 +35,37 @@ type SeriesSeasonsSectionProps = {
 };
 
 type SeasonAccordionProps = {
-  titleId: string;
   season: SeasonSummary;
   expanded: boolean;
   accentColor: string;
   watchedCount: number;
   completed: boolean;
+  episodes: EpisodeSummary[] | undefined;
+  loadingEpisodes: boolean;
+  episodesError: string | null;
   isEpisodeWatched: (seasonNumber: number, episodeNumber: number) => boolean;
   onToggleExpand: () => void;
+  onRetryEpisodes?: () => void;
   onToggleEpisode: (seasonNumber: number, episodeNumber: number) => void;
   onToggleSeason: (seasonNumber: number, episodeCount: number, episodeNumbers?: number[]) => void;
 };
 
 function SeasonAccordion({
-  titleId,
   season,
   expanded,
   accentColor,
   watchedCount,
   completed,
+  episodes,
+  loadingEpisodes,
+  episodesError,
   isEpisodeWatched,
   onToggleExpand,
+  onRetryEpisodes,
   onToggleEpisode,
   onToggleSeason,
 }: SeasonAccordionProps) {
   const reducedMotion = useReducedMotion();
-  const [loadedKey, setLoadedKey] = useState<string>('');
-  const [fetchedEpisodes, setFetchedEpisodes] = useState<EpisodeSummary[]>([]);
-  const requestKey = `${titleId}:${season.seasonNumber}`;
-  const cachedEpisodes = expanded ? getCachedTvSeasonEpisodes(titleId, season.seasonNumber) : null;
-  const episodes = cachedEpisodes ?? (loadedKey === requestKey ? fetchedEpisodes : null);
-  const loadingEpisodes = expanded && episodes === null;
 
   const chevronRotation = useSharedValue(expanded ? 180 : 0);
 
@@ -85,29 +85,6 @@ function SeasonAccordion({
   const chevronAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${chevronRotation.get()}deg` }],
   }));
-
-  useEffect(() => {
-    if (!expanded) return;
-    const cached = getCachedTvSeasonEpisodes(titleId, season.seasonNumber);
-    if (cached) return;
-
-    let cancelled = false;
-    void fetchTvSeasonEpisodes(titleId, season.seasonNumber)
-      .then((list) => {
-        if (cancelled) return;
-        setFetchedEpisodes(list);
-        setLoadedKey(requestKey);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setFetchedEpisodes([]);
-        setLoadedKey(requestKey);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [expanded, requestKey, season.seasonNumber, titleId]);
 
   const fallbackEpisodeNumbers = useMemo(
     () => Array.from({ length: Math.max(0, season.episodeCount) }, (_, idx) => idx + 1),
@@ -220,6 +197,27 @@ function SeasonAccordion({
               <SkeletonBox width="100%" height={36} borderRadius={THEME.radius.sm} />
               <SkeletonBox width="85%" height={36} borderRadius={THEME.radius.sm} />
             </View>
+          ) : episodesError && (!episodes || episodes.length === 0) ? (
+            <View style={styles.episodesErrorBox}>
+              <AppText tipo="legenda" style={styles.episodesErrorText}>
+                {episodesError}
+              </AppText>
+              {onRetryEpisodes && (
+                <Pressable
+                  onPress={() => {
+                    triggerSelectionHaptic();
+                    onRetryEpisodes();
+                  }}
+                  style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Tentar carregar episódios da ${seasonLabel} novamente`}>
+                  <MaterialIcons name="refresh" size={14} color={THEME.colors.accentText} />
+                  <AppText tipo="legenda" peso="forte" style={styles.retryButtonText}>
+                    Tentar novamente
+                  </AppText>
+                </Pressable>
+              )}
+            </View>
           ) : episodes && episodes.length > 0 ? (
             <Animated.View
               entering={reducedMotion ? undefined : FadeIn.duration(200)}
@@ -315,9 +313,14 @@ function SeasonAccordion({
 }
 
 export function SeriesSeasonsSection({
-  titleId,
   seasons,
   accentColor,
+  expandedSeason,
+  episodesBySeason,
+  loadingSeasonNumber,
+  seasonEpisodesError = null,
+  onToggleExpandSeason,
+  onRetrySeasonEpisodes,
   totalWatchedEpisodes,
   isEpisodeWatched,
   getSeasonWatchedCount,
@@ -326,9 +329,6 @@ export function SeriesSeasonsSection({
   onToggleSeason,
 }: SeriesSeasonsSectionProps) {
   const reducedMotion = useReducedMotion();
-  const [expandedSeason, setExpandedSeason] = useState<number | null>(
-    seasons.length === 1 ? seasons[0].seasonNumber : null,
-  );
 
   const totalEpisodes = useMemo(
     () => seasons.reduce((acc, item) => acc + Math.max(0, item.episodeCount), 0),
@@ -396,17 +396,20 @@ export function SeriesSeasonsSection({
           return (
             <SeasonAccordion
               key={season.seasonNumber}
-              titleId={titleId}
               season={season}
               expanded={isExpanded}
               accentColor={accentColor}
               watchedCount={getSeasonWatchedCount(season.seasonNumber)}
               completed={isSeasonCompleted(season.seasonNumber, season.episodeCount)}
+              episodes={episodesBySeason[season.seasonNumber]}
+              loadingEpisodes={isExpanded && loadingSeasonNumber === season.seasonNumber}
+              episodesError={isExpanded ? seasonEpisodesError : null}
               isEpisodeWatched={isEpisodeWatched}
-              onToggleExpand={() =>
-                setExpandedSeason((prev) =>
-                  prev === season.seasonNumber ? null : season.seasonNumber,
-                )
+              onToggleExpand={() => onToggleExpandSeason(season.seasonNumber)}
+              onRetryEpisodes={
+                onRetrySeasonEpisodes
+                  ? () => onRetrySeasonEpisodes(season.seasonNumber)
+                  : undefined
               }
               onToggleEpisode={onToggleEpisode}
               onToggleSeason={onToggleSeason}
@@ -550,6 +553,38 @@ const styles = StyleSheet.create({
   },
   episodesSkeleton: {
     gap: 6,
+  },
+  episodesErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: THEME.colors.bgCard,
+    borderRadius: THEME.radius.sm,
+    borderWidth: 1,
+    borderColor: THEME.colors.borderLight,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  episodesErrorText: {
+    flex: 1,
+    color: THEME.colors.textSecondary,
+    fontSize: 12,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: THEME.radius.pill,
+    backgroundColor: THEME.colors.bgHighlight,
+    borderWidth: 1,
+    borderColor: THEME.colors.borderWarm,
+  },
+  retryButtonText: {
+    color: THEME.colors.accentText,
+    fontSize: 11.5,
   },
   episodeRow: {
     flexDirection: 'row',

@@ -1,22 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { isMediaTitle, MediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
+import { isMediaTitle, MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useForegroundSync } from '@/hooks/useNetworkStatus';
 import {
-  classifySupabaseOutcome,
-  hasSupabaseConfig,
-  supabaseRestFetch,
-  type SupabaseOutcome,
-} from '@/services/authApi';
+  deleteMyListTitle,
+  fetchMyList,
+  upsertMyListBatch,
+  upsertMyListTitle,
+} from '@/services/repositories/myListRepo';
+import { hasSupabaseConfig } from '@/services/supabase';
 import { getCachedTitleDuration } from '@/services/tmdb';
 
 const BASE_STORAGE_KEY = '@nextwatch/my-list';
 const SYNCED_FLAG_PREFIX = '@nextwatch/my-list-synced';
 const PENDING_OPS_PREFIX = '@nextwatch/my-list-pending';
-const TABLE_NAME = 'user_my_list';
-const SYNC_TIMEOUT_MS = 8000;
 const AUTO_REFRESH_COOLDOWN_MS = 4000;
 
 type RefreshOptions = {
@@ -43,31 +42,6 @@ type PendingOp =
   | { type: 'delete' };
 
 type PendingOpsMap = Record<string, PendingOp>;
-
-type DbMyListRow = {
-  user_id: string;
-  title_id: string;
-  title: string;
-  kind: string;
-  year: number;
-  duration: string;
-  genres: string[] | null;
-  service: string;
-  services: string[] | null;
-  imdb_rating: string;
-  metacritic_score: number | null;
-  synopsis: string;
-  color: string;
-  icon: string;
-  rating_source: string | null;
-  catalog_source: string | null;
-  tmdb_poster_path: string | null;
-  tmdb_backdrop_path: string | null;
-  original_title: string | null;
-  popularity: number | null;
-  vote_count: number | null;
-  created_at?: string;
-};
 
 const MyListContext = createContext<MyListContextValue | null>(null);
 
@@ -134,158 +108,6 @@ function applyPendingOps(baseItems: MediaTitle[], pendingOps: PendingOpsMap): Me
   }
 
   return [...newUpserts, ...updatedBase];
-}
-
-function mapRowToMediaTitle(row: Partial<DbMyListRow> | null | undefined): MediaTitle | null {
-  if (!row || typeof row !== 'object') return null;
-
-  const candidate: MediaTitle = {
-    id: String(row.title_id ?? '').slice(0, 128),
-    title: String(row.title ?? '').slice(0, 500),
-    kind: row.kind as MediaTitle['kind'],
-    year: Math.max(0, Math.trunc(Number(row.year) || 0)),
-    duration: String(row.duration ?? ''),
-    genres: Array.isArray(row.genres) ? row.genres.filter((genre): genre is string => typeof genre === 'string') : [],
-    service: String(row.service ?? ''),
-    ...(Array.isArray(row.services)
-      ? { services: row.services.filter((service): service is string => typeof service === 'string') }
-      : {}),
-    imdbRating: String(row.imdb_rating ?? ''),
-    metacriticScore:
-      row.catalog_source !== 'tmdb' &&
-      typeof row.metacritic_score === 'number' &&
-      Number.isFinite(row.metacritic_score)
-        ? Math.round(row.metacritic_score)
-        : null,
-    synopsis: String(row.synopsis ?? ''),
-    color: sanitizeHexColor(row.color) ?? '#596b7c',
-    icon: row.icon as MediaTitle['icon'],
-    ...(row.rating_source === 'IMDb' || row.rating_source === 'TMDB'
-      ? { ratingSource: row.rating_source }
-      : {}),
-    ...(row.catalog_source === 'tmdb' ? { catalogSource: 'tmdb' as const } : {}),
-    tmdbPosterPath: sanitizeTmdbPath(row.tmdb_poster_path),
-    tmdbBackdropPath: sanitizeTmdbPath(row.tmdb_backdrop_path),
-    ...(typeof row.original_title === 'string' ? { originalTitle: row.original_title } : {}),
-    ...(typeof row.popularity === 'number' && Number.isFinite(row.popularity)
-      ? { popularity: row.popularity }
-      : {}),
-    ...(typeof row.vote_count === 'number' && Number.isFinite(row.vote_count)
-      ? { voteCount: Math.trunc(row.vote_count) }
-      : {}),
-  };
-
-  return isMediaTitle(candidate) ? candidate : null;
-}
-
-function mapMediaTitleToDbRow(
-  userId: string,
-  title: MediaTitle,
-  createdAt?: string,
-): DbMyListRow {
-  const safeService = (title.service || title.services?.[0] || 'Netflix').trim().slice(0, 64) || 'Netflix';
-  const safeServices = Array.isArray(title.services)
-    ? title.services.map((service) => String(service).trim().slice(0, 64)).filter(Boolean).slice(0, 20)
-    : null;
-
-  return {
-    user_id: userId,
-    title_id: title.id.slice(0, 128),
-    title: (title.title.trim() || 'Título sem nome').slice(0, 500),
-    kind: title.kind,
-    year: Math.max(0, Math.trunc(title.year) || 0),
-    duration: (title.duration ?? '').slice(0, 64),
-    genres: (Array.isArray(title.genres) ? title.genres : [])
-      .map((genre) => String(genre).trim())
-      .filter(Boolean)
-      .slice(0, 20),
-    service: safeService,
-    services: safeServices && safeServices.length > 0 ? safeServices : null,
-    imdb_rating: (title.imdbRating ?? '').slice(0, 16),
-    metacritic_score:
-      typeof title.metacriticScore === 'number' && Number.isFinite(title.metacriticScore)
-        ? Math.min(100, Math.max(0, Math.round(title.metacriticScore)))
-        : null,
-    synopsis: (title.synopsis ?? '').slice(0, 4000),
-    color: sanitizeHexColor(title.color) ?? '#596b7c',
-    icon: title.icon,
-    rating_source: title.ratingSource === 'IMDb' || title.ratingSource === 'TMDB' ? title.ratingSource : null,
-    catalog_source: title.catalogSource === 'tmdb' ? 'tmdb' : null,
-    tmdb_poster_path: sanitizeTmdbPath(title.tmdbPosterPath),
-    tmdb_backdrop_path: sanitizeTmdbPath(title.tmdbBackdropPath),
-    original_title:
-      typeof title.originalTitle === 'string' && title.originalTitle.trim().length > 0
-        ? title.originalTitle.trim().slice(0, 500)
-        : null,
-    popularity:
-      typeof title.popularity === 'number' && Number.isFinite(title.popularity) && title.popularity >= 0
-        ? title.popularity
-        : null,
-    vote_count:
-      typeof title.voteCount === 'number' && Number.isFinite(title.voteCount) && title.voteCount >= 0
-        ? Math.trunc(title.voteCount)
-        : null,
-    ...(createdAt ? { created_at: createdAt } : {}),
-  };
-}
-
-async function remoteFetchTitles(userId: string, token: string): Promise<MediaTitle[] | null> {
-  try {
-    const response = await supabaseRestFetch(
-      `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&select=*&order=created_at.desc`,
-      {},
-      token,
-      SYNC_TIMEOUT_MS,
-    );
-    if (!response || !response.ok) return null;
-    const rows: unknown = await response.json();
-    if (!Array.isArray(rows)) return null;
-    return (rows as Partial<DbMyListRow>[])
-      .map(mapRowToMediaTitle)
-      .filter((item): item is MediaTitle => item !== null);
-  } catch {
-    return null;
-  }
-}
-
-async function remoteUpsertTitles(
-  rows: DbMyListRow[],
-  token: string,
-): Promise<SupabaseOutcome> {
-  if (rows.length === 0) return 'ok';
-  try {
-    const response = await supabaseRestFetch(
-      `/rest/v1/${TABLE_NAME}`,
-      {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates' },
-        body: JSON.stringify(rows.length === 1 ? rows[0] : rows),
-      },
-      token,
-      SYNC_TIMEOUT_MS,
-    );
-    return response ? classifySupabaseOutcome(response) : 'retry';
-  } catch {
-    return 'retry';
-  }
-}
-
-async function remoteDeleteTitle(
-  userId: string,
-  titleId: string,
-  token: string,
-): Promise<SupabaseOutcome> {
-  try {
-    const response = await supabaseRestFetch(
-      `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&title_id=eq.${encodeURIComponent(titleId)}`,
-      { method: 'DELETE' },
-      token,
-      SYNC_TIMEOUT_MS,
-    );
-    return response ? classifySupabaseOutcome(response) : 'retry';
-  } catch {
-    return 'retry';
-  }
 }
 
 export function MyListProvider({ children }: PropsWithChildren) {
@@ -395,8 +217,8 @@ export function MyListProvider({ children }: PropsWithChildren) {
           const seqBefore = itemOpSeqRef.current.get(opKey) ?? 0;
 
           const outcome = op.type === 'upsert'
-            ? await remoteUpsertTitles([mapMediaTitleToDbRow(userId, op.title)], sessionToken)
-            : await remoteDeleteTitle(userId, titleId, sessionToken);
+            ? await upsertMyListTitle(userId, op.title)
+            : await deleteMyListTitle(userId, titleId);
 
           if (!isSessionCurrent()) return;
           if (outcome === 'retry') {
@@ -419,7 +241,7 @@ export function MyListProvider({ children }: PropsWithChildren) {
 
         // 3. Busca lista autoritativa no Supabase
         const epochAtGetStart = mutationEpochRef.current;
-        const fetchedTitles = await remoteFetchTitles(userId, sessionToken);
+        const fetchedTitles = await fetchMyList(userId);
         if (!isSessionCurrent() || fetchedTitles === null) return;
         let remoteTitles = fetchedTitles;
 
@@ -434,9 +256,12 @@ export function MyListProvider({ children }: PropsWithChildren) {
 
           if (localOnly.length > 0) {
             const now = Date.now();
-            const migrationOutcome = await remoteUpsertTitles(
-              localOnly.map((item, index) => mapMediaTitleToDbRow(userId, item, new Date(now - index).toISOString())),
-              sessionToken,
+            const migrationOutcome = await upsertMyListBatch(
+              userId,
+              localOnly.map((item, index) => ({
+                title: item,
+                createdAt: new Date(now - index).toISOString(),
+              })),
             );
             if (!isSessionCurrent()) return;
             remoteTitles = [...localOnly, ...remoteTitles];
@@ -532,8 +357,8 @@ export function MyListProvider({ children }: PropsWithChildren) {
     if (!token || !hasSupabaseConfig()) return;
 
     const remoteCall = mode === 'delete' || !snapshot
-      ? remoteDeleteTitle(userId, targetId, token)
-      : remoteUpsertTitles([mapMediaTitleToDbRow(userId, snapshot)], token);
+      ? deleteMyListTitle(userId, targetId)
+      : upsertMyListTitle(userId, snapshot);
 
     void remoteCall.then((outcome) => {
       if (outcome === 'retry') return;

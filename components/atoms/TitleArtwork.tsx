@@ -3,7 +3,7 @@ import { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
-import { tmdbImageUri } from '@/services/tmdb';
+import { tmdbImageUri } from '@/utils/tmdbImage';
 
 type ArtworkVariant = 'poster' | 'backdrop';
 

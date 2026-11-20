@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, type ViewToken } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
@@ -23,6 +23,7 @@ import { FONT_FAMILIES } from '@/constants/typography';
 import { useCatalog } from '@/contexts/CatalogContext';
 import { useMyList } from '@/contexts/MyListContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 import { formatCount } from '@/utils/format';
 
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
@@ -62,7 +63,9 @@ export default function ExploreScreen() {
   const [remoteQuery, setRemoteQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [durationsById, setDurationsById] = useState<Record<string, string>>({});
   const searchRequestRef = useRef(0);
+  const fetchedDurationIdsRef = useRef(new Set<string>());
 
   const handlePullRefresh = useCallback(async () => {
     setPullRefreshing(true);
@@ -271,6 +274,30 @@ export default function ExploreScreen() {
 
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
+  const resolveDurations = useCallback((items: MediaTitle[]) => {
+    for (const title of items) {
+      if (title.duration || getCachedTitleDuration(title) || fetchedDurationIdsRef.current.has(title.id)) {
+        continue;
+      }
+      fetchedDurationIdsRef.current.add(title.id);
+      void fetchTitleDuration(title).then((resolved) => {
+        if (!resolved) return;
+        setDurationsById((prev) => (prev[title.id] === resolved ? prev : { ...prev, [title.id]: resolved }));
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    resolveDurations(results.slice(0, 14));
+  }, [resolveDurations, results]);
+
+  const handleViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<MediaTitle>[] }) => {
+      resolveDurations(viewableItems.map((entry) => entry.item).filter((item): item is MediaTitle => Boolean(item)));
+    },
+    [resolveDurations],
+  );
+
   const renderTitleItem = useCallback(
     ({ item, index }: { item: MediaTitle; index: number }) => {
       const saved = isSaved(item.id);
@@ -278,6 +305,7 @@ export default function ExploreScreen() {
         <FadeInBlock delay={Math.min(index, 6) * 30}>
           <MediaTitleCard
             title={item}
+            duration={durationsById[item.id] ?? getCachedTitleDuration(item)}
             onOpen={() => openTitle(item)}
             actionIcon={saved ? 'bookmark' : 'bookmark-add'}
             actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
@@ -288,7 +316,7 @@ export default function ExploreScreen() {
         </FadeInBlock>
       );
     },
-    [isSaved, openTitle, toggleSavedTitle],
+    [durationsById, isSaved, openTitle, toggleSavedTitle],
   );
 
   return (
@@ -303,6 +331,7 @@ export default function ExploreScreen() {
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={5}
+        onViewableItemsChanged={handleViewableItemsChanged}
         refreshControl={
           <RefreshControl
             refreshing={pullRefreshing}

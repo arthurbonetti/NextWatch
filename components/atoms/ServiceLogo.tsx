@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from './AppText';
 import { SUBSCRIPTION_PROVIDERS } from '@/constants/subscriptions';
-import { getDynamicProviderLogo, tmdbImageUri } from '@/services/tmdb';
+import { getDynamicProviderLogo, tmdbImageUri } from '@/utils/tmdbImage';
 
 type ServiceLogoProps = {
   name: string;

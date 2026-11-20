@@ -2,7 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
-import { type AuthStatus } from '@/services/authApi';
+import { type AuthStatus } from '@/types/auth';
 
 type AuthStatusBannersProps = {
   isConnected: boolean | null;

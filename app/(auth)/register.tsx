@@ -9,7 +9,7 @@ import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { useAuth } from '@/contexts/AuthContext';
-import { isStrongPassword, isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/services/authApi';
+import { isStrongPassword, isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/types/auth';
 
 export default function RegisterScreen() {
   const { user, authReady, signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();

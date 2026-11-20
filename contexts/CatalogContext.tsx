@@ -1,15 +1,13 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CATALOG, MediaTitle } from '@/constants/catalog';
+import type { MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptions } from '@/contexts/SubscriptionsContext';
 import {
-  CatalogBackendNotConfiguredError,
   fetchAllCatalogForProviders,
   hasCatalogBackend,
   searchCatalogTitles,
 } from '@/services/tmdb';
-import { quickSortByRandom } from '@/utils/quickSort';
 
 export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 
@@ -43,7 +41,6 @@ export function CatalogProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<CatalogStatus>(() => (hasAuthSession && hasCatalogBackend() ? 'loading' : 'needs-api-key'));
   const [isFetchingCatalog, setIsFetchingCatalog] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [sessionCatalog] = useState(() => quickSortByRandom(CATALOG));
   const [searchedTitles, setSearchedTitles] = useState<MediaTitle[]>([]);
   const requestVersionRef = useRef(0);
   const searchCacheRef = useRef(new Map<string, MediaTitle[]>());
@@ -76,7 +73,7 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     if (!storageReady) return;
     const requestVersion = ++requestVersionRef.current;
 
-    if (!hasAuthSession || !hasCatalogBackend()) {
+    if (!hasAuthSession) {
       setStatus('needs-api-key');
       setIsFetchingCatalog(false);
       setErrorMessage(null);
@@ -88,37 +85,33 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     setErrorMessage(null);
     const shouldAbort = () => requestVersionRef.current !== requestVersion;
 
-    try {
-      await fetchAllCatalogForProviders(
-        providerKey ? providerKey.split('|') : [],
-        (batchTitles) => {
-          if (shouldAbort()) return;
-          setRemoteTitles(batchTitles);
-          setRemoteProviderKey(providerKey);
-          setStatus('ready');
-        },
-        shouldAbort,
-      );
-      if (!shouldAbort()) {
-        setIsFetchingCatalog(false);
-      }
-    } catch (error) {
-      if (shouldAbort()) return;
-      if (error instanceof CatalogBackendNotConfiguredError) {
-        setStatus('needs-api-key');
-        setIsFetchingCatalog(false);
-        setErrorMessage(null);
-        return;
-      }
-      setStatus('error');
-      setIsFetchingCatalog(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível atualizar o catálogo.');
+    const result = await fetchAllCatalogForProviders(
+      providerKey ? providerKey.split('|') : [],
+      (batchTitles) => {
+        if (shouldAbort()) return;
+        setRemoteTitles(batchTitles);
+        setRemoteProviderKey(providerKey);
+        setStatus('ready');
+      },
+      shouldAbort,
+    );
+
+    if (shouldAbort()) return;
+
+    setRemoteTitles(result.titles);
+    setRemoteProviderKey(providerKey);
+    setIsFetchingCatalog(false);
+    if (result.source === 'static-fallback') {
+      setStatus(result.reason === 'not-configured' ? 'needs-api-key' : 'error');
+      setErrorMessage(result.errorMessage ?? null);
+    } else {
+      setStatus('ready');
     }
   }, [hasAuthSession, providerKey, storageReady]);
 
   const searchTitles = useCallback(async (query: string) => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    if (normalizedQuery.length < 2 || !hasAuthSession || !hasCatalogBackend()) return [];
+    if (normalizedQuery.length < 2) return [];
     const cachedResults = searchCacheRef.current.get(normalizedQuery);
     if (cachedResults) {
       setSearchedTitles((current) => mergeTitles(current, cachedResults));
@@ -135,7 +128,7 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     searchCacheRef.current.set(normalizedQuery, results);
     setSearchedTitles((current) => mergeTitles(current, results));
     return results;
-  }, [hasAuthSession]);
+  }, []);
 
   useEffect(() => {
     if (!storageReady || !hasAuthSession) return;
@@ -149,15 +142,11 @@ export function CatalogProvider({ children }: PropsWithChildren) {
     if (remoteTitles && remoteProviderKey === providerKey) {
       return remoteTitles;
     }
-    if (status === 'needs-api-key' || status === 'error') {
-      return sessionCatalog;
-    }
     return [];
-  }, [providerKey, remoteProviderKey, remoteTitles, sessionCatalog, status]);
+  }, [providerKey, remoteProviderKey, remoteTitles]);
 
   const titlesById = useMemo(() => {
     const map = new Map<string, MediaTitle>();
-    for (const title of CATALOG) map.set(title.id, title);
     for (const title of searchedTitles) map.set(title.id, title);
     for (const title of activeTitles) map.set(title.id, title);
     return map;

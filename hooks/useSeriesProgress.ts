@@ -3,50 +3,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useForegroundSync } from '@/hooks/useNetworkStatus';
 import {
-  classifySupabaseOutcome,
-  hasSupabaseConfig,
-  supabaseRestFetch,
-  type SupabaseOutcome,
-} from '@/services/authApi';
+  deleteSeriesProgress,
+  fetchAllWatchedProgress,
+  fetchSeriesProgress,
+  sanitizeProgressObject,
+  upsertSeriesProgress,
+} from '@/services/repositories/progressRepo';
+import { hasSupabaseConfig } from '@/services/supabase';
 import {
   mergeWatchedProgress,
   type RemoteProgressEntry,
   type SeriesProgressMap,
 } from '@/utils/watchedProgress';
 
-type DbSeriesProgressRow = {
-  user_id: string;
-  title_id: string;
-  progress: SeriesProgressMap;
-  updated_at?: string;
-};
-
 const BASE_STORAGE_KEY = '@nextwatch/series-progress';
 const PENDING_SYNC_PREFIX = '@nextwatch/series-progress-pending';
-const TABLE_NAME = 'user_series_progress';
-const SYNC_TIMEOUT_MS = 8000;
 const EMPTY_MAP: SeriesProgressMap = {};
-
-function sanitizeProgressObject(parsed: unknown): SeriesProgressMap {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return EMPTY_MAP;
-  }
-  const result: SeriesProgressMap = {};
-  for (const [seasonKey, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!Array.isArray(value)) continue;
-    const validEpisodes = Array.from(
-      new Set(
-        value.filter(
-          (ep): ep is number => typeof ep === 'number' && Number.isInteger(ep) && ep > 0,
-        ),
-      ),
-    ).sort((a, b) => a - b);
-    if (validEpisodes.length > 0) {
-      result[seasonKey] = validEpisodes;
-    }
-  }
-  return result;
-}
 
 function parseProgressMap(raw: string | null): SeriesProgressMap {
   if (!raw) return EMPTY_MAP;
@@ -54,78 +26,6 @@ function parseProgressMap(raw: string | null): SeriesProgressMap {
     return sanitizeProgressObject(JSON.parse(raw));
   } catch {
     return EMPTY_MAP;
-  }
-}
-
-async function remoteFetchSeriesProgress(
-  userId: string,
-  titleId: string,
-  token: string,
-): Promise<{ found: boolean; map: SeriesProgressMap } | null> {
-  try {
-    const response = await supabaseRestFetch(
-      `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&title_id=eq.${encodeURIComponent(titleId)}&select=progress&limit=1`,
-      {},
-      token,
-      SYNC_TIMEOUT_MS,
-    );
-    if (!response || !response.ok) return null;
-    const rows: unknown = await response.json();
-    if (!Array.isArray(rows)) return null;
-    if (rows.length === 0) {
-      return { found: false, map: EMPTY_MAP };
-    }
-    const first = rows[0] as Partial<DbSeriesProgressRow>;
-    return { found: true, map: sanitizeProgressObject(first.progress) };
-  } catch {
-    return null;
-  }
-}
-
-async function remoteUpsertSeriesProgress(
-  userId: string,
-  titleId: string,
-  progress: SeriesProgressMap,
-  token: string,
-): Promise<SupabaseOutcome> {
-  try {
-    const payload: DbSeriesProgressRow = {
-      user_id: userId,
-      title_id: titleId.slice(0, 128),
-      progress,
-      updated_at: new Date().toISOString(),
-    };
-    const response = await supabaseRestFetch(
-      `/rest/v1/${TABLE_NAME}`,
-      {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates' },
-        body: JSON.stringify(payload),
-      },
-      token,
-      SYNC_TIMEOUT_MS,
-    );
-    return response ? classifySupabaseOutcome(response) : 'retry';
-  } catch {
-    return 'retry';
-  }
-}
-
-async function remoteDeleteSeriesProgress(
-  userId: string,
-  titleId: string,
-  token: string,
-): Promise<SupabaseOutcome> {
-  try {
-    const response = await supabaseRestFetch(
-      `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&title_id=eq.${encodeURIComponent(titleId)}`,
-      { method: 'DELETE' },
-      token,
-      SYNC_TIMEOUT_MS,
-    );
-    return response ? classifySupabaseOutcome(response) : 'retry';
-  } catch {
-    return 'retry';
   }
 }
 
@@ -180,8 +80,8 @@ export function useSeriesProgress(
         mutationEpochRef.current === initialEpoch ? localMap : latestMapRef.current;
       const outcome =
         Object.keys(currentMap).length === 0
-          ? await remoteDeleteSeriesProgress(userId, titleId, token)
-          : await remoteUpsertSeriesProgress(userId, titleId, currentMap, token);
+          ? await deleteSeriesProgress(userId, titleId)
+          : await upsertSeriesProgress(userId, titleId, currentMap);
 
       if (outcome === 'ok' && mutationEpochRef.current === initialEpoch) {
         await AsyncStorage.removeItem(targetPendingKey).catch(() => {});
@@ -189,7 +89,7 @@ export function useSeriesProgress(
       return;
     }
 
-    const remote = await remoteFetchSeriesProgress(userId, titleId, token);
+    const remote = await fetchSeriesProgress(userId, titleId);
     if (!remote || activeKeyRef.current !== targetKey) return;
     if (mutationEpochRef.current !== initialEpoch) return;
 
@@ -199,7 +99,7 @@ export function useSeriesProgress(
       await AsyncStorage.setItem(targetKey, JSON.stringify(remote.map)).catch(() => {});
     } else if (Object.keys(localMap).length > 0) {
       // Migra progresso salvo apenas localmente antes da sincronização em nuvem.
-      await remoteUpsertSeriesProgress(userId, titleId, localMap, token);
+      await upsertSeriesProgress(userId, titleId, localMap);
     }
   }, [pendingKey, storageKey, titleId, token, userId]);
 
@@ -221,8 +121,8 @@ export function useSeriesProgress(
       await AsyncStorage.setItem(pendingKey, '1').catch(() => {});
       const outcome =
         Object.keys(nextMap).length === 0
-          ? await remoteDeleteSeriesProgress(userId, titleId, token)
-          : await remoteUpsertSeriesProgress(userId, titleId, nextMap, token);
+          ? await deleteSeriesProgress(userId, titleId)
+          : await upsertSeriesProgress(userId, titleId, nextMap);
 
       if (outcome === 'ok' && mutationEpochRef.current === expectedEpoch) {
         await AsyncStorage.removeItem(pendingKey).catch(() => {});
@@ -389,30 +289,11 @@ export function useWatchedProgressIds(userId: string | null, token: string | nul
       }
     }
 
-    const remoteRows: RemoteProgressEntry[] = [];
-    if (canFetchRemote && userId && token) {
-      try {
-        const response = await supabaseRestFetch(
-          `/rest/v1/${TABLE_NAME}?user_id=eq.${encodeURIComponent(userId)}&select=title_id,progress&order=updated_at.desc`,
-          {},
-          token,
-          SYNC_TIMEOUT_MS,
-        );
-        if (response?.ok) {
-          const rows: unknown = await response.json();
-          if (Array.isArray(rows)) {
-            for (const row of rows as Array<{ title_id?: unknown; progress?: unknown }>) {
-              if (typeof row?.title_id === 'string' && row.title_id.length > 0) {
-                remoteRows.push({
-                  titleId: row.title_id,
-                  progress: sanitizeProgressObject(row.progress),
-                });
-              }
-            }
-          }
-        }
-      } catch {
-        // fallback para os dados locais já coletados
+    let remoteRows: RemoteProgressEntry[] = [];
+    if (canFetchRemote && userId) {
+      const fetched = await fetchAllWatchedProgress(userId);
+      if (fetched) {
+        remoteRows = fetched;
       }
     }
 

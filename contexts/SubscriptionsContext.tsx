@@ -3,11 +3,15 @@ import { createContext, PropsWithChildren, useCallback, useContext, useEffect, u
 
 import { Subscription } from '@/constants/subscriptions';
 import { useAuth } from '@/contexts/AuthContext';
-import { hasSupabaseConfig, supabaseRestFetch } from '@/services/authApi';
+import {
+  deleteSubscription,
+  fetchSubscriptions,
+  isSubscription,
+  upsertSubscription,
+} from '@/services/repositories/subscriptionsRepo';
+import { hasSupabaseConfig } from '@/services/supabase';
 
 const BASE_STORAGE_KEY = '@nextwatch/subscriptions';
-const SYNC_TIMEOUT_MS = 8000;
-const MAX_MONTHLY_PRICE = 10000;
 
 type SubscriptionsContextValue = {
   subscriptions: Subscription[];
@@ -15,17 +19,6 @@ type SubscriptionsContextValue = {
   saveSubscription: (subscription: Subscription) => void;
   toggleSubscription: (id: string) => void;
   removeSubscription: (id: string) => void;
-};
-
-type DbSubscriptionRow = {
-  user_id: string;
-  subscription_id: string;
-  provider: string;
-  monthly_price: number;
-  billing_day: number;
-  active: boolean;
-  renewal_alert: boolean;
-  alert_days: number;
 };
 
 const SubscriptionsContext = createContext<SubscriptionsContextValue | null>(null);
@@ -62,7 +55,6 @@ export function SubscriptionsProvider({ children }: PropsWithChildren) {
   // Carrega cache local imediatamente e sincroniza com Supabase quando autenticado
   useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
 
     if (!storageKey || !userId) {
       latestSubscriptionsRef.current = [];
@@ -89,76 +81,29 @@ export function SubscriptionsProvider({ children }: PropsWithChildren) {
 
       if (cancelled || !hasToken || !hasSupabaseConfig()) return;
 
-      try {
-        const response = await supabaseRestFetch(
-          `/rest/v1/user_subscriptions?user_id=eq.${encodeURIComponent(activeUserId)}&select=*`,
-          { signal: controller.signal },
-          tokenRef.current,
-          SYNC_TIMEOUT_MS,
-        );
-        if (cancelled || !response || !response.ok) return;
-        const rows: unknown = await response.json();
-        if (cancelled || !Array.isArray(rows)) return;
+      const remoteSubs = await fetchSubscriptions(activeUserId);
+      if (cancelled || !remoteSubs) return;
 
-        const remoteSubs = (rows as DbSubscriptionRow[])
-          .map((row): Subscription => ({
-            id: String(row.subscription_id ?? '').slice(0, 128),
-            provider: String(row.provider ?? '').slice(0, 64),
-            monthlyPrice: Math.min(MAX_MONTHLY_PRICE, Math.max(0.01, Number(row.monthly_price) || 0)),
-            billingDay: Math.min(31, Math.max(1, Math.trunc(Number(row.billing_day) || 1))),
-            active: Boolean(row.active),
-            renewalAlert: Boolean(row.renewal_alert),
-            alertDays: row.alert_days === 1 || row.alert_days === 3 || row.alert_days === 7 ? row.alert_days : 3,
-          }))
-          .filter(isSubscription);
-
-        latestSubscriptionsRef.current = remoteSubs;
-        setSubscriptions(remoteSubs);
-        AsyncStorage.setItem(activeKey, JSON.stringify(remoteSubs)).catch(() => {});
-      } catch {
-        // Mantém os dados locais se offline
-      }
+      latestSubscriptionsRef.current = remoteSubs;
+      setSubscriptions(remoteSubs);
+      AsyncStorage.setItem(activeKey, JSON.stringify(remoteSubs)).catch(() => {});
     }
 
     void loadSubscriptions(storageKey, userId);
 
     return () => {
       cancelled = true;
-      controller.abort();
     };
   }, [hasToken, storageKey, userId]);
 
   const syncUpsertToRemote = useCallback((sub: Subscription) => {
     if (!userId || !tokenRef.current || !hasSupabaseConfig()) return;
-    void supabaseRestFetch(
-      '/rest/v1/user_subscriptions',
-      {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates' },
-        body: JSON.stringify({
-          user_id: userId,
-          subscription_id: sub.id,
-          provider: sub.provider,
-          monthly_price: sub.monthlyPrice,
-          billing_day: sub.billingDay,
-          active: sub.active,
-          renewal_alert: sub.renewalAlert,
-          alert_days: sub.alertDays,
-        }),
-      },
-      tokenRef.current,
-      SYNC_TIMEOUT_MS,
-    ).catch(() => {});
+    void upsertSubscription(userId, sub);
   }, [userId]);
 
   const syncDeleteFromRemote = useCallback((subId: string) => {
     if (!userId || !tokenRef.current || !hasSupabaseConfig()) return;
-    void supabaseRestFetch(
-      `/rest/v1/user_subscriptions?user_id=eq.${encodeURIComponent(userId)}&subscription_id=eq.${encodeURIComponent(subId)}`,
-      { method: 'DELETE' },
-      tokenRef.current,
-      SYNC_TIMEOUT_MS,
-    ).catch(() => {});
+    void deleteSubscription(userId, subId);
   }, [userId]);
 
   const saveSubscription = useCallback((subscription: Subscription) => {
@@ -201,28 +146,4 @@ export function useSubscriptions() {
   const context = useContext(SubscriptionsContext);
   if (!context) throw new Error('useSubscriptions must be used within SubscriptionsProvider');
   return context;
-}
-
-function isSubscription(value: unknown): value is Subscription {
-  if (!value || typeof value !== 'object') return false;
-  const item = value as Partial<Subscription>;
-  return (
-    typeof item.id === 'string' &&
-    item.id.length > 0 &&
-    item.id.length <= 128 &&
-    typeof item.provider === 'string' &&
-    item.provider.length > 0 &&
-    item.provider.length <= 64 &&
-    typeof item.monthlyPrice === 'number' &&
-    Number.isFinite(item.monthlyPrice) &&
-    item.monthlyPrice > 0 &&
-    item.monthlyPrice <= MAX_MONTHLY_PRICE &&
-    typeof item.billingDay === 'number' &&
-    Number.isInteger(item.billingDay) &&
-    item.billingDay >= 1 &&
-    item.billingDay <= 31 &&
-    typeof item.active === 'boolean' &&
-    typeof item.renewalAlert === 'boolean' &&
-    (item.alertDays === 1 || item.alertDays === 3 || item.alertDays === 7)
-  );
 }

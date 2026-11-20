@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import { fetchWithTimeout } from '@/services/authApi';
+import { fetchWithTimeout } from '@/utils/http';
 
 const PROBE_URL = 'https://api.themoviedb.org/3/configuration';
 const PROBE_TIMEOUT_MS = 5000;

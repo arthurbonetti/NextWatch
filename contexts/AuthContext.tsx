@@ -2,15 +2,13 @@ import { createContext, PropsWithChildren, useCallback, useContext, useEffect, u
 
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
-  type AuthStatus,
-  type AuthUser,
   clearAuthSession,
   loginWithCredentials,
+  onAuthStateChange,
   registerAccount,
   restoreAuthSession,
-  subscribeSessionInvalidated,
-  subscribeSessionRefreshed,
-} from '@/services/authApi';
+} from '@/services/authService';
+import type { AuthSession, AuthStatus, AuthUser } from '@/types/auth';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -38,18 +36,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let active = true;
 
-    const unsubscribeRefreshed = subscribeSessionRefreshed((session) => {
+    const unsubscribeAuth = onAuthStateChange((event, session) => {
       if (!active) return;
-      setUser(session.user);
-      setToken(session.accessToken);
-      setStatus('success');
-    });
-
-    const unsubscribeInvalidated = subscribeSessionInvalidated(() => {
-      if (!active) return;
-      setUser(null);
-      setToken(null);
-      setStatus('idle');
+      if (session) {
+        setUser(session.user);
+        setToken(session.accessToken);
+        setStatus('success');
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setToken(null);
+        setStatus('idle');
+      }
     });
 
     restoreAuthSession()
@@ -72,8 +69,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return () => {
       active = false;
-      unsubscribeRefreshed();
-      unsubscribeInvalidated();
+      unsubscribeAuth();
     };
   }, []);
 
@@ -82,7 +78,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setStatus((current) => (current === 'error' ? 'idle' : current));
   }, []);
 
-  const runAuthAction = useCallback(async (action: () => Promise<Awaited<ReturnType<typeof loginWithCredentials>>>, fallbackMessage: string) => {
+  const runAuthAction = useCallback(async (action: () => Promise<AuthSession>, fallbackMessage: string) => {
     setStatus('loading');
     setErrorMessage(null);
 

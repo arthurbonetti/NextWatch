@@ -6,7 +6,7 @@ import Animated from 'react-native-reanimated';
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
-import { DrawAction, DrawHistoryEntry } from '@/contexts/DrawHistoryContext';
+import { type DrawAction, type DrawHistoryEntry } from '@/types/drawHistory';
 import { formatShortDateTime } from '@/utils/format';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];

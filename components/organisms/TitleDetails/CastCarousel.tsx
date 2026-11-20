@@ -4,7 +4,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import { THEME } from '@/constants/theme';
-import { CastMember, tmdbImageUri } from '@/services/tmdb';
+import { type CastMember } from '@/types/media';
+import { tmdbImageUri } from '@/utils/tmdbImage';
 
 type CastCarouselProps = {
   cast: CastMember[];

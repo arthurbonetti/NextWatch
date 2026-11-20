@@ -30,18 +30,14 @@ import {
 } from '@/constants/catalog';
 import { openStreamingService, Subscription } from '@/constants/subscriptions';
 import { resolveTitleAccentColor, THEME, withAlpha } from '@/constants/theme';
-import { useMyList } from '@/contexts/MyListContext';
-import {
-  fetchTitleDuration,
-  fetchTitleTrailerUrl,
-  getCachedTitleDuration,
-  getCachedTitleTrailerUrl,
-} from '@/services/tmdb';
 import { formatCurrency } from '@/utils/format';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
 type TitleDetailCardProps = {
   title: MediaTitle;
+  duration?: string;
+  trailerUrl?: string | null;
+  saved: boolean;
   eyebrow?: string;
   activeSubscriptions: Subscription[];
   enabledServices?: string[];
@@ -49,6 +45,7 @@ type TitleDetailCardProps = {
   showConfetti?: boolean;
   onClose: () => void;
   onWatch: () => void;
+  onToggleSave: () => void;
   onMarkWatched?: () => void;
   onSaveChange?: (saved: boolean) => void;
   onDrawAnother?: () => void;
@@ -180,6 +177,9 @@ function buildDrawReason(title: MediaTitle, primaryProvider: string | null): str
  */
 export function TitleDetailCard({
   title,
+  duration,
+  trailerUrl = null,
+  saved,
   eyebrow = 'PARA ASSISTIR HOJE',
   activeSubscriptions,
   enabledServices,
@@ -187,16 +187,14 @@ export function TitleDetailCard({
   showConfetti = false,
   onClose,
   onWatch,
+  onToggleSave,
   onMarkWatched,
   onSaveChange,
   onDrawAnother,
 }: TitleDetailCardProps) {
   const reducedMotion = useReducedMotion();
-  const { isSaved, toggleSavedTitle } = useMyList();
 
   const [prevTitleId, setPrevTitleId] = useState(title.id);
-  const [duration, setDuration] = useState(() => getCachedTitleDuration(title));
-  const [trailerUrl, setTrailerUrl] = useState<string | null>(() => getCachedTitleTrailerUrl(title));
   const [expanded, setExpanded] = useState(false);
   const [showRatingInfo, setShowRatingInfo] = useState(false);
   const [showAllProviders, setShowAllProviders] = useState(false);
@@ -208,8 +206,6 @@ export function TitleDetailCard({
 
   if (prevTitleId !== title.id) {
     setPrevTitleId(title.id);
-    setDuration(getCachedTitleDuration(title));
-    setTrailerUrl(getCachedTitleTrailerUrl(title));
     setExpanded(false);
     setShowRatingInfo(false);
     setShowAllProviders(false);
@@ -217,7 +213,7 @@ export function TitleDetailCard({
     setMarkedWatched(false);
   }
 
-  const saved = isSaved(title.id);
+  const displayDuration = duration || title.duration;
   const accentColor = resolveTitleAccentColor(title.color);
   const uniqueTitleServices = Array.from(new Set(getTitleServices(title)));
   const enabledSet = enabledServices ? new Set(enabledServices) : null;
@@ -257,23 +253,6 @@ export function TitleDetailCard({
   const saveProgress = useSharedValue(saved ? 1 : 0);
   const diceRotation = useSharedValue(0);
   const drawerChevronRotation = useSharedValue(0);
-
-  useEffect(() => {
-    let active = true;
-    void fetchTitleDuration(title).then((resolved) => {
-      if (active && resolved) {
-        setDuration((current) => (current === resolved ? current : resolved));
-      }
-    });
-    void fetchTitleTrailerUrl(title).then((resolvedUrl) => {
-      if (active) {
-        setTrailerUrl(resolvedUrl);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [title]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -363,7 +342,7 @@ export function TitleDetailCard({
   const handleSavePress = () => {
     const nextSaved = !saved;
     triggerSelectionHaptic();
-    toggleSavedTitle(title);
+    onToggleSave();
     onSaveChange?.(nextSaved);
   };
 
@@ -487,7 +466,7 @@ export function TitleDetailCard({
               </AppText>
               <AppText tipo="legenda" tabular style={styles.meta}>
                 {title.year || 'Ano não informado'} · {title.kind}
-                {duration ? ` · ${duration}` : ''}
+                {displayDuration ? ` · ${displayDuration}` : ''}
               </AppText>
             </View>
           </View>

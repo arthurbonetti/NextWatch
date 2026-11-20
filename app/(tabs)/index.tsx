@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,135 +13,95 @@ import { DrawFlowModal } from '@/components/organisms/DrawModal/DrawFlowModal';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
 import {
   formatAverageRating,
-  getDrawGenres,
   getTitleServices,
-  isEligibleForDraw,
   MediaTitle,
 } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { useDrawHistory } from '@/contexts/DrawHistoryContext';
-import { useSubscriptions } from '@/contexts/SubscriptionsContext';
-import { DrawKindFilter, usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
-import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
-import { fetchTitleDuration } from '@/services/tmdb';
+import { useRouletteFlow } from '@/hooks/useRouletteFlow';
+import {
+  fetchTitleDuration,
+  fetchTitleTrailerUrl,
+  getCachedTitleDuration,
+  getCachedTitleTrailerUrl,
+} from '@/services/tmdb';
 import { formatCount, formatCurrency } from '@/utils/format';
 
 export default function HomeScreen() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { titles, status: catalogStatus, isFetchingCatalog } = useCatalog();
-  const { subscriptions, storageReady } = useSubscriptions();
-  const { history } = useDrawHistory();
-  const { progressTitleIds, refreshProgressIds } = useWatchedProgressIds(user?.id ?? null, token);
-
-  useFocusEffect(
-    useCallback(() => {
-      void refreshProgressIds();
-    }, [refreshProgressIds]),
-  );
-  const [drawModalVisible, setDrawModalVisible] = useState(false);
-  const [autoSpinNonce, setAutoSpinNonce] = useState(0);
-  const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
-  const [detailsVisible, setDetailsVisible] = useState(false);
   const { drawGenre, drawKind, autoSpin, drawNonce } = useLocalSearchParams<{
     drawGenre?: string;
     drawKind?: string;
     autoSpin?: string;
     drawNonce?: string;
   }>();
-  const handledDrawNonceRef = useRef<string | null>(null);
 
-  const activeSubscriptions = useMemo(
-    () => subscriptions.filter((subscription) => subscription.active),
-    [subscriptions],
-  );
-  const activeServiceNames = useMemo(
-    () => activeSubscriptions.map((subscription) => subscription.provider),
-    [activeSubscriptions],
-  );
-  const activeServiceSet = useMemo(() => new Set(activeServiceNames), [activeServiceNames]);
-
+  const roulette = useRouletteFlow({ drawGenre, drawKind, autoSpin, drawNonce });
   const {
-    filters,
-    enabledServices,
-    setKind,
-    toggleGenre,
-    clearGenres,
-    toggleService,
-    setHideWatched,
-    resetFilters,
-    applyPreset,
-  } = usePersistedDrawFilters(user?.id ?? null, activeServiceNames);
+    activeSubscriptions,
+    activeServiceSet,
+    availableTitles,
+    eligibleTitles,
+    featuredSample,
+    catalogStatus,
+    isFetchingCatalog,
+    storageReady,
+    refreshProgressIds,
+    isTitleSaved,
+    toggleSavedTitle,
+  } = roulette;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProgressIds();
+    }, [refreshProgressIds]),
+  );
+
+  const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [selectedDetails, setSelectedDetails] = useState<{
+    id: string;
+    duration: string;
+    trailerUrl: string | null;
+  }>({ id: '', duration: '', trailerUrl: null });
 
   useEffect(() => {
-    if (!drawNonce || handledDrawNonceRef.current === drawNonce) return;
-    handledDrawNonceRef.current = drawNonce;
+    if (!selectedTitle) return;
+    let active = true;
 
-    const validKinds: DrawKindFilter[] = ['Todos', 'Filme', 'Série', 'Anime'];
-    const parsedKind = validKinds.includes(drawKind as DrawKindFilter)
-      ? (drawKind as DrawKindFilter)
-      : 'Todos';
-    const genres = drawGenre ? [drawGenre] : [];
-    const shouldAutoSpin = autoSpin === '1';
-
-    const frame = requestAnimationFrame(() => {
-      applyPreset({ kind: parsedKind, genres });
-      setDrawModalVisible(true);
-      if (shouldAutoSpin) {
-        setAutoSpinNonce((prev) => prev + 1);
-      }
+    void Promise.all([
+      fetchTitleDuration(selectedTitle),
+      fetchTitleTrailerUrl(selectedTitle),
+    ]).then(([resolvedDuration, resolvedTrailer]) => {
+      if (!active) return;
+      setSelectedDetails({
+        id: selectedTitle.id,
+        duration: resolvedDuration || selectedTitle.duration,
+        trailerUrl: resolvedTrailer,
+      });
     });
-    return () => cancelAnimationFrame(frame);
-  }, [applyPreset, autoSpin, drawGenre, drawKind, drawNonce]);
 
-  const availableTitles = useMemo(
-    () => titles.filter((title) => getTitleServices(title).some((service) => activeServiceSet.has(service))),
-    [activeServiceSet, titles],
-  );
-
-  const eligibleTitles = useMemo(
-    () => availableTitles.filter(isEligibleForDraw),
-    [availableTitles],
-  );
-
-  const availableGenres = useMemo(() => getDrawGenres(eligibleTitles), [eligibleTitles]);
-
-  const watchedTitleIds = useMemo(() => {
-    const ids = new Set(
-      history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId),
-    );
-    for (const id of progressTitleIds) {
-      ids.add(id);
-    }
-    return ids;
-  }, [history, progressTitleIds]);
-
-  const enabledServiceSet = useMemo(() => new Set(enabledServices), [enabledServices]);
-
-  const drawCandidates = useMemo(() => {
-    if (enabledServiceSet.size === 0) return [];
-    return eligibleTitles.filter((title) => {
-      const serviceMatches = getTitleServices(title).some((service) => enabledServiceSet.has(service));
-      if (!serviceMatches) return false;
-      const kindMatches = filters.kind === 'Todos' || title.kind === filters.kind;
-      if (!kindMatches) return false;
-      const genreMatches =
-        filters.selectedGenres.length === 0 ||
-        filters.selectedGenres.some((selectedGenre) => title.genres.includes(selectedGenre));
-      if (!genreMatches) return false;
-      if (filters.hideWatched && watchedTitleIds.has(title.id)) return false;
-      return true;
-    });
-  }, [eligibleTitles, enabledServiceSet, filters.hideWatched, filters.kind, filters.selectedGenres, watchedTitleIds]);
+    return () => {
+      active = false;
+    };
+  }, [selectedTitle]);
 
   const openDetails = (title: MediaTitle) => {
-    void fetchTitleDuration(title);
     setSelectedTitle(title);
     setDetailsVisible(true);
   };
 
-  const featuredSample = eligibleTitles[0] ?? availableTitles[0] ?? titles[0] ?? null;
+  const selectedDuration = selectedTitle
+    ? selectedDetails.id === selectedTitle.id
+      ? selectedDetails.duration
+      : getCachedTitleDuration(selectedTitle)
+    : undefined;
+  const selectedTrailerUrl = selectedTitle
+    ? selectedDetails.id === selectedTitle.id
+      ? selectedDetails.trailerUrl
+      : getCachedTitleTrailerUrl(selectedTitle)
+    : null;
+  const isSelectedSaved = selectedTitle ? isTitleSaved(selectedTitle.id) : false;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -226,7 +186,7 @@ export default function HomeScreen() {
                   (!storageReady || catalogStatus === 'loading' || availableTitles.length === 0) && styles.drawButtonDisabled,
                   pressed && styles.pressed,
                 ]}
-                onPress={() => setDrawModalVisible(true)}
+                onPress={roulette.openDrawModal}
                 disabled={!storageReady || catalogStatus === 'loading' || availableTitles.length === 0}
                 accessibilityRole="button">
                 <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
@@ -368,31 +328,51 @@ export default function HomeScreen() {
       </ScrollView>
 
       <DrawFlowModal
-        visible={drawModalVisible}
-        onClose={() => setDrawModalVisible(false)}
-        activeSubscriptions={activeSubscriptions}
-        availableGenres={availableGenres}
-        hasAnyAvailableTitle={availableTitles.length > 0}
-        eligibleTitles={drawCandidates}
-        watchedCount={watchedTitleIds.size}
-        isFetchingCatalog={isFetchingCatalog}
-        filters={filters}
-        enabledServices={enabledServices}
-        onSelectKind={setKind}
-        onToggleGenre={toggleGenre}
-        onClearGenres={clearGenres}
-        onToggleService={toggleService}
-        onToggleHideWatched={setHideWatched}
-        onResetFilters={resetFilters}
-        autoSpinNonce={autoSpinNonce}
+        visible={roulette.drawModalVisible}
+        phase={roulette.phase}
+        spinSession={roulette.spinSession}
+        incompleteConfirmVisible={roulette.incompleteConfirmVisible}
+        activeSubscriptions={roulette.activeSubscriptions}
+        availableGenres={roulette.availableGenres}
+        hasAnyAvailableTitle={roulette.availableTitles.length > 0}
+        eligibleTitles={roulette.drawCandidates}
+        watchedCount={roulette.watchedCount}
+        filters={roulette.filters}
+        enabledServices={roulette.enabledServices}
+        winnerDuration={roulette.winnerDuration}
+        winnerTrailerUrl={roulette.winnerTrailerUrl}
+        isWinnerSaved={roulette.isWinnerSaved}
+        onClose={roulette.handleClose}
+        onDismissFromSheet={roulette.dismissFromSheet}
+        onSelectKind={roulette.setKind}
+        onToggleGenre={roulette.toggleGenre}
+        onClearGenres={roulette.clearGenres}
+        onToggleService={roulette.toggleService}
+        onToggleHideWatched={roulette.setHideWatched}
+        onResetFilters={roulette.resetFilters}
+        onDrawPress={roulette.handleDrawPress}
+        onConfirmIncompleteDraw={roulette.confirmIncompleteDraw}
+        onCancelIncompleteDraw={roulette.cancelIncompleteDraw}
+        onRouletteDone={roulette.handleRouletteDone}
+        onDrawAnother={roulette.handleDrawAnother}
+        onWatchWinner={roulette.handleWatchWinner}
+        onMarkWinnerWatched={roulette.handleMarkWinnerWatched}
+        onToggleWinnerSaved={roulette.handleToggleWinnerSaved}
       />
 
       <TitleDetailsModal
         title={selectedTitle}
         visible={detailsVisible}
+        activeSubscriptions={activeSubscriptions}
+        duration={selectedDuration}
+        trailerUrl={selectedTrailerUrl}
+        saved={isSelectedSaved}
         eyebrow="PARA ASSISTIR HOJE"
         onClose={() => setDetailsVisible(false)}
         onWatch={() => setDetailsVisible(false)}
+        onToggleSave={() => {
+          if (selectedTitle) toggleSavedTitle(selectedTitle);
+        }}
       />
     </SafeAreaView>
   );
