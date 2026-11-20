@@ -146,7 +146,23 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
     watchedTitleIds,
   ]);
 
-  const featuredSample = eligibleTitles[0] ?? availableTitles[0] ?? titles[0] ?? null;
+  const candidateFeatured = eligibleTitles[0] ?? availableTitles[0] ?? null;
+  const [lockedFeatured, setLockedFeatured] = useState<MediaTitle | null>(null);
+
+  const lockedStillValid =
+    lockedFeatured !== null &&
+    activeServiceSet.size > 0 &&
+    getTitleServices(lockedFeatured).some((service) => activeServiceSet.has(service));
+
+  const nextLockedFeatured = lockedStillValid ? lockedFeatured : candidateFeatured;
+  if (nextLockedFeatured?.id !== lockedFeatured?.id) {
+    setLockedFeatured(nextLockedFeatured);
+  }
+
+  const featuredSample = useMemo(() => {
+    if (!nextLockedFeatured) return null;
+    return availableTitles.find((item) => item.id === nextLockedFeatured.id) ?? nextLockedFeatured;
+  }, [availableTitles, nextLockedFeatured]);
 
   const commitDrawAction = useCallback(
     (title: MediaTitle, action: DrawAction) => {

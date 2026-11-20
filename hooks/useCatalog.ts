@@ -13,6 +13,7 @@ import {
   fetchTvSeasonEpisodes,
   getCachedRichTitleDetails,
   getCachedTvSeasonEpisodes,
+  getDevCatalogMetrics,
   hasCatalogBackend,
   searchCatalogTitles,
 } from '@/services/tmdb';
@@ -23,29 +24,60 @@ export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 const EMPTY_TITLES: MediaTitle[] = [];
 const EMPTY_EPISODES: EpisodeSummary[] = [];
 
+const isDevRuntime = typeof __DEV__ !== 'undefined' && __DEV__;
+const nowMs = () =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+
+let devFirstHookMountAt: number | null = null;
+let devFirstUiBatchLogged = false;
+
 export function useCatalog() {
   const { token } = useAuth();
   const hasAuthSession = Boolean(token);
   const { subscriptions, storageReady } = useSubscriptions();
   const queryClient = useQueryClient();
 
-  const activeProviders = useMemo(
+  const providerKey = useMemo(
     () =>
-      subscriptions
-        .filter((subscription) => subscription.active)
-        .map((subscription) => subscription.provider)
-        .sort(),
+      Array.from(
+        new Set(
+          subscriptions
+            .filter((subscription) => subscription.active)
+            .map((subscription) => subscription.provider),
+        ),
+      )
+        .sort()
+        .join('|'),
     [subscriptions],
   );
-  const providerKey = useMemo(() => activeProviders.join('|'), [activeProviders]);
+  const activeProviders = useMemo(
+    () => (providerKey ? providerKey.split('|') : []),
+    [providerKey],
+  );
   const catalogKey = useMemo(() => queryKeys.catalog(providerKey), [providerKey]);
+
+  useEffect(() => {
+    if (!isDevRuntime || !hasAuthSession || devFirstHookMountAt !== null) return;
+    devFirstHookMountAt = nowMs();
+  }, [hasAuthSession]);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    void queryClient.cancelQueries({
+      queryKey: ['catalog'],
+      predicate: (query) => query.queryKey[1] !== providerKey,
+    });
+  }, [providerKey, queryClient, storageReady]);
 
   const { data, isLoading, isFetching, isError } = useQuery<CatalogFetchResult>({
     queryKey: catalogKey,
-    enabled: Boolean(hasAuthSession && storageReady),
-    staleTime: 1000 * 60 * 15,
+    enabled: Boolean(hasAuthSession && storageReady && activeProviders.length > 0),
+    staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 0,
     queryFn: ({ signal }) =>
       fetchAllCatalogForProviders(
@@ -58,30 +90,55 @@ export function useCatalog() {
             });
           }
         },
-        () => signal.aborted,
+        signal,
       ),
   });
 
   const titles = useMemo(
-    () => (hasAuthSession ? (data?.titles ?? EMPTY_TITLES) : EMPTY_TITLES),
-    [data?.titles, hasAuthSession],
+    () =>
+      hasAuthSession && activeProviders.length > 0
+        ? (data?.titles ?? EMPTY_TITLES)
+        : EMPTY_TITLES,
+    [activeProviders.length, data?.titles, hasAuthSession],
   );
+
+  useEffect(() => {
+    if (!isDevRuntime || !hasAuthSession || devFirstUiBatchLogged || titles.length === 0) return;
+    devFirstUiBatchLogged = true;
+    const now = nowMs();
+    const metrics = getDevCatalogMetrics();
+    const sinceMount = devFirstHookMountAt !== null ? Math.round(now - devFirstHookMountAt) : 0;
+    const sinceFetch =
+      metrics.lastFetchStartedAt !== null ? Math.round(now - metrics.lastFetchStartedAt) : 0;
+    console.info(
+      `[CatalogPerf] UI first batch visible in ${sinceMount}ms (sinceFetchStart=${sinceFetch}ms, titles=${titles.length}, providerKey="${providerKey}", bootFetchCount=${metrics.fetchCount})`,
+    );
+  }, [hasAuthSession, providerKey, titles.length]);
 
   const status: CatalogStatus = useMemo(() => {
     if (!hasAuthSession || !hasCatalogBackend()) {
       return 'needs-api-key';
     }
-    if (!storageReady || isLoading || (isFetching && data?.source !== 'tmdb')) {
+    if (!storageReady) {
       return 'loading';
     }
+    if (activeProviders.length === 0) {
+      return 'ready';
+    }
     if (data?.source === 'static-fallback') {
-      return data.reason === 'not-configured' ? 'needs-api-key' : 'error';
+      return isFetching ? 'loading' : data.reason === 'not-configured' ? 'needs-api-key' : 'error';
+    }
+    if (titles.length > 0) {
+      return 'ready';
+    }
+    if (isLoading || isFetching) {
+      return 'loading';
     }
     if (isError) {
       return 'error';
     }
     return data ? 'ready' : 'loading';
-  }, [data, hasAuthSession, isError, isFetching, isLoading, storageReady]);
+  }, [activeProviders.length, data, hasAuthSession, isError, isFetching, isLoading, storageReady, titles.length]);
 
   const errorMessage =
     hasAuthSession && data?.source === 'static-fallback' ? (data.errorMessage ?? null) : null;
@@ -101,14 +158,14 @@ export function useCatalog() {
   );
 
   const refreshCatalog = useCallback(async () => {
-    if (!hasAuthSession || !storageReady) return;
+    if (!hasAuthSession || !storageReady || activeProviders.length === 0) return;
     await queryClient.refetchQueries({ queryKey: catalogKey, exact: true });
-  }, [catalogKey, hasAuthSession, queryClient, storageReady]);
+  }, [activeProviders.length, catalogKey, hasAuthSession, queryClient, storageReady]);
 
   return {
     titles,
     status,
-    isFetchingCatalog: hasAuthSession && isFetching,
+    isFetchingCatalog: Boolean(hasAuthSession && activeProviders.length > 0 && isFetching),
     errorMessage,
     refreshCatalog,
     findTitle,
@@ -121,15 +178,23 @@ export function useCatalogSearch(rawQuery: string, debounceMs = 350) {
   const { subscriptions } = useSubscriptions();
   const queryClient = useQueryClient();
 
-  const activeProviders = useMemo(
+  const providerKey = useMemo(
     () =>
-      subscriptions
-        .filter((subscription) => subscription.active)
-        .map((subscription) => subscription.provider)
-        .sort(),
+      Array.from(
+        new Set(
+          subscriptions
+            .filter((subscription) => subscription.active)
+            .map((subscription) => subscription.provider),
+        ),
+      )
+        .sort()
+        .join('|'),
     [subscriptions],
   );
-  const providerKey = useMemo(() => activeProviders.join('|'), [activeProviders]);
+  const activeProviders = useMemo(
+    () => (providerKey ? providerKey.split('|') : []),
+    [providerKey],
+  );
 
   const [debouncedRaw, setDebouncedRaw] = useState('');
   const trimmedCurrent = rawQuery.trim();
@@ -156,9 +221,10 @@ export function useCatalogSearch(rawQuery: string, debounceMs = 350) {
     enabled: Boolean(hasAuthSession && normalizedDebounced.length >= 2),
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 0,
-    queryFn: async () => {
-      const results = await searchCatalogTitles(normalizedDebounced, activeProviders);
+    queryFn: async ({ signal }) => {
+      const results = await searchCatalogTitles(normalizedDebounced, activeProviders, signal);
       for (const item of results) {
         queryClient.setQueryData<MediaTitle>(queryKeys.titleById(item.id), item);
       }
@@ -181,6 +247,7 @@ export function useTitleById(titleId: string, enabled = true) {
     staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 0,
     queryFn: () => fetchTitleById(titleId),
   });
@@ -196,6 +263,7 @@ export function useTitleDetails(title: MediaTitle | undefined) {
     staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 0,
     initialData: () => (title ? (getCachedRichTitleDetails(title.id) ?? undefined) : undefined),
     queryFn: async () => {
@@ -234,6 +302,7 @@ export function useSeasonEpisodes(
     staleTime: 1000 * 60 * 30,
     gcTime: 1000 * 60 * 60,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 0,
     initialData: () =>
       titleId && validSeason > 0

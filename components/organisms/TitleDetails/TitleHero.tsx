@@ -114,6 +114,8 @@ export function TitleHero({
             variant="backdrop"
             posterPath={title.tmdbPosterPath}
             backdropPath={title.tmdbBackdropPath}
+            priority="high"
+            transition={0}
           />
         </Animated.View>
 
@@ -180,6 +182,8 @@ export function TitleHero({
             variant="poster"
             posterPath={title.tmdbPosterPath}
             backdropPath={title.tmdbBackdropPath}
+            priority="high"
+            transition={0}
             fallback={
               <View style={styles.posterFallback}>
                 <AppText tipo="titulo" peso="forte" style={styles.posterFallbackText}>

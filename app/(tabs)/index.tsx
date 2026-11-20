@@ -102,6 +102,10 @@ export default function HomeScreen() {
       : getCachedTitleTrailerUrl(selectedTitle)
     : null;
   const isSelectedSaved = selectedTitle ? isTitleSaved(selectedTitle.id) : false;
+  const isInitialCatalogLoading =
+    availableTitles.length === 0 &&
+    (!storageReady ||
+      (activeSubscriptions.length > 0 && (catalogStatus === 'loading' || isFetchingCatalog)));
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -178,18 +182,20 @@ export default function HomeScreen() {
               <AppText tipo="legenda" style={styles.heroDescription}>
                 {availableTitles.length > 0
                   ? `${formatCount(eligibleTitles.length)} obras com nota 6,0+ prontas para sortear nos seus streamings.`
-                  : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
+                  : isInitialCatalogLoading
+                    ? 'Carregando o catálogo dos seus streamings ativos…'
+                    : 'Ative seus serviços em Assinaturas para liberar o sorteio personalizado.'}
               </AppText>
               <Pressable
                 style={({ pressed }) => [
                   styles.drawButton,
-                  (!storageReady || catalogStatus === 'loading' || availableTitles.length === 0) && styles.drawButtonDisabled,
+                  (!storageReady || availableTitles.length === 0) && styles.drawButtonDisabled,
                   pressed && styles.pressed,
                 ]}
                 onPress={roulette.openDrawModal}
-                disabled={!storageReady || catalogStatus === 'loading' || availableTitles.length === 0}
+                disabled={!storageReady || availableTitles.length === 0}
                 accessibilityRole="button">
-                <AppText peso="forte" style={styles.drawButtonText}>{catalogStatus === 'loading' ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
+                <AppText peso="forte" style={styles.drawButtonText}>{isInitialCatalogLoading ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
                 <MaterialIcons name="arrow-forward" size={18} color="#182230" />
               </Pressable>
             </View>
@@ -205,6 +211,8 @@ export default function HomeScreen() {
                     variant="poster"
                     posterPath={featuredSample.tmdbPosterPath}
                     backdropPath={featuredSample.tmdbBackdropPath}
+                    priority="high"
+                    transition={0}
                   />
                   <View style={styles.heroPosterBadge}>
                     <MaterialIcons name="star" size={11} color="#f3b43f" />
@@ -273,7 +281,7 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
-            {availableTitles.slice(0, 8).map((title) => {
+            {availableTitles.slice(0, 8).map((title, index) => {
               const hasArtwork = getArtworkUri(title.id, 'poster', {
                 posterPath: title.tmdbPosterPath,
                 backdropPath: title.tmdbBackdropPath,
@@ -289,7 +297,14 @@ export default function HomeScreen() {
                   onPress={() => openDetails(title)}
                   accessibilityRole="button">
                   <View style={[styles.poster, { backgroundColor: title.color }]}>
-                    <TitleArtwork id={title.id} variant="poster" posterPath={title.tmdbPosterPath} backdropPath={title.tmdbBackdropPath} />
+                    <TitleArtwork
+                      id={title.id}
+                      variant="poster"
+                      posterPath={title.tmdbPosterPath}
+                      backdropPath={title.tmdbBackdropPath}
+                      priority={index < 2 ? 'high' : 'normal'}
+                      transition={index < 2 ? 0 : 200}
+                    />
                     {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
                     {badgeServices.length > 0 && (
                       <View style={styles.posterServicesCorner}>
@@ -315,13 +330,22 @@ export default function HomeScreen() {
               );
             })}
             {availableTitles.length === 0 && (
-              <Pressable
-                style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
-                onPress={() => router.push('/subscriptions')}
-                accessibilityRole="button">
-                <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
-                <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
-              </Pressable>
+              isInitialCatalogLoading ? (
+                <View style={styles.emptyTitlesCard}>
+                  <MaterialIcons name="autorenew" size={22} color="#a3520d" />
+                  <AppText tipo="legenda" peso="forte" style={styles.link}>
+                    Carregando títulos dos seus streamings…
+                  </AppText>
+                </View>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
+                  onPress={() => router.push('/subscriptions')}
+                  accessibilityRole="button">
+                  <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
+                  <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
+                </Pressable>
+              )
             )}
           </ScrollView>
         </FadeInBlock>

@@ -9,7 +9,7 @@ import {
   type MediaTitle,
 } from '@/constants/catalog';
 import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
-import { getSupabaseAnonKey, getSupabaseUrl, hasSupabaseConfig, supabase } from '@/services/supabase';
+import { getSupabaseAnonKey, getSupabaseUrl, hasSupabaseConfig } from '@/services/supabase';
 import type {
   CastMember,
   EpisodeSummary,
@@ -135,9 +135,77 @@ export type CatalogFetchResult = {
 };
 
 const MAX_PAGES_PER_ENDPOINT = 60;
-const REQUEST_CONCURRENCY = 8;
+const REQUEST_CONCURRENCY = 6;
+const FIRST_BATCH_EMIT_THRESHOLD = 4;
+const PROGRESSIVE_BATCH_EMIT_INTERVAL = 16;
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_SEARCH_QUERY_LENGTH = 100;
+
+const isDevRuntime = typeof __DEV__ !== 'undefined' && __DEV__;
+const nowMs = () =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+
+let devCatalogFetchCount = 0;
+let devLastCatalogFetchStartedAt: number | null = null;
+
+export function getDevCatalogMetrics() {
+  return {
+    fetchCount: devCatalogFetchCount,
+    lastFetchStartedAt: devLastCatalogFetchStartedAt,
+  };
+}
+
+function createAbortError(): Error {
+  const err = new Error('Aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(createAbortError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(createAbortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
 
 let upstreamUnavailable = false;
 
@@ -219,7 +287,10 @@ function searchStaticCatalog(encodedQuery: string): MediaTitle[] {
   return rankTitlesBySearchRelevance(matched, encodedQuery);
 }
 
-async function getWatchProviders(): Promise<TmdbProvider[]> {
+async function getWatchProviders(signal?: AbortSignal): Promise<TmdbProvider[]> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   if (!cachedProvidersPromise) {
     cachedProvidersPromise = Promise.all([
       request<TmdbProviderResponse>('/watch/providers/movie', { watch_region: 'BR', language: 'pt-BR' }),
@@ -241,7 +312,7 @@ async function getWatchProviders(): Promise<TmdbProvider[]> {
         throw error;
       });
   }
-  return cachedProvidersPromise;
+  return raceWithAbort(cachedProvidersPromise, signal);
 }
 
 function mergeTitleIntoCatalog(
@@ -275,25 +346,38 @@ function mergeTitleIntoCatalog(
 export async function fetchAllCatalogForProviders(
   providerNames: string[],
   onBatch?: TmdbCatalogBatchCallback,
-  shouldAbort?: () => boolean,
+  signal?: AbortSignal,
 ): Promise<CatalogFetchResult> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   if (!hasCatalogBackend()) {
     const fallback = buildStaticFallbackCatalog();
-    if (!shouldAbort?.()) {
+    if (!signal?.aborted) {
       onBatch?.(fallback);
     }
     return { titles: fallback, source: 'static-fallback', reason: 'not-configured' };
   }
   upstreamUnavailable = false;
   if (providerNames.length === 0) {
-    if (!shouldAbort?.()) {
+    if (!signal?.aborted) {
       onBatch?.([]);
     }
     return { titles: [], source: 'tmdb' };
   }
 
+  devCatalogFetchCount += 1;
+  const runId = devCatalogFetchCount;
+  const startedAt = nowMs();
+  devLastCatalogFetchStartedAt = startedAt;
+  if (isDevRuntime) {
+    console.info(
+      `[CatalogPerf] fetchAllCatalogForProviders #${runId} start (providers=${providerNames.join('|')})`,
+    );
+  }
+
   try {
-    const allProviders = await getWatchProviders();
+    const allProviders = await getWatchProviders(signal);
     const resolvedProviders = providerNames
       .map((providerName) => ({
         providerName,
@@ -307,106 +391,226 @@ export async function fetchAllCatalogForProviders(
 
     const catalogById = new Map<string, MediaTitle>();
     const idByNameKey = new Map<string, string>();
-    const remainingTasks: (() => Promise<MediaTitle[]>)[] = [];
 
-    const firstPages = await Promise.all(
-      resolvedProviders.flatMap(({ providerName, ids }) => {
-        const baseParams: Record<string, string> = {
-          language: 'pt-BR',
-          watch_region: 'BR',
-          with_watch_providers: ids.join('|'),
-          with_watch_monetization_types: 'flatrate|free|ads',
-          sort_by: 'popularity.desc',
-        };
-        const movieParams: Record<string, string> = {
-          ...baseParams,
-          region: 'BR',
-          include_adult: 'false',
-        };
+    const firstPageDescriptors = resolvedProviders.flatMap(({ providerName, ids }) => {
+      const baseParams: Record<string, string> = {
+        language: 'pt-BR',
+        watch_region: 'BR',
+        with_watch_providers: ids.join('|'),
+        with_watch_monetization_types: 'flatrate|free|ads',
+        sort_by: 'popularity.desc',
+      };
+      const movieParams: Record<string, string> = {
+        ...baseParams,
+        region: 'BR',
+        include_adult: 'false',
+      };
 
-        return [
-          request<TmdbMediaResponse>('/discover/movie', { ...movieParams, page: '1' }).then((res) => ({
-            endpoint: 'movie' as const,
-            providerName,
-            params: movieParams,
-            response: res,
-          })),
-          request<TmdbMediaResponse>('/discover/tv', { ...baseParams, page: '1' }).then((res) => ({
-            endpoint: 'tv' as const,
-            providerName,
-            params: baseParams,
-            response: res,
-          })),
-        ];
-      }),
+      return [
+        { endpoint: 'movie' as const, providerName, params: movieParams },
+        { endpoint: 'tv' as const, providerName, params: baseParams },
+      ];
+    });
+
+    type PageStreamDescriptor = {
+      endpoint: MediaEndpoint;
+      providerName: string;
+      params: Record<string, string>;
+      maxPages: number;
+    };
+
+    const pageStreams: PageStreamDescriptor[] = [];
+    const pendingFirstBatchItems: MediaTitle[] = [];
+    let firstPagesSettled = 0;
+    let firstPagesSucceeded = 0;
+    let firstPageError: unknown = null;
+    let firstBatchEmitted = false;
+    let hasUnemittedFirstPageItems = false;
+    let firstPageIndex = 0;
+    const initialEmitTarget = Math.min(FIRST_BATCH_EMIT_THRESHOLD, firstPageDescriptors.length);
+
+    const firstPageWorkers = Array.from(
+      { length: Math.min(REQUEST_CONCURRENCY, firstPageDescriptors.length) },
+      async () => {
+        while (firstPageIndex < firstPageDescriptors.length) {
+          if (signal?.aborted) return;
+          const descriptor = firstPageDescriptors[firstPageIndex++];
+          if (!descriptor) break;
+
+          try {
+            const response = await request<TmdbMediaResponse>(
+              `/discover/${descriptor.endpoint}`,
+              { ...descriptor.params, page: '1' },
+              { signal },
+            );
+            if (signal?.aborted) return;
+
+            firstPagesSucceeded += 1;
+            const mapped = response.results.map((item) =>
+              mapMedia(item, descriptor.endpoint, [descriptor.providerName]),
+            );
+            const maxPages = Math.min(response.total_pages, MAX_PAGES_PER_ENDPOINT);
+            if (maxPages >= 2) {
+              pageStreams.push({
+                endpoint: descriptor.endpoint,
+                providerName: descriptor.providerName,
+                params: descriptor.params,
+                maxPages,
+              });
+            }
+
+            if (!firstBatchEmitted) {
+              pendingFirstBatchItems.push(...mapped);
+            } else {
+              for (const title of quickSortByRandom(mapped)) {
+                mergeTitleIntoCatalog(catalogById, idByNameKey, title);
+              }
+              hasUnemittedFirstPageItems = true;
+            }
+          } catch (error) {
+            if (signal?.aborted || isAbortError(error)) {
+              throw createAbortError();
+            }
+            if (firstPageError === null) {
+              firstPageError = error;
+            }
+          } finally {
+            firstPagesSettled += 1;
+            if (
+              !signal?.aborted &&
+              !firstBatchEmitted &&
+              firstPagesSettled >= initialEmitTarget &&
+              pendingFirstBatchItems.length > 0
+            ) {
+              firstBatchEmitted = true;
+              const itemsToMerge = pendingFirstBatchItems.splice(0, pendingFirstBatchItems.length);
+              for (const title of quickSortByRandom(itemsToMerge)) {
+                mergeTitleIntoCatalog(catalogById, idByNameKey, title);
+              }
+              const snapshot = Array.from(catalogById.values());
+              onBatch?.(snapshot);
+              if (isDevRuntime) {
+                console.info(
+                  `[CatalogPerf] fetchAllCatalogForProviders #${runId} firstBatch emitted in ${Math.round(nowMs() - startedAt)}ms (titles=${snapshot.length})`,
+                );
+              }
+            }
+          }
+        }
+      },
     );
 
-    if (shouldAbort?.()) {
-      return { titles: [], source: 'tmdb' };
+    await Promise.all(firstPageWorkers);
+
+    if (signal?.aborted) {
+      throw createAbortError();
     }
 
-    const firstBatchItems: MediaTitle[] = [];
-    for (const { endpoint, providerName, params, response } of firstPages) {
-      for (const item of response.results) {
-        firstBatchItems.push(mapMedia(item, endpoint, [providerName]));
+    if (firstPagesSucceeded === 0 && firstPageError !== null) {
+      throw firstPageError;
+    }
+
+    if (pendingFirstBatchItems.length > 0) {
+      for (const title of quickSortByRandom(pendingFirstBatchItems)) {
+        mergeTitleIntoCatalog(catalogById, idByNameKey, title);
       }
-      const maxPages = Math.min(response.total_pages, MAX_PAGES_PER_ENDPOINT);
-      for (let page = 2; page <= maxPages; page++) {
+      pendingFirstBatchItems.length = 0;
+      hasUnemittedFirstPageItems = true;
+    }
+
+    if (!firstBatchEmitted || hasUnemittedFirstPageItems) {
+      const snapshot = Array.from(catalogById.values());
+      onBatch?.(snapshot);
+      if (!firstBatchEmitted && isDevRuntime) {
+        console.info(
+          `[CatalogPerf] fetchAllCatalogForProviders #${runId} firstBatch emitted in ${Math.round(nowMs() - startedAt)}ms (titles=${snapshot.length})`,
+        );
+      }
+      firstBatchEmitted = true;
+    }
+
+    const highestMaxPage = pageStreams.reduce(
+      (max, stream) => Math.max(max, stream.maxPages),
+      1,
+    );
+    const remainingTasks: (() => Promise<MediaTitle[]>)[] = [];
+    for (let page = 2; page <= highestMaxPage; page++) {
+      for (const stream of pageStreams) {
+        if (page > stream.maxPages) continue;
         remainingTasks.push(async () => {
+          if (signal?.aborted) {
+            throw createAbortError();
+          }
           try {
-            const pageRes = await request<TmdbMediaResponse>(`/discover/${endpoint}`, {
-              ...params,
-              page: String(page),
-            });
-            return pageRes.results.map((item) => mapMedia(item, endpoint, [providerName]));
-          } catch {
+            const pageRes = await request<TmdbMediaResponse>(
+              `/discover/${stream.endpoint}`,
+              {
+                ...stream.params,
+                page: String(page),
+              },
+              { retries: 2, signal },
+            );
+            return pageRes.results.map((item) =>
+              mapMedia(item, stream.endpoint, [stream.providerName]),
+            );
+          } catch (error) {
+            if (signal?.aborted || isAbortError(error)) {
+              throw createAbortError();
+            }
             return [];
           }
         });
       }
     }
 
-    for (const title of quickSortByRandom(firstBatchItems)) {
-      mergeTitleIntoCatalog(catalogById, idByNameKey, title);
-    }
-
-    onBatch?.(Array.from(catalogById.values()));
-
     if (remainingTasks.length > 0) {
       let taskIndex = 0;
       let completedSinceEmit = 0;
 
-      const workers = Array.from({ length: Math.min(REQUEST_CONCURRENCY, remainingTasks.length) }, async () => {
-        while (taskIndex < remainingTasks.length) {
-          if (shouldAbort?.()) return;
-          const currentTask = remainingTasks[taskIndex++];
-          if (!currentTask) break;
-          const pageTitles = await currentTask();
-          if (shouldAbort?.()) return;
-          for (const title of quickSortByRandom(pageTitles)) {
-            mergeTitleIntoCatalog(catalogById, idByNameKey, title);
+      const workers = Array.from(
+        { length: Math.min(REQUEST_CONCURRENCY, remainingTasks.length) },
+        async () => {
+          while (taskIndex < remainingTasks.length) {
+            if (signal?.aborted) return;
+            const currentTask = remainingTasks[taskIndex++];
+            if (!currentTask) break;
+            const pageTitles = await currentTask();
+            if (signal?.aborted) return;
+            for (const title of quickSortByRandom(pageTitles)) {
+              mergeTitleIntoCatalog(catalogById, idByNameKey, title);
+            }
+            completedSinceEmit += 1;
+            if (completedSinceEmit >= PROGRESSIVE_BATCH_EMIT_INTERVAL) {
+              completedSinceEmit = 0;
+              onBatch?.(Array.from(catalogById.values()));
+            }
           }
-          completedSinceEmit += 1;
-          if (completedSinceEmit >= 20) {
-            completedSinceEmit = 0;
-            onBatch?.(Array.from(catalogById.values()));
-          }
-        }
-      });
+        },
+      );
 
       await Promise.all(workers);
     }
 
-    if (shouldAbort?.()) {
-      return { titles: [], source: 'tmdb' };
+    if (signal?.aborted) {
+      throw createAbortError();
     }
 
     const finalTitles = Array.from(catalogById.values());
     onBatch?.(finalTitles);
+    if (isDevRuntime) {
+      console.info(
+        `[CatalogPerf] fetchAllCatalogForProviders #${runId} finished in ${Math.round(nowMs() - startedAt)}ms (titles=${finalTitles.length}, bootFetchCount=${devCatalogFetchCount})`,
+      );
+    }
     return { titles: finalTitles, source: 'tmdb' };
   } catch (error) {
-    if (shouldAbort?.()) {
-      return { titles: [], source: 'tmdb' };
+    if (signal?.aborted || isAbortError(error)) {
+      if (isDevRuntime) {
+        console.info(
+          `[CatalogPerf] fetchAllCatalogForProviders #${runId} aborted after ${Math.round(nowMs() - startedAt)}ms`,
+        );
+      }
+      throw createAbortError();
     }
     const fallback = buildStaticFallbackCatalog();
     onBatch?.(fallback);
@@ -422,7 +626,14 @@ export async function fetchAllCatalogForProviders(
   }
 }
 
-export async function searchCatalogTitles(query: string, fallbackProviders: string[] = []): Promise<MediaTitle[]> {
+export async function searchCatalogTitles(
+  query: string,
+  fallbackProviders: string[] = [],
+  signal?: AbortSignal,
+): Promise<MediaTitle[]> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   const encodedQuery = query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
   if (encodedQuery.length < 2) return [];
   if (!hasCatalogBackend() || upstreamUnavailable) {
@@ -431,20 +642,32 @@ export async function searchCatalogTitles(query: string, fallbackProviders: stri
 
   try {
     const [movies, shows] = await Promise.all([
-      request<TmdbMediaResponse>('/search/movie', {
-        language: 'pt-BR',
-        region: 'BR',
-        query: encodedQuery,
-        include_adult: 'false',
-        page: '1',
-      }),
-      request<TmdbMediaResponse>('/search/tv', {
-        language: 'pt-BR',
-        query: encodedQuery,
-        include_adult: 'false',
-        page: '1',
-      }),
+      request<TmdbMediaResponse>(
+        '/search/movie',
+        {
+          language: 'pt-BR',
+          region: 'BR',
+          query: encodedQuery,
+          include_adult: 'false',
+          page: '1',
+        },
+        { signal },
+      ),
+      request<TmdbMediaResponse>(
+        '/search/tv',
+        {
+          language: 'pt-BR',
+          query: encodedQuery,
+          include_adult: 'false',
+          page: '1',
+        },
+        { signal },
+      ),
     ]);
+
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
 
     const rawItems: { item: TmdbMediaResult; endpoint: MediaEndpoint; preliminaryScore: number }[] = [
       ...movies.results.map((item) => ({
@@ -461,11 +684,15 @@ export async function searchCatalogTitles(query: string, fallbackProviders: stri
 
     const mappedTitles = await Promise.all(
       rawItems.map(async ({ item, endpoint }, index) => {
-        const providers = index < 16 ? await fetchTitleProvidersInBrazil(endpoint, item.id) : [];
+        const providers = index < 16 ? await fetchTitleProvidersInBrazil(endpoint, item.id, signal) : [];
         const services = providers.length > 0 ? providers : fallbackProviders;
         return mapMedia(item, endpoint, services);
       }),
     );
+
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
 
     const deduplicated = new Map<string, MediaTitle>();
     const idByNameKey = new Map<string, string>();
@@ -473,14 +700,25 @@ export async function searchCatalogTitles(query: string, fallbackProviders: stri
       mergeTitleIntoCatalog(deduplicated, idByNameKey, title);
     }
     return rankTitlesBySearchRelevance(Array.from(deduplicated.values()), encodedQuery);
-  } catch {
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) {
+      throw createAbortError();
+    }
     return searchStaticCatalog(encodedQuery);
   }
 }
 
-async function fetchTitleProvidersInBrazil(endpoint: MediaEndpoint, tmdbId: number): Promise<string[]> {
+async function fetchTitleProvidersInBrazil(
+  endpoint: MediaEndpoint,
+  tmdbId: number,
+  signal?: AbortSignal,
+): Promise<string[]> {
   try {
-    const response = await request<TmdbTitleWatchProvidersResponse>(`/${endpoint}/${tmdbId}/watch/providers`, {});
+    const response = await request<TmdbTitleWatchProvidersResponse>(
+      `/${endpoint}/${tmdbId}/watch/providers`,
+      {},
+      { signal },
+    );
     const br = response.results?.BR;
     if (!br) return [];
     const rawProviders = [...(br.flatrate ?? []), ...(br.free ?? []), ...(br.ads ?? [])];
@@ -493,7 +731,10 @@ async function fetchTitleProvidersInBrazil(endpoint: MediaEndpoint, tmdbId: numb
       }
     }
     return matchedNames;
-  } catch {
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) {
+      throw createAbortError();
+    }
     return [];
   }
 }
@@ -511,28 +752,22 @@ function matchCanonicalProviderName(rawProviderName: string): string | null {
 async function request<T>(
   endpoint: string,
   params: Record<string, string>,
-  retries = 3,
-  authMode: 'session' | 'refreshed' | 'anon' = 'session',
+  options: { retries?: number; signal?: AbortSignal } = {},
 ): Promise<T> {
+  const { retries = 3, signal } = options;
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
   const baseUrl = getSupabaseUrl();
   const anonKey = getSupabaseAnonKey();
   if (!baseUrl || !anonKey) {
     throw new CatalogBackendNotConfiguredError();
   }
 
-  let accessToken: string | null = null;
-  if (supabase && authMode !== 'anon') {
-    try {
-      const { data } = await supabase.auth.getSession();
-      accessToken = data.session?.access_token ?? null;
-    } catch {
-      accessToken = null;
-    }
-  }
-
-  const retryRequest = async (nextAuthMode = authMode) => {
-    await new Promise((resolve) => setTimeout(resolve, 500 * (4 - retries)));
-    return request<T>(endpoint, params, retries - 1, nextAuthMode);
+  const retryRequest = async (delayMs: number) => {
+    await sleepWithSignal(delayMs, signal);
+    return request<T>(endpoint, params, { retries: retries - 1, signal });
   };
 
   let response: Response;
@@ -545,27 +780,24 @@ async function request<T>(
           Accept: 'application/json',
           'Content-Type': 'application/json',
           apikey: anonKey,
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({ endpoint, params }),
+        signal,
       },
       REQUEST_TIMEOUT_MS,
     );
   } catch (error) {
-    if (retries > 0) return retryRequest();
+    if (signal?.aborted || isAbortError(error)) {
+      throw createAbortError();
+    }
+    if (retries > 0) {
+      return retryRequest(500 * (4 - Math.min(retries, 3)));
+    }
     throw error;
   }
 
-  if (response.status === 401 && accessToken) {
-    if (authMode === 'session' && supabase) {
-      const refreshed = await supabase.auth.refreshSession().catch(() => null);
-      if (refreshed?.data?.session?.access_token) {
-        return request<T>(endpoint, params, retries, 'refreshed');
-      }
-    }
-    if (authMode !== 'anon') {
-      return request<T>(endpoint, params, retries, 'anon');
-    }
+  if (signal?.aborted) {
+    throw createAbortError();
   }
 
   if (response.status === 503) {
@@ -574,7 +806,13 @@ async function request<T>(
   }
 
   if ((response.status === 429 || response.status >= 500) && retries > 0) {
-    return retryRequest();
+    const retryAfterHeader = response.status === 429 ? response.headers.get('Retry-After') : null;
+    const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : Number.NaN;
+    const delayMs =
+      Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? Math.min(retryAfterSec * 1000, 3000)
+        : 500 * (4 - Math.min(retries, 3));
+    return retryRequest(delayMs);
   }
 
   if (!response.ok) {

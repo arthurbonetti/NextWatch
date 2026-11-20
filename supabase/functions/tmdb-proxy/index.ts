@@ -36,6 +36,8 @@ const MAX_CACHE_KEY_LENGTH = 512;
 const SEARCH_OR_DISCOVER_TTL_SECONDS = 12 * 60 * 60;
 const DETAIL_TTL_SECONDS = 24 * 60 * 60;
 const PUBLISHABLE_KEY_CACHE_TTL_MS = 15 * 60 * 1000;
+const L2_CIRCUIT_BREAKER_MS = 5 * 60 * 1000;
+const L2_READ_TIMEOUT_MS = 2000;
 
 type L1CacheEntry = {
   payloadText: string;
@@ -45,8 +47,21 @@ type L1CacheEntry = {
 
 const l1Cache = new Map<string, L1CacheEntry>();
 const validatedPublishableKeys = new Map<string, number>();
+const pendingPublishableKeyChecks = new Map<string, Promise<boolean>>();
 
-let adminClient: SupabaseClient | null | undefined;
+let l2DisabledUntilMs = 0;
+
+function isL2CircuitOpen(): boolean {
+  return Date.now() < l2DisabledUntilMs;
+}
+
+function tripL2CircuitBreaker(reason: string): void {
+  const alreadyOpen = isL2CircuitOpen();
+  l2DisabledUntilMs = Date.now() + L2_CIRCUIT_BREAKER_MS;
+  if (!alreadyOpen) {
+    console.warn(`[tmdb-proxy] L2 cache temporarily disabled for 5m: ${reason}`);
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -157,33 +172,29 @@ function resolveSecretKey(): string {
   return '';
 }
 
-function getSupabaseAdminClient(): SupabaseClient | null {
-  if (adminClient !== undefined) return adminClient;
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')?.trim() ?? '';
+const CONFIGURED_PUBLIC_KEYS = collectConfiguredPublicKeys();
+const SECRET_KEY = resolveSecretKey();
+const TMDB_TOKEN = (Deno.env.get('TMDB_API_TOKEN') ?? Deno.env.get('TMDB_API_KEY') ?? '').trim();
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim() ?? '';
-  const secretKey = resolveSecretKey();
-  if (!supabaseUrl || !secretKey) {
-    adminClient = null;
-    return null;
-  }
+const adminClient: SupabaseClient | null =
+  SUPABASE_URL && SECRET_KEY
+    ? createClient(SUPABASE_URL, SECRET_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+    : null;
 
-  adminClient = createClient(supabaseUrl, secretKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-  return adminClient;
-}
-
-async function verifyApiKey(apiKey: string, supabaseUrl: string, configuredPublicKeys: string[]): Promise<boolean> {
+async function verifyApiKey(apiKey: string): Promise<boolean> {
   if (!apiKey) return false;
-  if (configuredPublicKeys.some((key) => constantTimeEqual(apiKey, key))) {
+  if (CONFIGURED_PUBLIC_KEYS.some((key) => constantTimeEqual(apiKey, key))) {
     return true;
   }
 
   // Fallback para chaves publishable (`sb_publishable_*`) quando SUPABASE_PUBLISHABLE_KEYS ainda não estiver exposta no runtime
-  if (!apiKey.startsWith('sb_publishable_') || !supabaseUrl) {
+  if (!apiKey.startsWith('sb_publishable_') || !SUPABASE_URL) {
     return false;
   }
 
@@ -192,24 +203,35 @@ async function verifyApiKey(apiKey: string, supabaseUrl: string, configuredPubli
     return true;
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${supabaseUrl}/auth/v1/settings`, {
-      method: 'GET',
-      headers: { apikey: apiKey },
-      signal: controller.signal,
-    });
-    if (res.ok) {
-      validatedPublishableKeys.set(apiKey, Date.now() + PUBLISHABLE_KEY_CACHE_TTL_MS);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
+  const pendingCheck = pendingPublishableKeyChecks.get(apiKey);
+  if (pendingCheck) {
+    return pendingCheck;
   }
+
+  const checkPromise = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+        method: 'GET',
+        headers: { apikey: apiKey },
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        validatedPublishableKeys.set(apiKey, Date.now() + PUBLISHABLE_KEY_CACHE_TTL_MS);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+      pendingPublishableKeyChecks.delete(apiKey);
+    }
+  })();
+
+  pendingPublishableKeyChecks.set(apiKey, checkPromise);
+  return checkPromise;
 }
 
 function sanitizeAppendToResponse(rawValue: string): string | null {
@@ -269,19 +291,25 @@ function setInL1(cacheKey: string, entry: L1CacheEntry): void {
 }
 
 async function readFromL2(cacheKey: string): Promise<L1CacheEntry | null> {
-  const client = getSupabaseAdminClient();
-  if (!client) return null;
+  if (!adminClient || isL2CircuitOpen()) return null;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), L2_READ_TIMEOUT_MS);
   try {
     const nowIso = new Date().toISOString();
-    const { data, error } = await client
+    const { data, error } = await adminClient
       .from('tmdb_cache')
       .select('payload, status_code, expires_at')
       .eq('cache_key', cacheKey)
       .gt('expires_at', nowIso)
+      .abortSignal(controller.signal)
       .maybeSingle();
 
-    if (error || !data || data.payload === undefined || data.payload === null) {
+    if (error) {
+      tripL2CircuitBreaker(error.message || 'select error');
+      return null;
+    }
+    if (!data || data.payload === undefined || data.payload === null) {
       return null;
     }
 
@@ -301,8 +329,11 @@ async function readFromL2(cacheKey: string): Promise<L1CacheEntry | null> {
     };
     setInL1(cacheKey, entry);
     return entry;
-  } catch {
+  } catch (error) {
+    tripL2CircuitBreaker(error instanceof Error ? error.message : 'read exception');
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -312,12 +343,11 @@ async function writeToL2(
   statusCode: number,
   expiresAtIso: string,
 ): Promise<void> {
-  const client = getSupabaseAdminClient();
-  if (!client) return;
+  if (!adminClient || isL2CircuitOpen()) return;
 
   try {
     const nowIso = new Date().toISOString();
-    await client.from('tmdb_cache').upsert(
+    const { error } = await adminClient.from('tmdb_cache').upsert(
       {
         cache_key: cacheKey,
         payload: parsedPayload,
@@ -328,22 +358,28 @@ async function writeToL2(
       { onConflict: 'cache_key' },
     );
 
-    if (Math.random() < 0.01) {
-      await client.from('tmdb_cache').delete().lt('expires_at', nowIso);
+    if (error) {
+      tripL2CircuitBreaker(error.message || 'upsert error');
+      return;
     }
-  } catch {
-    // Fail-open: erro no L2 nunca quebra a resposta ao cliente
+
+    if (Math.random() < 0.01) {
+      await adminClient.from('tmdb_cache').delete().lt('expires_at', nowIso);
+    }
+  } catch (error) {
+    tripL2CircuitBreaker(error instanceof Error ? error.message : 'write exception');
   }
 }
 
 function runInBackground(task: Promise<unknown>): void {
+  const safeTask = task.catch(() => {});
   const edgeRuntime = (
     globalThis as { EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void } }
   ).EdgeRuntime;
   if (typeof edgeRuntime?.waitUntil === 'function') {
-    edgeRuntime.waitUntil(task);
+    edgeRuntime.waitUntil(safeTask);
   } else {
-    void task;
+    void safeTask;
   }
 }
 
@@ -356,9 +392,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim() ?? '';
-  const configuredPublicKeys = collectConfiguredPublicKeys();
-  if (!supabaseUrl) {
+  if (!SUPABASE_URL) {
     return jsonResponse({ error: 'Server auth configuration missing' }, 500);
   }
 
@@ -366,48 +400,15 @@ Deno.serve(async (req: Request) => {
   if (!apiKeyHeader) {
     return jsonResponse({ error: 'Unauthorized' }, 401);
   }
-  if (configuredPublicKeys.length === 0 && !apiKeyHeader.startsWith('sb_publishable_')) {
+  if (CONFIGURED_PUBLIC_KEYS.length === 0 && !apiKeyHeader.startsWith('sb_publishable_')) {
     return jsonResponse({ error: 'Server auth configuration missing' }, 500);
   }
-  const isValidApiKey = await verifyApiKey(apiKeyHeader, supabaseUrl, configuredPublicKeys);
+  const isValidApiKey = await verifyApiKey(apiKeyHeader);
   if (!isValidApiKey) {
     return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
-  const authHeader = req.headers.get('Authorization');
-  if (authHeader !== null) {
-    if (!authHeader.startsWith('Bearer ')) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
-    }
-    const jwt = authHeader.slice('Bearer '.length).trim();
-    if (!jwt) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
-    }
-
-    const isPublicKeyAsBearer =
-      constantTimeEqual(jwt, apiKeyHeader) ||
-      configuredPublicKeys.some((key) => constantTimeEqual(jwt, key));
-
-    if (!isPublicKeyAsBearer) {
-      const supabaseAuthClient = createClient(supabaseUrl, apiKeyHeader, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      });
-      const {
-        data: { user },
-        error: authError,
-      } = await supabaseAuthClient.auth.getUser(jwt);
-
-      if (authError || !user) {
-        return jsonResponse({ error: 'Invalid or expired session' }, 401);
-      }
-    }
-  }
-
-  const tmdbToken = (Deno.env.get('TMDB_API_TOKEN') ?? Deno.env.get('TMDB_API_KEY') ?? '').trim();
-  if (!tmdbToken) {
+  if (!TMDB_TOKEN) {
     return jsonResponse({ error: 'Catalog upstream token not configured' }, 503);
   }
 
@@ -469,9 +470,9 @@ Deno.serve(async (req: Request) => {
     return cachedPayloadResponse(l2Hit.payloadText, l2Hit.statusCode, 'HIT-L2', remainingSeconds);
   }
 
-  const isBearer = tmdbToken.startsWith('eyJ');
+  const isBearer = TMDB_TOKEN.startsWith('eyJ');
   if (!isBearer) {
-    upstreamUrl.searchParams.set('api_key', tmdbToken);
+    upstreamUrl.searchParams.set('api_key', TMDB_TOKEN);
   }
 
   const controller = new AbortController();
@@ -480,7 +481,7 @@ Deno.serve(async (req: Request) => {
     const upstreamRes = await fetch(upstreamUrl, {
       headers: {
         Accept: 'application/json',
-        ...(isBearer ? { Authorization: `Bearer ${tmdbToken}` } : {}),
+        ...(isBearer ? { Authorization: `Bearer ${TMDB_TOKEN}` } : {}),
       },
       signal: controller.signal,
     });

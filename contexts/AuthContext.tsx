@@ -1,5 +1,6 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { clearSubscriptionsLocalCache } from '@/hooks/useSubscriptions';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   clearAuthSession,
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setToken(session.accessToken);
         setStatus('success');
       } else if (event === 'SIGNED_OUT') {
+        clearSubscriptionsLocalCache();
         queryClient.clear();
         setUser(null);
         setToken(null);
@@ -116,8 +118,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const signOut = useCallback(async () => {
+    clearSubscriptionsLocalCache();
     queryClient.clear();
     await clearAuthSession();
+    clearSubscriptionsLocalCache();
     queryClient.clear();
     setUser(null);
     setToken(null);

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
 import type { Subscription } from '@/constants/subscriptions';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,14 +18,94 @@ const EMPTY_SUBSCRIPTIONS: Subscription[] = [];
 
 type MutationOutcome = 'ok' | 'retry' | 'offline';
 
-function parseStoredSubscriptions(raw: string | null): Subscription[] {
-  if (!raw) return [];
+const localSubscriptionsCache = new Map<string, Subscription[] | null>();
+const localHydrationInFlight = new Map<string, Promise<Subscription[] | null>>();
+const localCacheWriteSeq = new Map<string, number>();
+const localCacheListeners = new Set<() => void>();
+let localCacheVersion = 0;
+
+function notifyLocalCacheListeners() {
+  localCacheVersion += 1;
+  for (const listener of localCacheListeners) {
+    listener();
+  }
+}
+
+function subscribeLocalCache(listener: () => void) {
+  localCacheListeners.add(listener);
+  return () => {
+    localCacheListeners.delete(listener);
+  };
+}
+
+function getLocalCacheVersion() {
+  return localCacheVersion;
+}
+
+function setLocalSubscriptionsCache(userId: string, value: Subscription[] | null) {
+  localCacheWriteSeq.set(userId, (localCacheWriteSeq.get(userId) ?? 0) + 1);
+  localSubscriptionsCache.set(userId, value);
+  notifyLocalCacheListeners();
+}
+
+export function clearSubscriptionsLocalCache(): void {
+  localSubscriptionsCache.clear();
+  localHydrationInFlight.clear();
+  localCacheWriteSeq.clear();
+  notifyLocalCacheListeners();
+}
+
+function parseStoredSubscriptionsEntry(raw: string | null): Subscription[] | null {
+  if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isSubscription) : [];
+    return Array.isArray(parsed) ? parsed.filter(isSubscription) : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+function hydrateLocalSubscriptions(
+  userId: string,
+  storageKey: string,
+): Promise<Subscription[] | null> {
+  const existing = localSubscriptionsCache.get(userId);
+  if (existing !== undefined) {
+    return Promise.resolve(existing);
+  }
+
+  const inFlight = localHydrationInFlight.get(userId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const writeSeqAtStart = localCacheWriteSeq.get(userId) ?? 0;
+  const promise = AsyncStorage.getItem(storageKey)
+    .then((raw) => {
+      const parsed = parseStoredSubscriptionsEntry(raw);
+      if (
+        (localCacheWriteSeq.get(userId) ?? 0) === writeSeqAtStart &&
+        localSubscriptionsCache.get(userId) === undefined
+      ) {
+        setLocalSubscriptionsCache(userId, parsed);
+      }
+      return parsed;
+    })
+    .catch(() => {
+      if (
+        (localCacheWriteSeq.get(userId) ?? 0) === writeSeqAtStart &&
+        localSubscriptionsCache.get(userId) === undefined
+      ) {
+        setLocalSubscriptionsCache(userId, null);
+      }
+      return null;
+    })
+    .finally(() => {
+      localHydrationInFlight.delete(userId);
+    });
+
+  localHydrationInFlight.set(userId, promise);
+  return promise;
 }
 
 export function useSubscriptions() {
@@ -36,15 +116,19 @@ export function useSubscriptions() {
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => queryKeys.subscriptions(userId), [userId]);
 
+  useSyncExternalStore(subscribeLocalCache, getLocalCacheVersion, getLocalCacheVersion);
+  const localEntry = userId ? localSubscriptionsCache.get(userId) : undefined;
+  const hasHydratedLocal = Array.isArray(localEntry);
+
   const { data, isLoading } = useQuery<Subscription[]>({
     queryKey,
     enabled: Boolean(userId),
-    staleTime: 60_000,
+    staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!userId || !storageKey) return EMPTY_SUBSCRIPTIONS;
 
-      const storedRaw = await AsyncStorage.getItem(storageKey).catch(() => null);
-      const localSubs = parseStoredSubscriptions(storedRaw);
+      const cachedLocal = await hydrateLocalSubscriptions(userId, storageKey);
+      const localSubs = cachedLocal ?? EMPTY_SUBSCRIPTIONS;
 
       if (!hasToken || !hasSupabaseConfig()) {
         return localSubs;
@@ -55,6 +139,7 @@ export function useSubscriptions() {
         return localSubs;
       }
 
+      setLocalSubscriptionsCache(userId, remoteSubs);
       AsyncStorage.setItem(storageKey, JSON.stringify(remoteSubs)).catch(() => {});
       return remoteSubs;
     },
@@ -77,18 +162,23 @@ export function useSubscriptions() {
     onMutate: async (subscription) => {
       if (!userId || !storageKey) return { previous: undefined };
       await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<Subscription[]>(queryKey);
+      const cachedLocal = localSubscriptionsCache.get(userId);
+      const previous =
+        queryClient.getQueryData<Subscription[]>(queryKey) ??
+        (Array.isArray(cachedLocal) ? cachedLocal : undefined);
       const current = previous ?? [];
       const exists = current.some((item) => item.id === subscription.id);
       const next = exists
         ? current.map((item) => (item.id === subscription.id ? subscription : item))
         : [...current, subscription];
+      setLocalSubscriptionsCache(userId, next);
       queryClient.setQueryData<Subscription[]>(queryKey, next);
       AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
       return { previous };
     },
     onError: (_error, _subscription, context) => {
-      if (storageKey && context?.previous !== undefined) {
+      if (userId && storageKey && context?.previous !== undefined) {
+        setLocalSubscriptionsCache(userId, context.previous);
         queryClient.setQueryData<Subscription[]>(queryKey, context.previous);
         AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
       }
@@ -117,14 +207,19 @@ export function useSubscriptions() {
     onMutate: async (subId) => {
       if (!userId || !storageKey) return { previous: undefined };
       await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<Subscription[]>(queryKey);
+      const cachedLocal = localSubscriptionsCache.get(userId);
+      const previous =
+        queryClient.getQueryData<Subscription[]>(queryKey) ??
+        (Array.isArray(cachedLocal) ? cachedLocal : undefined);
       const next = (previous ?? []).filter((item) => item.id !== subId);
+      setLocalSubscriptionsCache(userId, next);
       queryClient.setQueryData<Subscription[]>(queryKey, next);
       AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
       return { previous };
     },
     onError: (_error, _subId, context) => {
-      if (storageKey && context?.previous !== undefined) {
+      if (userId && storageKey && context?.previous !== undefined) {
+        setLocalSubscriptionsCache(userId, context.previous);
         queryClient.setQueryData<Subscription[]>(queryKey, context.previous);
         AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
       }
@@ -147,7 +242,10 @@ export function useSubscriptions() {
   const toggleSubscription = useCallback(
     (id: string) => {
       if (!userId) return;
-      const current = queryClient.getQueryData<Subscription[]>(queryKey) ?? [];
+      const cachedLocal = localSubscriptionsCache.get(userId);
+      const current =
+        queryClient.getQueryData<Subscription[]>(queryKey) ??
+        (Array.isArray(cachedLocal) ? cachedLocal : EMPTY_SUBSCRIPTIONS);
       const target = current.find((item) => item.id === id);
       if (!target) return;
       upsertMutate({ ...target, active: !target.active });
@@ -164,8 +262,10 @@ export function useSubscriptions() {
   );
 
   return {
-    subscriptions: userId ? (data ?? EMPTY_SUBSCRIPTIONS) : EMPTY_SUBSCRIPTIONS,
-    storageReady: !userId || !isLoading,
+    subscriptions: userId
+      ? (data ?? (hasHydratedLocal ? localEntry : EMPTY_SUBSCRIPTIONS))
+      : EMPTY_SUBSCRIPTIONS,
+    storageReady: !userId || data !== undefined || hasHydratedLocal || !isLoading,
     saveSubscription,
     toggleSubscription,
     removeSubscription,

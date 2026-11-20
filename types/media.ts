@@ -1,6 +1,6 @@
 import type { MediaTitle } from '@/constants/catalog';
 
-export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w780';
+export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w500' | 'w780';
 
 export type CastMember = {
   id: number;

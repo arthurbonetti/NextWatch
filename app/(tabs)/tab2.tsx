@@ -40,7 +40,7 @@ const COLLAPSED_GENRE_COUNT = 7;
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
-  const { titles, refreshCatalog } = useCatalog();
+  const { titles, status: catalogStatus, isFetchingCatalog, refreshCatalog } = useCatalog();
   const { isSaved, toggleSavedTitle, refreshMyList } = useMyList();
 
   useFocusEffect(
@@ -48,7 +48,7 @@ export default function ExploreScreen() {
       void refreshMyList({ minIntervalMs: 5000 });
     }, [refreshMyList]),
   );
-  const { subscriptions } = useSubscriptions();
+  const { subscriptions, storageReady } = useSubscriptions();
   const [search, setSearch] = useState('');
   const [kindFilter, setKindFilter] = useState<'Todos' | MediaKind>('Todos');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
@@ -82,6 +82,10 @@ export default function ExploreScreen() {
   const availableTitles = useMemo(() => titles.filter((title) =>
     getTitleServices(title).some((service) => activeServices.has(service))
   ), [activeServices, titles]);
+  const isInitialCatalogLoading =
+    availableTitles.length === 0 &&
+    (!storageReady ||
+      (activeServices.size > 0 && (catalogStatus === 'loading' || isFetchingCatalog)));
 
   const handleSearchChange = useCallback((nextSearch: string) => {
     setSearch(nextSearch);
@@ -277,6 +281,7 @@ export default function ExploreScreen() {
             onAction={() => toggleSavedTitle(item)}
             actionButtonStyle={saved ? styles.savedButtonActive : undefined}
             actionIconColor={saved ? '#e58c34' : '#657078'}
+            imagePriority={index === 0 ? 'high' : 'normal'}
           />
         </FadeInBlock>
       );
@@ -415,9 +420,13 @@ export default function ExploreScreen() {
                   <AppText tipo="legenda" tabular style={styles.resultsSubtitle}>
                     {searchLoading
                       ? 'Pesquisando no catálogo online…'
-                      : hasActiveFilter
-                        ? `${formatCount(results.length)} de ${formatCount(availableTitles.length)} títulos`
-                        : `${formatCount(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
+                      : isInitialCatalogLoading
+                        ? 'Carregando catálogo…'
+                        : hasActiveFilter
+                          ? `${formatCount(results.length)} de ${formatCount(availableTitles.length)} títulos`
+                          : isFetchingCatalog
+                            ? `${formatCount(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'} · carregando mais…`
+                            : `${formatCount(availableTitles.length)} ${availableTitles.length === 1 ? 'título disponível' : 'títulos disponíveis'}`}
                   </AppText>
                 </View>
               </View>
@@ -428,14 +437,23 @@ export default function ExploreScreen() {
         }
         ListEmptyComponent={
           <FadeInBlock delay={60}>
-            <EmptyStateCard
-              icon={activeServices.size > 0 ? 'search-off' : 'subscriptions'}
-              title={activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}
-              description={activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}
-              actionLabel={activeServices.size === 0 ? 'Gerenciar assinaturas' : hasResettableFilters ? 'Limpar filtros' : undefined}
-              onAction={activeServices.size === 0 ? () => router.push('/subscriptions') : hasResettableFilters ? clearAllFilters : undefined}
-              style={styles.emptyState}
-            />
+            {isInitialCatalogLoading ? (
+              <EmptyStateCard
+                icon="autorenew"
+                title="Carregando catálogo…"
+                description="Buscando os primeiros títulos dos seus streamings ativos."
+                style={styles.emptyState}
+              />
+            ) : (
+              <EmptyStateCard
+                icon={activeServices.size > 0 ? 'search-off' : 'subscriptions'}
+                title={activeServices.size > 0 ? 'Nenhum título encontrado' : 'Adicione um streaming'}
+                description={activeServices.size > 0 ? 'Experimente outro termo ou remova alguns filtros.' : 'Os títulos dos seus serviços ativos aparecem aqui.'}
+                actionLabel={activeServices.size === 0 ? 'Gerenciar assinaturas' : hasResettableFilters ? 'Limpar filtros' : undefined}
+                onAction={activeServices.size === 0 ? () => router.push('/subscriptions') : hasResettableFilters ? clearAllFilters : undefined}
+                style={styles.emptyState}
+              />
+            )}
           </FadeInBlock>
         }
       />

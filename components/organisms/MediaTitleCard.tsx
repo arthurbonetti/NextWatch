@@ -20,6 +20,7 @@ type MediaTitleCardProps = {
   onAction: () => void;
   actionButtonStyle?: StyleProp<ViewStyle>;
   actionIconColor?: string;
+  imagePriority?: 'low' | 'normal' | 'high';
 };
 
 export const MediaTitleCard = memo(function MediaTitleCard({
@@ -31,6 +32,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
   onAction,
   actionButtonStyle,
   actionIconColor = '#657078',
+  imagePriority = 'normal',
 }: MediaTitleCardProps) {
   const displayDuration = duration || title.duration;
   const averageRating = formatAverageRating(title);
@@ -48,6 +50,8 @@ export const MediaTitleCard = memo(function MediaTitleCard({
             variant="poster"
             posterPath={title.tmdbPosterPath}
             backdropPath={title.tmdbBackdropPath}
+            priority={imagePriority}
+            transition={imagePriority === 'high' ? 0 : 200}
             fallback={<MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
           />
         </Animated.View>
