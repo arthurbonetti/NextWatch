@@ -97,10 +97,10 @@ function ConfettiParticle({
 
   return (
     <Animated.View
-      pointerEvents="none"
       style={[
         styles.confettiDot,
         {
+          pointerEvents: 'none',
           width: spec.size,
           height: spec.size * 0.65,
           backgroundColor: spec.color,
@@ -134,7 +134,7 @@ function GoldConfettiBurst({
   ];
 
   return (
-    <View pointerEvents="none" style={styles.confettiAnchor}>
+    <View style={[styles.confettiAnchor, { pointerEvents: 'none' }]}>
       {specs.map((spec, idx) => (
         <ConfettiParticle key={idx} spec={spec} progress={progress} />
       ))}

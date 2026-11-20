@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { ReactNode, useCallback, useState } from 'react';
-import { Animated, Easing, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, StyleProp, ViewStyle } from 'react-native';
 
 type FadeInBlockProps = {
   children: ReactNode;
@@ -28,20 +28,21 @@ export function FadeInBlock({
       opacity.setValue(0);
       translateY.setValue(offsetY);
 
+      const useNativeDriver = Platform.OS !== 'web';
       const animation = Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
           duration,
           delay,
           easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
+          useNativeDriver,
         }),
         Animated.timing(translateY, {
           toValue: 0,
           duration,
           delay,
           easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]);
 

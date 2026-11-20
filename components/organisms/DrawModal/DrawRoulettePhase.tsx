@@ -281,7 +281,7 @@ export function DrawRoulettePhase({
         </View>
 
         <View style={styles.reelViewport} onLayout={handleViewportLayout}>
-          <View style={styles.pointerTop} pointerEvents="none">
+          <View style={[styles.pointerTop, { pointerEvents: 'none' }]}>
             <MaterialIcons name="arrow-drop-down" size={26} color={THEME.colors.gold} />
           </View>
 
@@ -291,9 +291,9 @@ export function DrawRoulettePhase({
             ))}
           </Animated.View>
 
-          <Animated.View pointerEvents="none" style={[styles.centerFrame, frameAnimatedStyle]} />
+          <Animated.View style={[styles.centerFrame, frameAnimatedStyle, { pointerEvents: 'none' }]} />
 
-          <View style={styles.pointerBottom} pointerEvents="none">
+          <View style={[styles.pointerBottom, { pointerEvents: 'none' }]}>
             <MaterialIcons name="arrow-drop-up" size={26} color={THEME.colors.gold} />
           </View>
         </View>

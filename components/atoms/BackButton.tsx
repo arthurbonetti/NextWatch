@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Href, router } from 'expo-router';
 import { useState } from 'react';
-import { Animated, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { Animated, Platform, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 
 type BackButtonProps = {
   onPress?: () => void;
@@ -24,7 +24,7 @@ export function BackButton({
   const animateTo = (toValue: number) => {
     Animated.spring(pressAnim, {
       toValue,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       speed: 36,
       bounciness: 6,
     }).start();

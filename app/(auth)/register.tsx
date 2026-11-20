@@ -27,7 +27,7 @@ export default function RegisterScreen() {
   const animateBack = (toValue: number) => {
     Animated.spring(backPressAnim, {
       toValue,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       speed: 36,
       bounciness: 6,
     }).start();

@@ -28,8 +28,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: FloatingTabB
 
   return (
     <View
-      pointerEvents="box-none"
-      style={[styles.wrapper, { bottom: Math.max(8, insets.bottom + 2) }]}>
+      style={[styles.wrapper, { bottom: Math.max(8, insets.bottom + 2), pointerEvents: 'box-none' }]}>
       <View style={styles.dock} accessibilityRole="tablist">
         {state.routes.map((route, index) => {
           const focused = state.index === index;

@@ -484,8 +484,8 @@ export function AnimatedModalShell({
 
   return (
     <ModalPortal onBackPress={visible ? (onRequestClose ?? onClose) : undefined}>
-      <View style={styles.root} pointerEvents={visible ? 'auto' : 'none'}>
-        <Animated.View style={[styles.backdropContainer, backdropStyle]} pointerEvents="none">
+      <View style={[styles.root, { pointerEvents: visible ? 'auto' : 'none' }]}>
+        <Animated.View style={[styles.backdropContainer, backdropStyle, { pointerEvents: 'none' }]}>
           {Platform.OS !== 'android' && (
             <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFill} />
           )}

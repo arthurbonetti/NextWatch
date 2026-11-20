@@ -89,7 +89,7 @@ export function AnimatedRollingNumber({ value, style, peso = 'forte' }: Animated
   return (
     <View style={styles.container}>
       {tracked.previous !== null && (
-        <Animated.View pointerEvents="none" style={[styles.outgoing, outgoingStyle]}>
+        <Animated.View style={[styles.outgoing, outgoingStyle, { pointerEvents: 'none' }]}>
           <AppText peso={peso} tabular style={style}>
             {formatCount(tracked.previous)}
           </AppText>

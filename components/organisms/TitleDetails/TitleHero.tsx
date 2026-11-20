@@ -120,8 +120,7 @@ export function TitleHero({
         <LinearGradient
           colors={['rgba(15, 22, 32, 0.56)', 'rgba(15, 22, 32, 0.14)', 'rgba(15, 22, 32, 0)']}
           locations={[0, 0.45, 1]}
-          style={[styles.topScrim, { height: topInset + 72 }]}
-          pointerEvents="none"
+          style={[styles.topScrim, { height: topInset + 72, pointerEvents: 'none' }]}
         />
 
         <LinearGradient
@@ -131,8 +130,7 @@ export function TitleHero({
             THEME.colors.bgCanvas,
           ]}
           locations={[0, 0.55, 1]}
-          style={styles.bottomGradient}
-          pointerEvents="none"
+          style={[styles.bottomGradient, { pointerEvents: 'none' }]}
         />
 
         <View style={[styles.topBar, { top: topInset + THEME.spacing.xs }]}>
@@ -148,7 +146,7 @@ export function TitleHero({
         </View>
 
         {trailerUrl && (
-          <View style={[styles.trailerCenterOverlay, { top: topInset + 22 }]} pointerEvents="box-none">
+          <View style={[styles.trailerCenterOverlay, { top: topInset + 22, pointerEvents: 'box-none' }]}>
             <Pressable
               onPress={onWatchTrailer}
               style={({ pressed }) => [

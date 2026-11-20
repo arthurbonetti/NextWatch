@@ -257,8 +257,7 @@ export function ConfirmDialog({
     if (!inlineRendered) return null;
     return (
       <Animated.View
-        style={[styles.inlineBackdrop, inlineBackdropStyle]}
-        pointerEvents={visible ? 'auto' : 'none'}>
+        style={[styles.inlineBackdrop, inlineBackdropStyle, { pointerEvents: visible ? 'auto' : 'none' }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onCancel}

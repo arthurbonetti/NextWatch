@@ -174,10 +174,9 @@ function ExpandableBody({
         </AppText>
 
         <Animated.View
-          pointerEvents="none"
-          style={[styles.revealVeil, { backgroundColor: fadeColor }, revealVeilStyle]}
+          style={[styles.revealVeil, { backgroundColor: fadeColor, pointerEvents: 'none' }, revealVeilStyle]}
         />
-        <Animated.View pointerEvents="none" style={[styles.bottomFadeWrap, bottomFadeStyle]}>
+        <Animated.View style={[styles.bottomFadeWrap, bottomFadeStyle, { pointerEvents: 'none' }]}>
           <LinearGradient
             colors={[withAlpha(fadeColor, 0), withAlpha(fadeColor, 0.72), fadeColor]}
             locations={[0, 0.58, 1]}
@@ -283,8 +282,7 @@ export function ExpandableText({
   return (
     <View style={[styles.root, style]}>
       <View
-        style={styles.measurerAnchor}
-        pointerEvents="none"
+        style={[styles.measurerAnchor, { pointerEvents: 'none' }]}
         accessible={false}
         importantForAccessibility="no-hide-descendants"
         aria-hidden>

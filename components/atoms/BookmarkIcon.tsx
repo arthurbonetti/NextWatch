@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet } from 'react-native';
+import { Animated, Platform, StyleSheet } from 'react-native';
 
 type BookmarkIconProps = {
   saved: boolean;
@@ -41,6 +41,8 @@ export function BookmarkIcon({
     if (prevSavedRef.current === saved) return;
     prevSavedRef.current = saved;
 
+    const useNativeDriver = Platform.OS !== 'web';
+
     if (saved) {
       popScale.setValue(0.82);
       checkAnim.setValue(0);
@@ -50,20 +52,20 @@ export function BookmarkIcon({
             toValue: 1.24,
             speed: 40,
             bounciness: 12,
-            useNativeDriver: true,
+            useNativeDriver,
           }),
           Animated.spring(popScale, {
             toValue: 1,
             speed: 28,
             bounciness: 8,
-            useNativeDriver: true,
+            useNativeDriver,
           }),
         ]),
         Animated.spring(checkAnim, {
           toValue: 1,
           speed: 24,
           bounciness: 12,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]).start();
     } else {
@@ -72,19 +74,19 @@ export function BookmarkIcon({
           Animated.timing(popScale, {
             toValue: 0.85,
             duration: 90,
-            useNativeDriver: true,
+            useNativeDriver,
           }),
           Animated.spring(popScale, {
             toValue: 1,
             speed: 32,
             bounciness: 6,
-            useNativeDriver: true,
+            useNativeDriver,
           }),
         ]),
         Animated.timing(checkAnim, {
           toValue: 0,
           duration: 120,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]).start();
     }
@@ -101,9 +103,9 @@ export function BookmarkIcon({
         color={saved ? color : (inactiveColor ?? color)}
       />
       <Animated.View
-        pointerEvents="none"
         style={[
           styles.badge,
+          { pointerEvents: 'none' },
           {
             width: badgeSize,
             height: badgeSize,

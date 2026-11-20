@@ -97,12 +97,11 @@ export function ModalPortalHost() {
   if (entries.length === 0) return null;
 
   return (
-    <View pointerEvents="box-none" style={styles.host}>
+    <View style={[styles.host, { pointerEvents: 'box-none' }]}>
       {entries.map((entry, index) => (
         <View
           key={entry.id}
-          pointerEvents="box-none"
-          style={styles.entryLayer}
+          style={[styles.entryLayer, { pointerEvents: 'box-none' }]}
           accessibilityViewIsModal={index === entries.length - 1}>
           {entry.node}
         </View>

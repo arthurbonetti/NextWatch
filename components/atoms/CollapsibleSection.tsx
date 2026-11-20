@@ -218,8 +218,7 @@ export function CollapsibleSection({
 
   return (
     <Animated.View
-      pointerEvents={expanded ? 'auto' : 'none'}
-      style={[styles.clipper, style, containerAnimatedStyle]}>
+      style={[styles.clipper, style, containerAnimatedStyle, { pointerEvents: expanded ? 'auto' : 'none' }]}>
       <Animated.View
         style={[styles.measureInner, contentContainerStyle, contentAnimatedStyle]}
         onLayout={handleContentLayout}>
