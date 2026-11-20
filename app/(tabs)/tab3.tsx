@@ -9,10 +9,10 @@ import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { useDrawHistory } from '@/contexts/DrawHistoryContext';
-import { useMyList } from '@/contexts/MyListContext';
-import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { useCatalog } from '@/hooks/useCatalog';
+import { useDrawHistory } from '@/hooks/useDrawHistory';
+import { useMyList } from '@/hooks/useMyList';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { formatCount } from '@/utils/format';
 
@@ -164,7 +164,7 @@ export default function ProfileTabScreen() {
                       key={entry.id}
                       entry={entry}
                       resolvedTitle={resolved}
-                      onPress={resolved ? () => router.push({ pathname: '/title/[id]', params: { id: resolved.id } }) : undefined}
+                      onPress={() => router.push({ pathname: '/title/[id]', params: { id: entry.tmdbId } })}
                     />
                   );
                 })}

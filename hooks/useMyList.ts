@@ -1,0 +1,410 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useRef } from 'react';
+
+import { isMediaTitle, type MediaTitle } from '@/constants/catalog';
+import { useAuth } from '@/contexts/AuthContext';
+import { queryKeys } from '@/services/queryKeys';
+import {
+  deleteMyListTitle,
+  fetchMyList,
+  upsertMyListBatch,
+  upsertMyListTitle,
+} from '@/services/repositories/myListRepo';
+import { hasSupabaseConfig } from '@/services/supabase';
+import { getCachedTitleDuration } from '@/services/tmdb';
+
+const BASE_STORAGE_KEY = '@nextwatch/my-list';
+const SYNCED_FLAG_PREFIX = '@nextwatch/my-list-synced';
+const PENDING_OPS_PREFIX = '@nextwatch/my-list-pending';
+const EMPTY_TITLES: MediaTitle[] = [];
+
+type RefreshOptions = {
+  minIntervalMs?: number;
+};
+
+type PendingOp =
+  | { type: 'upsert'; title: MediaTitle }
+  | { type: 'delete' };
+
+type PendingOpsMap = Record<string, PendingOp>;
+type MutationOutcome = 'ok' | 'retry' | 'offline';
+
+function parseStoredTitles(raw: string | null): MediaTitle[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed
+          .filter(isMediaTitle)
+          .map((item) => (item.catalogSource === 'tmdb' ? { ...item, metacriticScore: null } : item))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parsePendingOps(raw: string | null): PendingOpsMap {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const result: PendingOpsMap = {};
+    for (const [id, entry] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!id || !entry || typeof entry !== 'object') continue;
+      const candidate = entry as { type?: unknown; title?: unknown };
+      if (candidate.type === 'delete') {
+        result[id] = { type: 'delete' };
+      } else if (candidate.type === 'upsert' && isMediaTitle(candidate.title)) {
+        result[id] = { type: 'upsert', title: candidate.title };
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function applyPendingOps(baseItems: MediaTitle[], pendingOps: PendingOpsMap): MediaTitle[] {
+  const entries = Object.entries(pendingOps);
+  if (entries.length === 0) return baseItems;
+
+  const deletedIds = new Set<string>();
+  const upserts = new Map<string, MediaTitle>();
+  for (const [id, op] of entries) {
+    if (op.type === 'delete') deletedIds.add(id);
+    else upserts.set(id, op.title);
+  }
+
+  const updatedBase: MediaTitle[] = [];
+  const seen = new Set<string>();
+  for (const item of baseItems) {
+    if (deletedIds.has(item.id) || seen.has(item.id)) continue;
+    seen.add(item.id);
+    updatedBase.push(upserts.get(item.id) ?? item);
+  }
+
+  const newUpserts: MediaTitle[] = [];
+  for (const [id, title] of upserts) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      newUpserts.unshift(title);
+    }
+  }
+
+  return [...newUpserts, ...updatedBase];
+}
+
+async function readPendingOps(pendingKey: string): Promise<PendingOpsMap> {
+  const raw = await AsyncStorage.getItem(pendingKey).catch(() => null);
+  return parsePendingOps(raw);
+}
+
+async function writePendingOp(pendingKey: string, titleId: string, op: PendingOp): Promise<void> {
+  const current = await readPendingOps(pendingKey);
+  current[titleId] = op;
+  await AsyncStorage.setItem(pendingKey, JSON.stringify(current)).catch(() => {});
+}
+
+async function removePendingOp(pendingKey: string, titleId: string): Promise<void> {
+  const current = await readPendingOps(pendingKey);
+  if (!(titleId in current)) return;
+  delete current[titleId];
+  await AsyncStorage.setItem(pendingKey, JSON.stringify(current)).catch(() => {});
+}
+
+export function useMyList() {
+  const { user, token } = useAuth();
+  const userId = user?.id ?? null;
+  const hasToken = Boolean(token);
+  const storageKey = userId ? `${BASE_STORAGE_KEY}:${userId}` : null;
+  const syncedKey = userId ? `${SYNCED_FLAG_PREFIX}:${userId}` : null;
+  const pendingKey = userId ? `${PENDING_OPS_PREFIX}:${userId}` : null;
+
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => queryKeys.myList(userId), [userId]);
+  const itemOpSeqRef = useRef<Map<string, number>>(new Map());
+
+  const { data, isLoading } = useQuery<MediaTitle[]>({
+    queryKey,
+    enabled: Boolean(userId),
+    staleTime: 30_000,
+    queryFn: async ({ signal }) => {
+      if (!userId || !storageKey || !syncedKey || !pendingKey) return EMPTY_TITLES;
+
+      const [storedRaw, syncedRaw, pendingRaw] = await Promise.all([
+        AsyncStorage.getItem(storageKey).catch(() => null),
+        AsyncStorage.getItem(syncedKey).catch(() => null),
+        AsyncStorage.getItem(pendingKey).catch(() => null),
+      ]);
+
+      const localCached = parseStoredTitles(storedRaw);
+      const pendingOps = parsePendingOps(pendingRaw);
+      const syncedFlag = syncedRaw === '1';
+
+      if (!hasToken || !hasSupabaseConfig()) {
+        return applyPendingOps(localCached, pendingOps);
+      }
+
+      // Reenvia mutações locais pendentes antes de consultar a nuvem
+      const remainingPending: PendingOpsMap = { ...pendingOps };
+      let pendingChanged = false;
+      let stoppedOnRetry = false;
+      for (const [titleId, op] of Object.entries(pendingOps)) {
+        if (signal.aborted) {
+          return applyPendingOps(localCached, remainingPending);
+        }
+        const opKey = `${userId}:${titleId}`;
+        const seqBefore = itemOpSeqRef.current.get(opKey) ?? 0;
+
+        const outcome =
+          op.type === 'upsert'
+            ? await upsertMyListTitle(userId, op.title)
+            : await deleteMyListTitle(userId, titleId);
+
+        if (signal.aborted) {
+          return applyPendingOps(localCached, remainingPending);
+        }
+        if (outcome === 'retry') {
+          stoppedOnRetry = true;
+          break;
+        }
+
+        if ((itemOpSeqRef.current.get(opKey) ?? 0) === seqBefore) {
+          delete remainingPending[titleId];
+          pendingChanged = true;
+        }
+      }
+
+      if (pendingChanged) {
+        AsyncStorage.setItem(pendingKey, JSON.stringify(remainingPending)).catch(() => {});
+      }
+      if (stoppedOnRetry) {
+        return applyPendingOps(localCached, remainingPending);
+      }
+
+      const fetchedTitles = await fetchMyList(userId);
+      if (signal.aborted || fetchedTitles === null) {
+        return applyPendingOps(localCached, remainingPending);
+      }
+      let remoteTitles = fetchedTitles;
+
+      // Migra títulos que existiam apenas no cache local antes da sincronização na nuvem
+      if (!syncedFlag) {
+        const remoteIds = new Set(remoteTitles.map((item) => item.id));
+        const localOnly = localCached.filter(
+          (item) => !remoteIds.has(item.id) && remainingPending[item.id]?.type !== 'delete',
+        );
+
+        if (localOnly.length > 0) {
+          const now = Date.now();
+          const migrationOutcome = await upsertMyListBatch(
+            userId,
+            localOnly.map((item, index) => ({
+              title: item,
+              createdAt: new Date(now - index).toISOString(),
+            })),
+          );
+          if (signal.aborted) {
+            return applyPendingOps(localCached, remainingPending);
+          }
+          remoteTitles = [...localOnly, ...remoteTitles];
+          if (migrationOutcome === 'ok' || migrationOutcome === 'drop') {
+            AsyncStorage.setItem(syncedKey, '1').catch(() => {});
+          }
+        } else {
+          AsyncStorage.setItem(syncedKey, '1').catch(() => {});
+        }
+      }
+
+      const finalTitles = applyPendingOps(remoteTitles, remainingPending);
+      AsyncStorage.setItem(storageKey, JSON.stringify(finalTitles)).catch(() => {});
+      return finalTitles;
+    },
+  });
+
+  type MutationContext = { previous: MediaTitle[] | undefined; opKey: string; seq: number };
+
+  const { mutate: upsertMutate } = useMutation<MutationOutcome, Error, MediaTitle, MutationContext>({
+    mutationFn: async (snapshot) => {
+      if (!userId || !hasToken || !hasSupabaseConfig()) return 'offline';
+      const outcome = await upsertMyListTitle(userId, snapshot);
+      if (outcome === 'drop') {
+        throw new Error('Não foi possível salvar o título na sua fila.');
+      }
+      return outcome;
+    },
+    onMutate: async (snapshot) => {
+      if (!userId || !storageKey || !pendingKey) {
+        return { previous: undefined, opKey: '', seq: 0 };
+      }
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<MediaTitle[]>(queryKey);
+      const current = previous ?? [];
+      const next = [snapshot, ...current.filter((item) => item.id !== snapshot.id)];
+      queryClient.setQueryData<MediaTitle[]>(queryKey, next);
+      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
+
+      const opKey = `${userId}:${snapshot.id}`;
+      const seq = (itemOpSeqRef.current.get(opKey) ?? 0) + 1;
+      itemOpSeqRef.current.set(opKey, seq);
+      void writePendingOp(pendingKey, snapshot.id, { type: 'upsert', title: snapshot });
+
+      return { previous, opKey, seq };
+    },
+    onSuccess: (outcome, snapshot, context) => {
+      if (
+        outcome === 'ok' &&
+        pendingKey &&
+        context &&
+        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+      ) {
+        void removePendingOp(pendingKey, snapshot.id);
+      }
+    },
+    onError: (_error, snapshot, context) => {
+      if (
+        pendingKey &&
+        context &&
+        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+      ) {
+        void removePendingOp(pendingKey, snapshot.id);
+      }
+      if (storageKey && context?.previous !== undefined) {
+        queryClient.setQueryData<MediaTitle[]>(queryKey, context.previous);
+        AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+      }
+    },
+    onSettled: (outcome) => {
+      if (outcome === 'ok' && userId && hasToken) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+
+  const { mutate: deleteMutate } = useMutation<MutationOutcome, Error, string, MutationContext>({
+    mutationFn: async (targetId) => {
+      if (!userId || !hasToken || !hasSupabaseConfig()) return 'offline';
+      const outcome = await deleteMyListTitle(userId, targetId);
+      if (outcome === 'drop') {
+        throw new Error('Não foi possível remover o título da sua fila.');
+      }
+      return outcome;
+    },
+    onMutate: async (targetId) => {
+      if (!userId || !storageKey || !pendingKey) {
+        return { previous: undefined, opKey: '', seq: 0 };
+      }
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<MediaTitle[]>(queryKey);
+      const next = (previous ?? []).filter((item) => item.id !== targetId);
+      queryClient.setQueryData<MediaTitle[]>(queryKey, next);
+      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
+
+      const opKey = `${userId}:${targetId}`;
+      const seq = (itemOpSeqRef.current.get(opKey) ?? 0) + 1;
+      itemOpSeqRef.current.set(opKey, seq);
+      void writePendingOp(pendingKey, targetId, { type: 'delete' });
+
+      return { previous, opKey, seq };
+    },
+    onSuccess: (outcome, targetId, context) => {
+      if (
+        outcome === 'ok' &&
+        pendingKey &&
+        context &&
+        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+      ) {
+        void removePendingOp(pendingKey, targetId);
+      }
+    },
+    onError: (_error, targetId, context) => {
+      if (
+        pendingKey &&
+        context &&
+        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+      ) {
+        void removePendingOp(pendingKey, targetId);
+      }
+      if (storageKey && context?.previous !== undefined) {
+        queryClient.setQueryData<MediaTitle[]>(queryKey, context.previous);
+        AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+      }
+    },
+    onSettled: (outcome) => {
+      if (outcome === 'ok' && userId && hasToken) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+
+  const savedTitles = useMemo(
+    () => (userId ? (data ?? EMPTY_TITLES) : EMPTY_TITLES),
+    [data, userId],
+  );
+
+  const savedById = useMemo(
+    () => new Map(savedTitles.map((item) => [item.id, item])),
+    [savedTitles],
+  );
+
+  const isSaved = useCallback((id: string) => savedById.has(id), [savedById]);
+
+  const findSavedTitle = useCallback((id: string) => savedById.get(id), [savedById]);
+
+  const toggleSavedTitle = useCallback(
+    (title: MediaTitle) => {
+      if (!userId) return;
+      const snapshot: MediaTitle = {
+        ...title,
+        duration: getCachedTitleDuration(title),
+      };
+      if (!isMediaTitle(snapshot)) return;
+
+      const currentItems = queryClient.getQueryData<MediaTitle[]>(queryKey) ?? savedTitles;
+      const exists = currentItems.some((item) => item.id === snapshot.id);
+      if (exists) {
+        deleteMutate(snapshot.id);
+      } else {
+        upsertMutate(snapshot);
+      }
+    },
+    [deleteMutate, queryClient, queryKey, savedTitles, upsertMutate, userId],
+  );
+
+  const removeFromMyList = useCallback(
+    (id: string) => {
+      if (!userId) return;
+      deleteMutate(id);
+    },
+    [deleteMutate, userId],
+  );
+
+  const refreshMyList = useCallback(
+    async (options?: RefreshOptions) => {
+      if (!userId || !pendingKey) return;
+      if (options?.minIntervalMs !== undefined) {
+        const state = queryClient.getQueryState(queryKey);
+        const lastUpdated = state?.dataUpdatedAt ?? 0;
+        if (Date.now() - lastUpdated < options.minIntervalMs) {
+          const pending = await readPendingOps(pendingKey);
+          if (Object.keys(pending).length === 0) {
+            return;
+          }
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey });
+    },
+    [pendingKey, queryClient, queryKey, userId],
+  );
+
+  return {
+    savedTitles,
+    storageReady: !userId || !isLoading,
+    isSaved,
+    toggleSavedTitle,
+    removeFromMyList,
+    findSavedTitle,
+    refreshMyList,
+  };
+}

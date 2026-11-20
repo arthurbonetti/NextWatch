@@ -8,10 +8,10 @@ import {
   type MediaTitle,
 } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { useDrawHistory } from '@/contexts/DrawHistoryContext';
-import { useMyList } from '@/contexts/MyListContext';
-import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { useCatalog } from '@/hooks/useCatalog';
+import { useDrawHistory } from '@/hooks/useDrawHistory';
+import { useMyList } from '@/hooks/useMyList';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { type DrawKindFilter, usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import {

@@ -5,6 +5,7 @@ import {
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -17,10 +18,7 @@ import 'react-native-reanimated';
 
 import { ModalPortalHost, ModalPortalProvider } from '@/components/atoms/ModalPortal';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { CatalogProvider } from '@/contexts/CatalogContext';
-import { DrawHistoryProvider } from '@/contexts/DrawHistoryContext';
-import { MyListProvider } from '@/contexts/MyListContext';
-import { SubscriptionsProvider } from '@/contexts/SubscriptionsContext';
+import { queryClient } from '@/services/queryClient';
 import { patchWebScrollViewRejectionWarning } from '@/utils/patchWebScrollView';
 
 patchWebScrollViewRejectionWarning();
@@ -61,28 +59,22 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <SubscriptionsProvider>
-            <CatalogProvider>
-              <MyListProvider>
-                <DrawHistoryProvider>
-                  <ModalPortalProvider>
-                    <Stack>
-                      <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-                      <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
-                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                      <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
-                      <Stack.Screen name="my-list" options={{ headerShown: false }} />
-                      <Stack.Screen name="draw-history" options={{ headerShown: false }} />
-                      <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
-                    </Stack>
-                    <ModalPortalHost />
-                  </ModalPortalProvider>
-                </DrawHistoryProvider>
-              </MyListProvider>
-            </CatalogProvider>
-          </SubscriptionsProvider>
-        </AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <ModalPortalProvider>
+              <Stack>
+                <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+                <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
+                <Stack.Screen name="my-list" options={{ headerShown: false }} />
+                <Stack.Screen name="draw-history" options={{ headerShown: false }} />
+                <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
+              </Stack>
+              <ModalPortalHost />
+            </ModalPortalProvider>
+          </AuthProvider>
+        </QueryClientProvider>
         <StatusBar style="auto" />
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -1,6 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Redirect, router, useFocusEffect } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -19,10 +20,10 @@ import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
 import { isSerialTitle, MediaTitle } from '@/constants/catalog';
 import { resolveTitleAccentColor, THEME } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { DrawHistoryEntry, useDrawHistory } from '@/contexts/DrawHistoryContext';
-import { useMyList } from '@/contexts/MyListContext';
+import { DrawHistoryEntry, useDrawHistory } from '@/hooks/useDrawHistory';
+import { useMyList } from '@/hooks/useMyList';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
+import { queryKeys } from '@/services/queryKeys';
 import {
   fetchTitleById,
   fetchTitleDuration,
@@ -50,9 +51,6 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
   progressMap,
   onOpen,
 }: WatchedTitleCardProps) {
-  const [resolvedTotal, setResolvedTotal] = useState<{ id: string; total: number | null } | null>(
-    null,
-  );
   const isSerial = title
     ? isSerialTitle(title)
     : drawEntry?.kind === 'Série' ||
@@ -60,23 +58,19 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
       id.startsWith('tmdb-tv-');
 
   const cachedTotal = title ? getCachedTitleTotalEpisodes(title.id) : null;
-  const totalEpisodes =
-    cachedTotal ?? (title && resolvedTotal?.id === title.id ? resolvedTotal.total : null);
-
-  useEffect(() => {
-    if (!title || !isSerial || cachedTotal !== null) return;
-    let active = true;
-    void fetchTitleDuration(title).then(() => {
-      if (!active) return;
-      const nextTotal = getCachedTitleTotalEpisodes(title.id);
-      if (nextTotal !== null) {
-        setResolvedTotal({ id: title.id, total: nextTotal });
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [cachedTotal, isSerial, title]);
+  const { data: queriedTotal } = useQuery<number | null>({
+    queryKey: queryKeys.titleTotalEpisodes(title?.id ?? ''),
+    enabled: Boolean(title && isSerial && cachedTotal === null),
+    staleTime: 1000 * 60 * 30,
+    refetchOnWindowFocus: false,
+    retry: 0,
+    queryFn: async () => {
+      if (!title) return null;
+      await fetchTitleDuration(title);
+      return getCachedTitleTotalEpisodes(title.id);
+    },
+  });
+  const totalEpisodes = cachedTotal ?? queriedTotal ?? null;
 
   const summary = summarizeWatchedProgress({ isSerial, progressMap, totalEpisodes });
   const accentColor = title ? resolveTitleAccentColor(title.color) : THEME.colors.accent;
@@ -181,40 +175,41 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
 export default function MyListScreen() {
   const reducedMotion = useReducedMotion();
   const { user, token, authReady } = useAuth();
-  const { findTitle } = useCatalog();
   const { savedTitles, storageReady, findSavedTitle, removeFromMyList, refreshMyList } = useMyList();
   const { history, storageReady: historyReady, refreshDrawHistory } = useDrawHistory();
   const { progressTitleIds, progressByTitleId, progressReady, refreshProgressIds } =
     useWatchedProgressIds(user?.id ?? null, token);
 
   const [activeTab, setActiveTab] = useState<ListsTab>('fila');
-  const [fetchedTitles, setFetchedTitles] = useState<Record<string, MediaTitle>>({});
-  const [savedDurationsById, setSavedDurationsById] = useState<Record<string, string>>({});
-  const attemptedFetchRef = useRef(new Set<string>());
-  const attemptedDurationRef = useRef(new Set<string>());
 
-  useEffect(() => {
-    let active = true;
-    for (const title of savedTitles) {
-      if (title.duration || getCachedTitleDuration(title) || attemptedDurationRef.current.has(title.id)) {
-        continue;
+  const titlesMissingDuration = useMemo(
+    () => savedTitles.filter((title) => !title.duration && !getCachedTitleDuration(title)),
+    [savedTitles],
+  );
+
+  const durationQueries = useQueries({
+    queries: titlesMissingDuration.map((title) => ({
+      queryKey: queryKeys.titleDuration(title.id),
+      staleTime: 1000 * 60 * 30,
+      refetchOnWindowFocus: false,
+      retry: 0,
+      queryFn: () => fetchTitleDuration(title),
+    })),
+  });
+
+  const savedDurationsById = useMemo(() => {
+    const map: Record<string, string> = {};
+    titlesMissingDuration.forEach((title, idx) => {
+      const resolved = durationQueries[idx]?.data;
+      if (resolved) {
+        map[title.id] = resolved;
       }
-      attemptedDurationRef.current.add(title.id);
-      void fetchTitleDuration(title).then((resolved) => {
-        if (!active || !resolved) return;
-        setSavedDurationsById((prev) =>
-          prev[title.id] === resolved ? prev : { ...prev, [title.id]: resolved },
-        );
-      });
-    }
-    return () => {
-      active = false;
-    };
-  }, [savedTitles]);
+    });
+    return map;
+  }, [durationQueries, titlesMissingDuration]);
 
   useFocusEffect(
     useCallback(() => {
-      attemptedFetchRef.current.clear();
       void refreshMyList();
       void refreshProgressIds();
       void refreshDrawHistory({ minIntervalMs: 3000 });
@@ -249,46 +244,33 @@ export default function MyListScreen() {
     return ordered;
   }, [drawWatchedById, progressTitleIds]);
 
-  useEffect(() => {
-    if (activeTab !== 'assistidos') return;
-    const attempted = attemptedFetchRef.current;
-    const missing = watchedIds.filter(
-      (id) =>
-        !findTitle(id) &&
-        !findSavedTitle(id) &&
-        !findCachedRelatedTitle(id) &&
-        !fetchedTitles[id] &&
-        !attempted.has(id),
-    );
-    if (missing.length === 0) return;
+  const missingWatchedIds = useMemo(
+    () => watchedIds.filter((id) => !findSavedTitle(id) && !findCachedRelatedTitle(id)),
+    [findSavedTitle, watchedIds],
+  );
 
-    let cancelled = false;
-    let finished = false;
-    for (const id of missing) {
-      attempted.add(id);
-    }
-    void Promise.all(
-      missing.map(async (id) => ({ id, title: await fetchTitleById(id) })),
-    ).then((results) => {
-      finished = true;
-      if (cancelled) return;
-      const additions: Record<string, MediaTitle> = {};
-      for (const item of results) {
-        if (item.title) additions[item.id] = item.title;
-      }
-      if (Object.keys(additions).length > 0) {
-        setFetchedTitles((prev) => ({ ...prev, ...additions }));
+  const watchedTitleQueries = useQueries({
+    queries: missingWatchedIds.map((id) => ({
+      queryKey: queryKeys.titleById(id),
+      enabled: activeTab === 'assistidos',
+      staleTime: 1000 * 60 * 30,
+      gcTime: 1000 * 60 * 60,
+      refetchOnWindowFocus: false,
+      retry: 0,
+      queryFn: () => fetchTitleById(id),
+    })),
+  });
+
+  const fetchedTitles = useMemo(() => {
+    const map: Record<string, MediaTitle> = {};
+    missingWatchedIds.forEach((id, idx) => {
+      const resolved = watchedTitleQueries[idx]?.data;
+      if (resolved) {
+        map[id] = resolved;
       }
     });
-    return () => {
-      cancelled = true;
-      if (!finished) {
-        for (const id of missing) {
-          attempted.delete(id);
-        }
-      }
-    };
-  }, [activeTab, fetchedTitles, findSavedTitle, findTitle, watchedIds]);
+    return map;
+  }, [missingWatchedIds, watchedTitleQueries]);
 
   const openTitleById = useCallback((id: string) => {
     router.push({ pathname: '/title/[id]', params: { id } });
@@ -422,7 +404,6 @@ export default function MyListScreen() {
             <View>
               {watchedIds.map((id, index) => {
                 const resolved =
-                  findTitle(id) ??
                   findSavedTitle(id) ??
                   findCachedRelatedTitle(id) ??
                   fetchedTitles[id];

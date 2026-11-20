@@ -8,6 +8,7 @@ import {
   registerAccount,
   restoreAuthSession,
 } from '@/services/authService';
+import { queryClient } from '@/services/queryClient';
 import type { AuthSession, AuthStatus, AuthUser } from '@/types/auth';
 
 type AuthContextValue = {
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setToken(session.accessToken);
         setStatus('success');
       } else if (event === 'SIGNED_OUT') {
+        queryClient.clear();
         setUser(null);
         setToken(null);
         setStatus('idle');
@@ -114,7 +116,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const signOut = useCallback(async () => {
+    queryClient.clear();
     await clearAuthSession();
+    queryClient.clear();
     setUser(null);
     setToken(null);
     setErrorMessage(null);

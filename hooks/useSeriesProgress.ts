@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 
-import { useForegroundSync } from '@/hooks/useNetworkStatus';
+import { queryKeys } from '@/services/queryKeys';
 import {
   deleteSeriesProgress,
   fetchAllWatchedProgress,
@@ -12,13 +13,26 @@ import {
 import { hasSupabaseConfig } from '@/services/supabase';
 import {
   mergeWatchedProgress,
-  type RemoteProgressEntry,
   type SeriesProgressMap,
 } from '@/utils/watchedProgress';
 
 const BASE_STORAGE_KEY = '@nextwatch/series-progress';
 const PENDING_SYNC_PREFIX = '@nextwatch/series-progress-pending';
 const EMPTY_MAP: SeriesProgressMap = {};
+const EMPTY_IDS: string[] = [];
+const EMPTY_BY_TITLE: Record<string, SeriesProgressMap> = {};
+
+type WatchedProgressData = {
+  ids: string[];
+  byTitleId: Record<string, SeriesProgressMap>;
+};
+
+type ProgressMutationInput = {
+  updater: (prev: SeriesProgressMap) => SeriesProgressMap;
+  resolvedMap?: SeriesProgressMap;
+};
+
+type ProgressMutationOutcome = 'ok' | 'retry' | 'offline';
 
 function parseProgressMap(raw: string | null): SeriesProgressMap {
   if (!raw) return EMPTY_MAP;
@@ -29,93 +43,170 @@ function parseProgressMap(raw: string | null): SeriesProgressMap {
   }
 }
 
+async function syncSeriesProgressEntry(
+  userId: string,
+  titleId: string,
+  storageKey: string,
+  pendingKey: string,
+  hasToken: boolean,
+  signal: AbortSignal,
+): Promise<SeriesProgressMap> {
+  const [rawLocal, rawPending] = await Promise.all([
+    AsyncStorage.getItem(storageKey).catch(() => null),
+    AsyncStorage.getItem(pendingKey).catch(() => null),
+  ]);
+
+  const localMap = parseProgressMap(rawLocal);
+  if (!hasToken || !hasSupabaseConfig() || signal.aborted) {
+    return localMap;
+  }
+
+  if (rawPending === '1') {
+    const outcome =
+      Object.keys(localMap).length === 0
+        ? await deleteSeriesProgress(userId, titleId)
+        : await upsertSeriesProgress(userId, titleId, localMap);
+
+    if (!signal.aborted && (outcome === 'ok' || outcome === 'drop')) {
+      await AsyncStorage.removeItem(pendingKey).catch(() => {});
+    }
+    return localMap;
+  }
+
+  const remote = await fetchSeriesProgress(userId, titleId);
+  if (signal.aborted || !remote) {
+    return localMap;
+  }
+
+  if (remote.found) {
+    await AsyncStorage.setItem(storageKey, JSON.stringify(remote.map)).catch(() => {});
+    return remote.map;
+  }
+
+  if (Object.keys(localMap).length > 0) {
+    // Migra progresso salvo apenas localmente antes da sincronização em nuvem.
+    const outcome = await upsertSeriesProgress(userId, titleId, localMap);
+    if (outcome === 'retry') {
+      await AsyncStorage.setItem(pendingKey, '1').catch(() => {});
+    }
+  }
+  return localMap;
+}
+
+async function readLocalWatchedProgress(scope: string): Promise<{
+  localById: Record<string, SeriesProgressMap>;
+  pendingIds: Set<string>;
+}> {
+  const localPrefix = `${BASE_STORAGE_KEY}:${scope}:`;
+  const pendingPrefix = `${PENDING_SYNC_PREFIX}:${scope}:`;
+  const localById: Record<string, SeriesProgressMap> = {};
+  const pendingIds = new Set<string>();
+
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const relevantKeys = allKeys.filter(
+      (key) => key.startsWith(localPrefix) || key.startsWith(pendingPrefix),
+    );
+    if (relevantKeys.length > 0) {
+      const entries = await AsyncStorage.multiGet(relevantKeys);
+      for (const [key, raw] of entries) {
+        if (key.startsWith(pendingPrefix)) {
+          if (raw === '1') {
+            pendingIds.add(key.slice(pendingPrefix.length));
+          }
+        } else if (key.startsWith(localPrefix)) {
+          localById[key.slice(localPrefix.length)] = parseProgressMap(raw);
+        }
+      }
+    }
+  } catch {
+    // ignora erro de leitura local
+  }
+
+  return { localById, pendingIds };
+}
+
+function updateWatchedCacheEntry(
+  current: WatchedProgressData | undefined,
+  titleId: string,
+  nextMap: SeriesProgressMap,
+): WatchedProgressData | undefined {
+  if (!current) return current;
+  const hasEntries = Object.keys(nextMap).length > 0;
+  const nextByTitleId = { ...current.byTitleId };
+  let nextIds = current.ids;
+
+  if (hasEntries) {
+    nextByTitleId[titleId] = nextMap;
+    if (!nextIds.includes(titleId)) {
+      nextIds = [titleId, ...nextIds];
+    }
+  } else {
+    delete nextByTitleId[titleId];
+    if (nextIds.includes(titleId)) {
+      nextIds = nextIds.filter((id) => id !== titleId);
+    }
+  }
+
+  return { ids: nextIds, byTitleId: nextByTitleId };
+}
+
 export function useSeriesProgress(
   userId: string | null,
   titleId: string,
   token: string | null = null,
 ) {
-  const storageKey = `${BASE_STORAGE_KEY}:${userId ?? 'guest'}:${titleId}`;
-  const pendingKey = `${PENDING_SYNC_PREFIX}:${userId ?? 'guest'}:${titleId}`;
+  const hasToken = Boolean(token);
+  const scope = userId ?? 'guest';
+  const storageKey = `${BASE_STORAGE_KEY}:${scope}:${titleId}`;
+  const pendingKey = `${PENDING_SYNC_PREFIX}:${scope}:${titleId}`;
 
-  const [state, setState] = useState<{ key: string; map: SeriesProgressMap; ready: boolean }>({
-    key: '',
-    map: EMPTY_MAP,
-    ready: false,
+  const queryClient = useQueryClient();
+  const authQueryKey = useMemo(
+    () => queryKeys.seriesProgress(userId, titleId),
+    [titleId, userId],
+  );
+  const guestQueryKey = useMemo(() => queryKeys.seriesProgressGuest(titleId), [titleId]);
+  const activeQueryKey = userId ? authQueryKey : guestQueryKey;
+  const watchedQueryKey = useMemo(
+    () => (userId ? queryKeys.watchedProgressIds(userId) : queryKeys.watchedProgressIdsGuest()),
+    [userId],
+  );
+
+  const authQuery = useQuery<SeriesProgressMap>({
+    queryKey: authQueryKey,
+    enabled: Boolean(userId && titleId),
+    staleTime: 30_000,
+    queryFn: ({ signal }) =>
+      syncSeriesProgressEntry(userId!, titleId, storageKey, pendingKey, hasToken, signal),
   });
 
-  const latestMapRef = useRef<SeriesProgressMap>(EMPTY_MAP);
-  const mutationEpochRef = useRef(0);
-  const activeKeyRef = useRef(storageKey);
+  const guestQuery = useQuery<SeriesProgressMap>({
+    queryKey: guestQueryKey,
+    enabled: Boolean(!userId && titleId),
+    staleTime: Infinity,
+    queryFn: async () => {
+      const rawLocal = await AsyncStorage.getItem(storageKey).catch(() => null);
+      return parseProgressMap(rawLocal);
+    },
+  });
 
-  useEffect(() => {
-    activeKeyRef.current = storageKey;
-  }, [storageKey]);
+  const activeQuery = userId ? authQuery : guestQuery;
+  const activeMap = titleId ? (activeQuery.data ?? EMPTY_MAP) : EMPTY_MAP;
 
-  const syncWithBackend = useCallback(async () => {
-    if (!titleId) return;
-    const targetKey = storageKey;
-    const targetPendingKey = pendingKey;
-    const initialEpoch = mutationEpochRef.current;
-
-    const [rawLocal, rawPending] = await Promise.all([
-      AsyncStorage.getItem(targetKey).catch(() => null),
-      AsyncStorage.getItem(targetPendingKey).catch(() => null),
-    ]);
-
-    if (activeKeyRef.current !== targetKey) return;
-
-    const localMap = parseProgressMap(rawLocal);
-    if (mutationEpochRef.current === initialEpoch) {
-      latestMapRef.current = localMap;
-      setState({ key: targetKey, map: localMap, ready: true });
+  const { mutate: mutateProgress } = useMutation<
+    ProgressMutationOutcome,
+    Error,
+    ProgressMutationInput,
+    {
+      previous: SeriesProgressMap | undefined;
+      previousWatched: WatchedProgressData | undefined;
     }
-
-    if (!userId || !token || !hasSupabaseConfig()) {
-      return;
-    }
-
-    const hasPending = rawPending === '1';
-    if (hasPending) {
-      const currentMap =
-        mutationEpochRef.current === initialEpoch ? localMap : latestMapRef.current;
-      const outcome =
-        Object.keys(currentMap).length === 0
-          ? await deleteSeriesProgress(userId, titleId)
-          : await upsertSeriesProgress(userId, titleId, currentMap);
-
-      if (outcome === 'ok' && mutationEpochRef.current === initialEpoch) {
-        await AsyncStorage.removeItem(targetPendingKey).catch(() => {});
-      }
-      return;
-    }
-
-    const remote = await fetchSeriesProgress(userId, titleId);
-    if (!remote || activeKeyRef.current !== targetKey) return;
-    if (mutationEpochRef.current !== initialEpoch) return;
-
-    if (remote.found) {
-      latestMapRef.current = remote.map;
-      setState({ key: targetKey, map: remote.map, ready: true });
-      await AsyncStorage.setItem(targetKey, JSON.stringify(remote.map)).catch(() => {});
-    } else if (Object.keys(localMap).length > 0) {
-      // Migra progresso salvo apenas localmente antes da sincronização em nuvem.
-      await upsertSeriesProgress(userId, titleId, localMap);
-    }
-  }, [pendingKey, storageKey, titleId, token, userId]);
-
-  useEffect(() => {
-    void syncWithBackend();
-  }, [syncWithBackend]);
-
-  useForegroundSync(Boolean(userId && titleId && token), syncWithBackend);
-
-  const persistRemote = useCallback(
-    async (nextMap: SeriesProgressMap, expectedEpoch: number) => {
-      if (!userId || !titleId || !token || !hasSupabaseConfig()) {
-        if (userId && titleId) {
-          await AsyncStorage.setItem(pendingKey, '1').catch(() => {});
-        }
-        return;
+  >({
+    mutationFn: async (input) => {
+      const nextMap = input.resolvedMap ?? EMPTY_MAP;
+      if (!userId || !titleId || !hasToken || !hasSupabaseConfig()) {
+        return 'offline';
       }
 
       await AsyncStorage.setItem(pendingKey, '1').catch(() => {});
@@ -124,27 +215,53 @@ export function useSeriesProgress(
           ? await deleteSeriesProgress(userId, titleId)
           : await upsertSeriesProgress(userId, titleId, nextMap);
 
-      if (outcome === 'ok' && mutationEpochRef.current === expectedEpoch) {
+      if (outcome === 'drop') {
         await AsyncStorage.removeItem(pendingKey).catch(() => {});
+        throw new Error('Não foi possível salvar o progresso da série.');
+      }
+
+      if (outcome === 'ok') {
+        const latestCached = queryClient.getQueryData<SeriesProgressMap>(activeQueryKey);
+        if (latestCached === nextMap) {
+          await AsyncStorage.removeItem(pendingKey).catch(() => {});
+        }
+      }
+      return outcome;
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: activeQueryKey });
+      const previous = queryClient.getQueryData<SeriesProgressMap>(activeQueryKey);
+      const previousWatched = queryClient.getQueryData<WatchedProgressData>(watchedQueryKey);
+      const nextMap = input.updater(previous ?? EMPTY_MAP);
+      input.resolvedMap = nextMap;
+
+      queryClient.setQueryData<SeriesProgressMap>(activeQueryKey, nextMap);
+      queryClient.setQueryData<WatchedProgressData | undefined>(watchedQueryKey, (current) =>
+        updateWatchedCacheEntry(current, titleId, nextMap),
+      );
+      void AsyncStorage.setItem(storageKey, JSON.stringify(nextMap)).catch(() => {});
+      if (userId) {
+        void AsyncStorage.setItem(pendingKey, '1').catch(() => {});
+      }
+
+      return { previous, previousWatched };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData<SeriesProgressMap>(activeQueryKey, context.previous);
+        void AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+      }
+      if (context?.previousWatched !== undefined) {
+        queryClient.setQueryData<WatchedProgressData>(watchedQueryKey, context.previousWatched);
       }
     },
-    [pendingKey, titleId, token, userId],
-  );
-
-  const updateMap = useCallback(
-    (updater: (prev: SeriesProgressMap) => SeriesProgressMap) => {
-      const nextEpoch = ++mutationEpochRef.current;
-      const base = state.key === storageKey ? latestMapRef.current : EMPTY_MAP;
-      const next = updater(base);
-      latestMapRef.current = next;
-      setState({ key: storageKey, map: next, ready: true });
-      void AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
-      void persistRemote(next, nextEpoch);
+    onSettled: (outcome) => {
+      if (outcome === 'ok' && userId && hasToken) {
+        void queryClient.invalidateQueries({ queryKey: activeQueryKey });
+        void queryClient.invalidateQueries({ queryKey: watchedQueryKey });
+      }
     },
-    [persistRemote, state.key, storageKey],
-  );
-
-  const activeMap = state.key === storageKey ? state.map : EMPTY_MAP;
+  });
 
   const isEpisodeWatched = useCallback(
     (seasonNumber: number, episodeNumber: number): boolean => {
@@ -171,27 +288,31 @@ export function useSeriesProgress(
 
   const toggleEpisode = useCallback(
     (seasonNumber: number, episodeNumber: number) => {
+      if (!titleId) return;
       const key = String(seasonNumber);
-      updateMap((prev) => {
-        const current = prev[key] ?? [];
-        const exists = current.includes(episodeNumber);
-        const nextEpisodes = exists
-          ? current.filter((ep) => ep !== episodeNumber)
-          : [...current, episodeNumber].sort((a, b) => a - b);
+      mutateProgress({
+        updater: (prev) => {
+          const current = prev[key] ?? [];
+          const exists = current.includes(episodeNumber);
+          const nextEpisodes = exists
+            ? current.filter((ep) => ep !== episodeNumber)
+            : [...current, episodeNumber].sort((a, b) => a - b);
 
-        if (nextEpisodes.length === 0) {
-          const rest = { ...prev };
-          delete rest[key];
-          return rest;
-        }
-        return { ...prev, [key]: nextEpisodes };
+          if (nextEpisodes.length === 0) {
+            const rest = { ...prev };
+            delete rest[key];
+            return rest;
+          }
+          return { ...prev, [key]: nextEpisodes };
+        },
       });
     },
-    [updateMap],
+    [mutateProgress, titleId],
   );
 
   const toggleSeason = useCallback(
     (seasonNumber: number, episodeCount: number, episodeNumbers?: number[]) => {
+      if (!titleId) return;
       const key = String(seasonNumber);
       const targetNumbers =
         episodeNumbers && episodeNumbers.length > 0
@@ -200,18 +321,20 @@ export function useSeriesProgress(
 
       if (targetNumbers.length === 0) return;
 
-      updateMap((prev) => {
-        const current = prev[key] ?? [];
-        const allWatched = targetNumbers.every((num) => current.includes(num));
-        if (allWatched) {
-          const rest = { ...prev };
-          delete rest[key];
-          return rest;
-        }
-        return { ...prev, [key]: targetNumbers };
+      mutateProgress({
+        updater: (prev) => {
+          const current = prev[key] ?? [];
+          const allWatched = targetNumbers.every((num) => current.includes(num));
+          if (allWatched) {
+            const rest = { ...prev };
+            delete rest[key];
+            return rest;
+          }
+          return { ...prev, [key]: targetNumbers };
+        },
       });
     },
-    [updateMap],
+    [mutateProgress, titleId],
   );
 
   const totalWatchedEpisodes = useMemo(() => {
@@ -223,7 +346,7 @@ export function useSeriesProgress(
   }, [activeMap]);
 
   return {
-    ready: state.key === storageKey && state.ready,
+    ready: Boolean(titleId) && !activeQuery.isLoading,
     isEpisodeWatched,
     getSeasonWatchedCount,
     isSeasonCompleted,
@@ -233,96 +356,51 @@ export function useSeriesProgress(
   };
 }
 
-const EMPTY_BY_TITLE: Record<string, SeriesProgressMap> = {};
-
 /** Lista IDs e mapas de progresso de obras com registros marcados (local + nuvem). */
 export function useWatchedProgressIds(userId: string | null, token: string | null) {
-  const scope = userId ?? 'guest';
-  const localPrefix = `${BASE_STORAGE_KEY}:${scope}:`;
-  const pendingPrefix = `${PENDING_SYNC_PREFIX}:${scope}:`;
-  const requestIdRef = useRef(0);
-  const [state, setState] = useState<{
-    scope: string;
-    ids: string[];
-    byTitleId: Record<string, SeriesProgressMap>;
-    ready: boolean;
-  }>({ scope, ids: [], byTitleId: EMPTY_BY_TITLE, ready: false });
+  const hasToken = Boolean(token);
+  const queryClient = useQueryClient();
+  const authQueryKey = useMemo(() => queryKeys.watchedProgressIds(userId), [userId]);
+  const guestQueryKey = useMemo(() => queryKeys.watchedProgressIdsGuest(), []);
+  const activeKey = userId ? authQueryKey : guestQueryKey;
 
-  const refresh = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
-    const localById: Record<string, SeriesProgressMap> = {};
-    const pendingIds = new Set<string>();
-
-    try {
-      const allKeys = await AsyncStorage.getAllKeys();
-      const relevantKeys = allKeys.filter(
-        (k) => k.startsWith(localPrefix) || k.startsWith(pendingPrefix),
-      );
-      if (relevantKeys.length > 0) {
-        const entries = await AsyncStorage.multiGet(relevantKeys);
-        for (const [key, raw] of entries) {
-          if (key.startsWith(pendingPrefix)) {
-            if (raw === '1') {
-              pendingIds.add(key.slice(pendingPrefix.length));
-            }
-          } else if (key.startsWith(localPrefix)) {
-            localById[key.slice(localPrefix.length)] = parseProgressMap(raw);
-          }
-        }
+  const authQuery = useQuery<WatchedProgressData>({
+    queryKey: authQueryKey,
+    enabled: Boolean(userId),
+    staleTime: 30_000,
+    queryFn: async ({ signal }) => {
+      const { localById, pendingIds } = await readLocalWatchedProgress(userId!);
+      if (!hasToken || !hasSupabaseConfig() || signal.aborted) {
+        return mergeWatchedProgress(localById, [], pendingIds);
       }
-    } catch {
-      // ignora erro de leitura local
-    }
-
-    if (requestIdRef.current !== requestId) return;
-
-    const canFetchRemote = Boolean(userId && token && hasSupabaseConfig());
-    if (canFetchRemote) {
-      const localOnly = mergeWatchedProgress(localById, [], pendingIds);
-      if (localOnly.ids.length > 0) {
-        setState((prev) => ({
-          scope,
-          ids: localOnly.ids,
-          byTitleId: localOnly.byTitleId,
-          ready: prev.scope === scope ? prev.ready : false,
-        }));
+      const remoteRows = (await fetchAllWatchedProgress(userId!)) ?? [];
+      if (signal.aborted) {
+        return mergeWatchedProgress(localById, [], pendingIds);
       }
-    }
+      return mergeWatchedProgress(localById, remoteRows, pendingIds);
+    },
+  });
 
-    let remoteRows: RemoteProgressEntry[] = [];
-    if (canFetchRemote && userId) {
-      const fetched = await fetchAllWatchedProgress(userId);
-      if (fetched) {
-        remoteRows = fetched;
-      }
-    }
+  const guestQuery = useQuery<WatchedProgressData>({
+    queryKey: guestQueryKey,
+    enabled: !userId,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { localById, pendingIds } = await readLocalWatchedProgress('guest');
+      return mergeWatchedProgress(localById, [], pendingIds);
+    },
+  });
 
-    if (requestIdRef.current !== requestId) return;
+  const activeQuery = userId ? authQuery : guestQuery;
 
-    const merged = mergeWatchedProgress(localById, remoteRows, pendingIds);
-    setState({ scope, ids: merged.ids, byTitleId: merged.byTitleId, ready: true });
-  }, [localPrefix, pendingPrefix, scope, token, userId]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  useForegroundSync(Boolean(userId && token), refresh);
-
-  const ids = useMemo(
-    () => (state.scope === scope ? state.ids : []),
-    [scope, state.ids, state.scope],
-  );
-  const byTitleId = useMemo(
-    () => (state.scope === scope ? state.byTitleId : EMPTY_BY_TITLE),
-    [scope, state.byTitleId, state.scope],
-  );
-  const ready = state.scope === scope && state.ready;
+  const refreshProgressIds = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: activeKey });
+  }, [activeKey, queryClient]);
 
   return {
-    progressTitleIds: ids,
-    progressByTitleId: byTitleId,
-    progressReady: ready,
-    refreshProgressIds: refresh,
+    progressTitleIds: activeQuery.data?.ids ?? EMPTY_IDS,
+    progressByTitleId: activeQuery.data?.byTitleId ?? EMPTY_BY_TITLE,
+    progressReady: !activeQuery.isLoading,
+    refreshProgressIds,
   };
 }

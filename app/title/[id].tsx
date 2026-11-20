@@ -1,4 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -38,20 +39,22 @@ import {
 import { openStreamingService } from '@/constants/subscriptions';
 import { resolveTitleAccentColor, THEME, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { useMyList } from '@/contexts/MyListContext';
-import { useSubscriptions } from '@/contexts/SubscriptionsContext';
-import { useSeriesProgress } from '@/hooks/useSeriesProgress';
 import {
-  fetchRichTitleDetails,
-  fetchTitleById,
-  fetchTvSeasonEpisodes,
+  useCatalog,
+  useSeasonEpisodes,
+  useTitleById,
+  useTitleDetails,
+} from '@/hooks/useCatalog';
+import { useMyList } from '@/hooks/useMyList';
+import { useSeriesProgress } from '@/hooks/useSeriesProgress';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
+import { queryKeys } from '@/services/queryKeys';
+import {
   findCachedRelatedTitle,
-  getCachedRichTitleDetails,
   getCachedTitleDuration,
   getCachedTvSeasonEpisodes,
 } from '@/services/tmdb';
-import type { EpisodeSummary, RichTitleDetails } from '@/types/media';
+import type { EpisodeSummary } from '@/types/media';
 import { formatCount } from '@/utils/format';
 import { triggerLightImpactHaptic, triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
@@ -60,56 +63,33 @@ export default function TitleDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
+  const queryClient = useQueryClient();
   const { status, findTitle } = useCatalog();
   const { isSaved, toggleSavedTitle, findSavedTitle, storageReady } = useMyList();
   const { subscriptions } = useSubscriptions();
 
   const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
   const [savedSnapshot, setSavedSnapshot] = useState<MediaTitle | null>(null);
-  const [resolvedFallback, setResolvedFallback] = useState<{
-    id: string;
-    title: MediaTitle | null;
-    done: boolean;
-  }>({ id: '', title: null, done: false });
 
   const liveTitle = normalizedId
     ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId) ?? findCachedRelatedTitle(normalizedId))
     : undefined;
-  const fallbackTitle =
-    resolvedFallback.id === normalizedId ? (resolvedFallback.title ?? undefined) : undefined;
+  const titleByIdQuery = useTitleById(
+    normalizedId,
+    Boolean(normalizedId && !liveTitle && savedSnapshot?.id !== normalizedId),
+  );
+  const fallbackTitle = titleByIdQuery.data ?? undefined;
   const title =
     liveTitle ?? (savedSnapshot?.id === normalizedId ? savedSnapshot : undefined) ?? fallbackTitle;
   const resolvingFallback = Boolean(
-    normalizedId && !title && (resolvedFallback.id !== normalizedId || !resolvedFallback.done),
+    normalizedId && !title && (titleByIdQuery.isLoading || titleByIdQuery.isFetching),
   );
   const saved = title ? isSaved(title.id) : false;
 
-  const [richState, setRichState] = useState<{
-    id: string;
-    details: RichTitleDetails | null;
-    error: string | null;
-    done: boolean;
-  }>({
-    id: '',
-    details: null,
-    error: null,
-    done: false,
-  });
-  const [richRetryNonce, setRichRetryNonce] = useState(0);
   const [seasonSelection, setSeasonSelection] = useState<{
     titleId: string;
     seasonNumber: number | null;
   }>({ titleId: '', seasonNumber: null });
-  const [episodesState, setEpisodesState] = useState<{
-    titleId: string;
-    bySeason: Partial<Record<number, EpisodeSummary[]>>;
-    errorBySeason: Partial<Record<number, string | null>>;
-  }>({
-    titleId: '',
-    bySeason: {},
-    errorBySeason: {},
-  });
-  const [seasonRetryNonce, setSeasonRetryNonce] = useState(0);
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
   const [ratingInfoVisible, setRatingInfoVisible] = useState(false);
   const [streamingDrawerOpen, setStreamingDrawerOpen] = useState(false);
@@ -121,16 +101,12 @@ export default function TitleDetailsScreen() {
   const saveProgress = useSharedValue(saved ? 1 : 0);
   const drawerChevronRotation = useSharedValue(0);
 
-  const cachedRichDetails = title ? getCachedRichTitleDetails(title.id) : null;
-  const richDetails =
-    cachedRichDetails ?? (title && richState.id === title.id ? richState.details : null);
-  const loadingRichDetails = Boolean(
-    title && !cachedRichDetails && (richState.id !== title.id || !richState.done),
-  );
-  const richDetailsError =
-    title && !cachedRichDetails && richState.id === title.id && richState.done
-      ? richState.error
-      : null;
+  const {
+    details: richDetails,
+    isLoading: loadingRichDetails,
+    error: richDetailsError,
+    refetch: refetchRichDetails,
+  } = useTitleDetails(title);
 
   const titleId = title?.id ?? '';
   const richSeasons = richDetails?.seasons;
@@ -145,113 +121,55 @@ export default function TitleDetailsScreen() {
     return null;
   }, [richSeasons, seasonSelection.seasonNumber, seasonSelection.titleId, titleId]);
 
+  const {
+    episodes: activeSeasonEpisodes,
+    isLoading: loadingActiveSeasonEpisodes,
+    error: activeSeasonError,
+    refetch: refetchSeasonEpisodes,
+  } = useSeasonEpisodes(
+    titleId,
+    expandedSeason,
+    Boolean(title && checkIsSerialTitle(title)),
+  );
+
   const episodesBySeason = useMemo(() => {
-    const base: Partial<Record<number, EpisodeSummary[]>> =
-      episodesState.titleId === titleId ? { ...episodesState.bySeason } : {};
+    const base: Partial<Record<number, EpisodeSummary[]>> = {};
     if (titleId && richSeasons) {
       for (const season of richSeasons) {
-        if (!base[season.seasonNumber]) {
-          const cached = getCachedTvSeasonEpisodes(titleId, season.seasonNumber);
-          if (cached) {
-            base[season.seasonNumber] = cached;
-          }
+        const queryCached = queryClient.getQueryData<EpisodeSummary[]>(
+          queryKeys.seasonEpisodes(titleId, season.seasonNumber),
+        );
+        const cached = queryCached ?? getCachedTvSeasonEpisodes(titleId, season.seasonNumber);
+        if (cached) {
+          base[season.seasonNumber] = cached;
         }
       }
     }
+    if (
+      expandedSeason !== null &&
+      expandedSeason > 0 &&
+      activeSeasonEpisodes.length > 0
+    ) {
+      base[expandedSeason] = activeSeasonEpisodes;
+    }
     return base;
-  }, [episodesState.bySeason, episodesState.titleId, richSeasons, titleId]);
+  }, [
+    activeSeasonEpisodes,
+    expandedSeason,
+    queryClient,
+    richSeasons,
+    titleId,
+  ]);
 
-  const seasonEpisodesError =
-    expandedSeason !== null && episodesState.titleId === titleId
-      ? (episodesState.errorBySeason[expandedSeason] ?? null)
-      : null;
+  const seasonEpisodesError = expandedSeason !== null ? activeSeasonError : null;
 
   const loadingSeasonNumber =
     expandedSeason !== null &&
     title &&
     checkIsSerialTitle(title) &&
-    !episodesBySeason[expandedSeason] &&
-    !seasonEpisodesError
+    loadingActiveSeasonEpisodes
       ? expandedSeason
       : null;
-
-  useEffect(() => {
-    if (!normalizedId || liveTitle || savedSnapshot?.id === normalizedId) return;
-
-    let cancelled = false;
-    void fetchTitleById(normalizedId).then((fetched) => {
-      if (cancelled) return;
-      setResolvedFallback({ id: normalizedId, title: fetched, done: true });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [liveTitle, normalizedId, savedSnapshot?.id]);
-
-  useEffect(() => {
-    if (!title) return;
-    if (getCachedRichTitleDetails(title.id)) return;
-
-    let cancelled = false;
-    void fetchRichTitleDetails(title, { throwOnError: true })
-      .then((details) => {
-        if (cancelled) return;
-        setRichState({ id: title.id, details, error: null, done: true });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRichState({
-          id: title.id,
-          details: null,
-          error: 'Não foi possível carregar detalhes adicionais no momento.',
-          done: true,
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [richRetryNonce, title]);
-
-  useEffect(() => {
-    if (!title || !checkIsSerialTitle(title) || expandedSeason === null) return;
-    if (getCachedTvSeasonEpisodes(title.id, expandedSeason)) return;
-
-    let cancelled = false;
-    const targetTitleId = title.id;
-    const targetSeason = expandedSeason;
-
-    void fetchTvSeasonEpisodes(targetTitleId, targetSeason, { throwOnError: true })
-      .then((list) => {
-        if (cancelled) return;
-        setEpisodesState((prev) => {
-          const sameTitle = prev.titleId === targetTitleId;
-          return {
-            titleId: targetTitleId,
-            bySeason: sameTitle ? { ...prev.bySeason, [targetSeason]: list } : { [targetSeason]: list },
-            errorBySeason: sameTitle ? { ...prev.errorBySeason, [targetSeason]: null } : {},
-          };
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setEpisodesState((prev) => {
-          const sameTitle = prev.titleId === targetTitleId;
-          return {
-            titleId: targetTitleId,
-            bySeason: sameTitle ? prev.bySeason : {},
-            errorBySeason: sameTitle
-              ? { ...prev.errorBySeason, [targetSeason]: 'Não foi possível carregar os episódios.' }
-              : { [targetSeason]: 'Não foi possível carregar os episódios.' },
-          };
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [expandedSeason, seasonRetryNonce, title]);
 
   const handleToggleExpandSeason = useCallback(
     (seasonNumber: number) => {
@@ -267,23 +185,15 @@ export default function TitleDetailsScreen() {
   const handleRetrySeasonEpisodes = useCallback(
     (seasonNumber: number) => {
       if (!titleId) return;
-      setEpisodesState((prev) => {
-        if (prev.titleId !== titleId) return prev;
-        return {
-          ...prev,
-          errorBySeason: { ...prev.errorBySeason, [seasonNumber]: null },
-        };
-      });
       setSeasonSelection({ titleId, seasonNumber });
-      setSeasonRetryNonce((prev) => prev + 1);
+      void refetchSeasonEpisodes();
     },
-    [titleId],
+    [refetchSeasonEpisodes, titleId],
   );
 
   const handleRetryRichDetails = useCallback(() => {
-    setRichState({ id: '', details: null, error: null, done: false });
-    setRichRetryNonce((prev) => prev + 1);
-  }, []);
+    void refetchRichDetails();
+  }, [refetchRichDetails]);
 
   useEffect(() => {
     saveProgress.set(

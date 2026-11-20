@@ -10,16 +10,14 @@ import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { DrawAction, useDrawHistory } from '@/contexts/DrawHistoryContext';
-import { useMyList } from '@/contexts/MyListContext';
+import { DrawAction, useDrawHistory } from '@/hooks/useDrawHistory';
+import { useMyList } from '@/hooks/useMyList';
 import { formatCount } from '@/utils/format';
 
 type HistoryFilter = 'all' | DrawAction;
 
 export default function DrawHistoryScreen() {
   const { user, authReady } = useAuth();
-  const { findTitle } = useCatalog();
   const { findSavedTitle } = useMyList();
   const { history, storageReady, clearDrawHistory, refreshDrawHistory } = useDrawHistory();
   const [filter, setFilter] = useState<HistoryFilter>('all');
@@ -114,13 +112,13 @@ export default function DrawHistoryScreen() {
         {filteredHistory.length > 0 ? (
           <View style={styles.list}>
             {filteredHistory.map((entry, index) => {
-              const resolved = findTitle(entry.tmdbId) ?? findSavedTitle(entry.tmdbId);
+              const resolved = findSavedTitle(entry.tmdbId);
               return (
                 <FadeInBlock key={entry.id} delay={Math.min(index + 1, 7) * 30}>
                   <DrawHistoryCard
                     entry={entry}
                     resolvedTitle={resolved}
-                    onPress={resolved ? () => router.push({ pathname: '/title/[id]', params: { id: resolved.id } }) : undefined}
+                    onPress={() => router.push({ pathname: '/title/[id]', params: { id: entry.tmdbId } })}
                   />
                 </FadeInBlock>
               );

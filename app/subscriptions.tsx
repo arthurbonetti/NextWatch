@@ -14,7 +14,7 @@ import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
 import { Subscription } from '@/constants/subscriptions';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCurrency } from '@/utils/format';
 
 export default function SubscriptionsScreen() {

@@ -20,9 +20,9 @@ import {
   rankTitlesBySearchRelevance,
 } from '@/constants/catalog';
 import { FONT_FAMILIES } from '@/constants/typography';
-import { useCatalog } from '@/contexts/CatalogContext';
-import { useMyList } from '@/contexts/MyListContext';
-import { useSubscriptions } from '@/contexts/SubscriptionsContext';
+import { useCatalog, useCatalogSearch } from '@/hooks/useCatalog';
+import { useMyList } from '@/hooks/useMyList';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 import { formatCount } from '@/utils/format';
 
@@ -40,7 +40,7 @@ const COLLAPSED_GENRE_COUNT = 7;
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
-  const { titles, refreshCatalog, searchTitles } = useCatalog();
+  const { titles, refreshCatalog } = useCatalog();
   const { isSaved, toggleSavedTitle, refreshMyList } = useMyList();
 
   useFocusEffect(
@@ -59,13 +59,15 @@ export default function ExploreScreen() {
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [remoteResults, setRemoteResults] = useState<MediaTitle[] | null>(null);
-  const [remoteQuery, setRemoteQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
   const [durationsById, setDurationsById] = useState<Record<string, string>>({});
-  const searchRequestRef = useRef(0);
   const fetchedDurationIdsRef = useRef(new Set<string>());
+
+  const {
+    results: remoteResults,
+    isSearching: searchLoading,
+    isMatch: remoteSearchMatched,
+    errorMessage: searchError,
+  } = useCatalogSearch(search);
 
   const handlePullRefresh = useCallback(async () => {
     setPullRefreshing(true);
@@ -83,43 +85,7 @@ export default function ExploreScreen() {
 
   const handleSearchChange = useCallback((nextSearch: string) => {
     setSearch(nextSearch);
-    if (nextSearch.trim().length < 2) {
-      searchRequestRef.current += 1;
-      setSearchLoading(false);
-      setRemoteResults(null);
-      setRemoteQuery('');
-      setSearchError(null);
-    }
   }, []);
-
-  useEffect(() => {
-    const query = search.trim();
-    if (query.length < 2) return;
-    const requestId = ++searchRequestRef.current;
-
-    const timer = setTimeout(() => {
-      setSearchLoading(true);
-      setSearchError(null);
-      void searchTitles(query)
-        .then((results) => {
-          if (searchRequestRef.current === requestId) {
-            setRemoteResults(results);
-            setRemoteQuery(query.toLocaleLowerCase());
-          }
-        })
-        .catch(() => {
-          if (searchRequestRef.current === requestId) {
-            setRemoteResults([]);
-            setSearchError('Não foi possível pesquisar no catálogo online. Tente novamente.');
-          }
-        })
-        .finally(() => {
-          if (searchRequestRef.current === requestId) setSearchLoading(false);
-        });
-    }, 350);
-
-    return () => clearTimeout(timer);
-  }, [search, searchTitles]);
 
   const genres = useMemo(() => getAllGenres(titles), [titles]);
   const serviceNames = useMemo(() => {
@@ -181,13 +147,12 @@ export default function ExploreScreen() {
 
   const results = useMemo(() => {
     const rawQuery = search.trim();
-    const normalizedQuery = rawQuery.toLocaleLowerCase();
     const localMatched = rawQuery.length > 0
       ? availableTitles.filter((title) => matchesSearchQuery(title, rawQuery))
       : availableTitles;
 
     let sourceTitles: MediaTitle[] = localMatched;
-    if (normalizedQuery.length >= 2 && remoteQuery === normalizedQuery && remoteResults) {
+    if (rawQuery.length >= 2 && remoteSearchMatched && remoteResults.length > 0) {
       const mergedById = new Map<string, MediaTitle>();
       for (const item of localMatched) {
         mergedById.set(item.id, item);
@@ -232,7 +197,7 @@ export default function ExploreScreen() {
     }
 
     return rawQuery.length > 0 ? rankTitlesBySearchRelevance(filtered, rawQuery) : filtered;
-  }, [availableTitles, effectiveSelectedGenres, effectiveSelectedServices, kindFilter, ratingFilter, remoteQuery, remoteResults, search, sortBy]);
+  }, [availableTitles, effectiveSelectedGenres, effectiveSelectedServices, kindFilter, ratingFilter, remoteResults, remoteSearchMatched, search, sortBy]);
 
   const activeSortLabel = sortBy === 'default' && search.trim().length > 0
     ? 'Relevância'
