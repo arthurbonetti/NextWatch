@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, TextInput, View, type ViewToken } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,10 +22,9 @@ import {
 import { Theme } from '@/constants/theme';
 import { FONT_FAMILIES } from '@/constants/typography';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-import { useCatalog, useCatalogSearch } from '@/hooks/useCatalog';
+import { useCatalog, useCatalogSearch, useTitleDurationPrefetch } from '@/hooks/useCatalog';
 import { useMyList } from '@/hooks/useMyList';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { fetchTitleDuration, getCachedTitleDuration } from '@/services/tmdb';
 import { formatCount } from '@/utils/format';
 
 type RatingFilter = 'Qualquer nota' | '7+' | '8+';
@@ -63,8 +62,7 @@ export default function ExploreScreen() {
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [durationsById, setDurationsById] = useState<Record<string, string>>({});
-  const fetchedDurationIdsRef = useRef(new Set<string>());
+  const { prefetchDurations, getDuration } = useTitleDurationPrefetch();
 
   const {
     results: remoteResults,
@@ -247,28 +245,17 @@ export default function ExploreScreen() {
 
   const openTitle = useCallback((title: MediaTitle) => router.push({ pathname: '/title/[id]', params: { id: title.id } }), []);
 
-  const resolveDurations = useCallback((items: MediaTitle[]) => {
-    for (const title of items) {
-      if (title.duration || getCachedTitleDuration(title) || fetchedDurationIdsRef.current.has(title.id)) {
-        continue;
-      }
-      fetchedDurationIdsRef.current.add(title.id);
-      void fetchTitleDuration(title).then((resolved) => {
-        if (!resolved) return;
-        setDurationsById((prev) => (prev[title.id] === resolved ? prev : { ...prev, [title.id]: resolved }));
-      });
-    }
-  }, []);
-
   useEffect(() => {
-    resolveDurations(results.slice(0, 14));
-  }, [resolveDurations, results]);
+    prefetchDurations(results.slice(0, 14));
+  }, [prefetchDurations, results]);
 
   const handleViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken<MediaTitle>[] }) => {
-      resolveDurations(viewableItems.map((entry) => entry.item).filter((item): item is MediaTitle => Boolean(item)));
+      prefetchDurations(
+        viewableItems.map((entry) => entry.item).filter((item): item is MediaTitle => Boolean(item)),
+      );
     },
-    [resolveDurations],
+    [prefetchDurations],
   );
 
   const renderTitleItem = useCallback(
@@ -278,7 +265,7 @@ export default function ExploreScreen() {
         <FadeInBlock delay={Math.min(index, 6) * 30}>
           <MediaTitleCard
             title={item}
-            duration={durationsById[item.id] ?? getCachedTitleDuration(item)}
+            duration={getDuration(item)}
             onOpen={() => openTitle(item)}
             actionIcon={saved ? 'bookmark' : 'bookmark-add'}
             actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
@@ -290,7 +277,7 @@ export default function ExploreScreen() {
         </FadeInBlock>
       );
     },
-    [colors.savedActiveIcon, colors.textSecondary, durationsById, isSaved, openTitle, styles.savedButtonActive, toggleSavedTitle],
+    [colors.savedActiveIcon, colors.textSecondary, getDuration, isSaved, openTitle, styles.savedButtonActive, toggleSavedTitle],
   );
 
   return (

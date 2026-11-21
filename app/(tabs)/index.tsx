@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,19 +19,14 @@ import {
   MediaTitle,
 } from '@/constants/catalog';
 import { Theme, withAlpha } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { useTitleQuickDetails } from '@/hooks/useCatalog';
+import { useProfile } from '@/hooks/useProfile';
 import { useRouletteFlow } from '@/hooks/useRouletteFlow';
-import {
-  fetchTitleDuration,
-  fetchTitleTrailerUrl,
-  getCachedTitleDuration,
-  getCachedTitleTrailerUrl,
-} from '@/services/tmdb';
 import { formatCount, formatCurrency } from '@/utils/format';
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { profile } = useProfile();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
@@ -65,48 +60,14 @@ export default function HomeScreen() {
 
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
-  const [selectedDetails, setSelectedDetails] = useState<{
-    id: string;
-    duration: string;
-    trailerUrl: string | null;
-  }>({ id: '', duration: '', trailerUrl: null });
-
-  useEffect(() => {
-    if (!selectedTitle) return;
-    let active = true;
-
-    void Promise.all([
-      fetchTitleDuration(selectedTitle),
-      fetchTitleTrailerUrl(selectedTitle),
-    ]).then(([resolvedDuration, resolvedTrailer]) => {
-      if (!active) return;
-      setSelectedDetails({
-        id: selectedTitle.id,
-        duration: resolvedDuration || selectedTitle.duration,
-        trailerUrl: resolvedTrailer,
-      });
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [selectedTitle]);
 
   const openDetails = (title: MediaTitle) => {
     setSelectedTitle(title);
     setDetailsVisible(true);
   };
 
-  const selectedDuration = selectedTitle
-    ? selectedDetails.id === selectedTitle.id
-      ? selectedDetails.duration
-      : getCachedTitleDuration(selectedTitle)
-    : undefined;
-  const selectedTrailerUrl = selectedTitle
-    ? selectedDetails.id === selectedTitle.id
-      ? selectedDetails.trailerUrl
-      : getCachedTitleTrailerUrl(selectedTitle)
-    : null;
+  const { duration: selectedDuration, trailerUrl: selectedTrailerUrl } =
+    useTitleQuickDetails(selectedTitle);
   const isSelectedSaved = selectedTitle ? isTitleSaved(selectedTitle.id) : false;
   const isInitialCatalogLoading =
     availableTitles.length === 0 &&
@@ -139,10 +100,10 @@ export default function HomeScreen() {
                 accessibilityLabel="Abrir perfil">
                 <UserAvatar
                   size={44}
-                  name={user?.name}
-                  avatarType={user?.avatarType}
-                  avatarPreset={user?.avatarPreset}
-                  avatarUrl={user?.avatarUrl}
+                  name={profile?.name}
+                  avatarType={profile?.avatarType}
+                  avatarPreset={profile?.avatarPreset}
+                  avatarUrl={profile?.avatarUrl}
                 />
               </Pressable>
             </View>

@@ -1,7 +1,10 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 
-import { SupabaseSecureStorage } from '@/services/secureStore';
+import { SecureStore, SupabaseSecureStorage } from '@/services/secureStore';
+
+const LEGACY_ACCESS_TOKEN_KEY = 'accessToken';
+const LEGACY_REFRESH_TOKEN_KEY = 'refreshToken';
 
 const RAW_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || '';
 const SUPABASE_ANON_KEY =
@@ -100,4 +103,36 @@ export function classifySupabaseError(error: SupabaseErrorLike | null | undefine
   }
 
   return 'retry';
+}
+
+export async function purgeLegacyAuthTokens(): Promise<void> {
+  await SecureStore.deleteItemAsync(LEGACY_ACCESS_TOKEN_KEY).catch(() => {});
+  await SecureStore.deleteItemAsync(LEGACY_REFRESH_TOKEN_KEY).catch(() => {});
+}
+
+export async function migrateLegacySupabaseSession(): Promise<Session | null> {
+  if (!supabase) return null;
+
+  const legacyAccessToken = await SecureStore.getItemAsync(LEGACY_ACCESS_TOKEN_KEY).catch(() => null);
+  const legacyRefreshToken = await SecureStore.getItemAsync(LEGACY_REFRESH_TOKEN_KEY).catch(() => null);
+
+  if (legacyAccessToken && legacyRefreshToken) {
+    try {
+      const { data, error } = await supabase.auth.setSession({
+        access_token: legacyAccessToken,
+        refresh_token: legacyRefreshToken,
+      });
+      if (!error && data.session?.user) {
+        return data.session;
+      }
+    } catch {
+      // Migração falhou (offline ou tokens expirados)
+    } finally {
+      await purgeLegacyAuthTokens();
+    }
+  } else if (legacyAccessToken || legacyRefreshToken) {
+    await purgeLegacyAuthTokens();
+  }
+
+  return null;
 }

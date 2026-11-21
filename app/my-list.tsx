@@ -1,5 +1,4 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useQueries, useQuery } from '@tanstack/react-query';
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -21,17 +20,10 @@ import { isSerialTitle, MediaTitle } from '@/constants/catalog';
 import { resolveTitleAccentColor, Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { useTitlesByIds, useTitlesDurations, useTitleTotalEpisodes } from '@/hooks/useCatalog';
 import { DrawHistoryEntry, useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
-import { queryKeys } from '@/services/queryKeys';
-import {
-  fetchTitleById,
-  fetchTitleDuration,
-  findCachedRelatedTitle,
-  getCachedTitleDuration,
-  getCachedTitleTotalEpisodes,
-} from '@/services/tmdb';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 import { SeriesProgressMap, summarizeWatchedProgress } from '@/utils/watchedProgress';
 
@@ -61,20 +53,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
       (drawEntry?.kind === 'Anime' && !id.startsWith('tmdb-movie-')) ||
       id.startsWith('tmdb-tv-');
 
-  const cachedTotal = title ? getCachedTitleTotalEpisodes(title.id) : null;
-  const { data: queriedTotal } = useQuery<number | null>({
-    queryKey: queryKeys.titleTotalEpisodes(title?.id ?? ''),
-    enabled: Boolean(title && isSerial && cachedTotal === null),
-    staleTime: 1000 * 60 * 30,
-    refetchOnWindowFocus: false,
-    retry: 0,
-    queryFn: async () => {
-      if (!title) return null;
-      await fetchTitleDuration(title);
-      return getCachedTitleTotalEpisodes(title.id);
-    },
-  });
-  const totalEpisodes = cachedTotal ?? queriedTotal ?? null;
+  const totalEpisodes = useTitleTotalEpisodes(title, isSerial);
 
   const summary = summarizeWatchedProgress({ isSerial, progressMap, totalEpisodes });
   const accentColor = title ? resolveTitleAccentColor(title.color, isDark) : colors.accentLink;
@@ -187,32 +166,7 @@ export default function MyListScreen() {
     useWatchedProgressIds(user?.id ?? null, token);
 
   const [activeTab, setActiveTab] = useState<ListsTab>('fila');
-
-  const titlesMissingDuration = useMemo(
-    () => savedTitles.filter((title) => !title.duration && !getCachedTitleDuration(title)),
-    [savedTitles],
-  );
-
-  const durationQueries = useQueries({
-    queries: titlesMissingDuration.map((title) => ({
-      queryKey: queryKeys.titleDuration(title.id),
-      staleTime: 1000 * 60 * 30,
-      refetchOnWindowFocus: false,
-      retry: 0,
-      queryFn: () => fetchTitleDuration(title),
-    })),
-  });
-
-  const savedDurationsById = useMemo(() => {
-    const map: Record<string, string> = {};
-    titlesMissingDuration.forEach((title, idx) => {
-      const resolved = durationQueries[idx]?.data;
-      if (resolved) {
-        map[title.id] = resolved;
-      }
-    });
-    return map;
-  }, [durationQueries, titlesMissingDuration]);
+  const { getDuration } = useTitlesDurations(savedTitles);
 
   useFocusEffect(
     useCallback(() => {
@@ -250,33 +204,10 @@ export default function MyListScreen() {
     return ordered;
   }, [drawWatchedById, progressTitleIds]);
 
-  const missingWatchedIds = useMemo(
-    () => watchedIds.filter((id) => !findSavedTitle(id) && !findCachedRelatedTitle(id)),
-    [findSavedTitle, watchedIds],
-  );
-
-  const watchedTitleQueries = useQueries({
-    queries: missingWatchedIds.map((id) => ({
-      queryKey: queryKeys.titleById(id),
-      enabled: activeTab === 'assistidos',
-      staleTime: 1000 * 60 * 30,
-      gcTime: 1000 * 60 * 60,
-      refetchOnWindowFocus: false,
-      retry: 0,
-      queryFn: () => fetchTitleById(id),
-    })),
+  const { resolveTitle: resolveWatchedTitle } = useTitlesByIds(watchedIds, {
+    enabled: activeTab === 'assistidos',
+    resolveKnown: findSavedTitle,
   });
-
-  const fetchedTitles = useMemo(() => {
-    const map: Record<string, MediaTitle> = {};
-    missingWatchedIds.forEach((id, idx) => {
-      const resolved = watchedTitleQueries[idx]?.data;
-      if (resolved) {
-        map[id] = resolved;
-      }
-    });
-    return map;
-  }, [missingWatchedIds, watchedTitleQueries]);
 
   const openTitleById = useCallback((id: string) => {
     router.push({ pathname: '/title/[id]', params: { id } });
@@ -378,7 +309,7 @@ export default function MyListScreen() {
                   <FadeInBlock delay={Math.min(index + 1, 7) * 30}>
                     <MediaTitleCard
                       title={title}
-                      duration={savedDurationsById[title.id] ?? getCachedTitleDuration(title)}
+                      duration={getDuration(title)}
                       onOpen={() => openTitleById(title.id)}
                       actionIcon="bookmark"
                       actionLabel={`Remover ${title.title} da fila`}
@@ -409,10 +340,7 @@ export default function MyListScreen() {
           <>
             <View>
               {watchedIds.map((id, index) => {
-                const resolved =
-                  findSavedTitle(id) ??
-                  findCachedRelatedTitle(id) ??
-                  fetchedTitles[id];
+                const resolved = resolveWatchedTitle(id);
                 return (
                   <FadeInBlock key={id} delay={Math.min(index + 1, 7) * 30}>
                     <WatchedTitleCard

@@ -3,25 +3,25 @@ import { useReducedMotion } from 'react-native-reanimated';
 
 import {
   getDrawGenres,
-  getTitleServices,
   isEligibleForDraw,
   type MediaTitle,
 } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCatalog } from '@/hooks/useCatalog';
+import { useCatalog, useTitleQuickDetails } from '@/hooks/useCatalog';
 import { useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
-import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { type DrawKindFilter, usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
+import { usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
-import {
-  fetchTitleDuration,
-  fetchTitleTrailerUrl,
-  getCachedTitleDuration,
-  getCachedTitleTrailerUrl,
-} from '@/services/tmdb';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import type { DrawAction } from '@/types/drawHistory';
-import { quickSortByRandom } from '@/utils/quickSort';
+import {
+  buildWatchedTitleIds,
+  filterRouletteCandidates,
+  filterTitlesByActiveServices,
+  parseRouletteDeepLinkPreset,
+  pickRouletteWinner,
+  resolveLockedFeaturedTitle,
+} from '@/utils/roulette';
 
 export type DrawPhase = 'filtros' | 'sorteando' | 'resultado';
 
@@ -58,15 +58,6 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   const [lastDrawnId, setLastDrawnId] = useState<string | null>(null);
   const [spinSession, setSpinSession] = useState<SpinSession | null>(null);
   const [pendingAutoSpin, setPendingAutoSpin] = useState(false);
-  const [winnerDetails, setWinnerDetails] = useState<{
-    id: string;
-    duration: string;
-    trailerUrl: string | null;
-  }>({
-    id: '',
-    duration: '',
-    trailerUrl: null,
-  });
 
   const drawEntryPromiseRef = useRef<Promise<string | null> | null>(null);
   const drawHandledRef = useRef(false);
@@ -95,10 +86,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   } = usePersistedDrawFilters(user?.id ?? null, activeServiceNames);
 
   const availableTitles = useMemo(
-    () =>
-      titles.filter((title) =>
-        getTitleServices(title).some((service) => activeServiceSet.has(service)),
-      ),
+    () => filterTitlesByActiveServices(titles, activeServiceSet),
     [activeServiceSet, titles],
   );
 
@@ -109,52 +97,31 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
 
   const availableGenres = useMemo(() => getDrawGenres(eligibleTitles), [eligibleTitles]);
 
-  const watchedTitleIds = useMemo(() => {
-    const ids = new Set(
-      history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId),
-    );
-    for (const id of progressTitleIds) {
-      ids.add(id);
-    }
-    return ids;
-  }, [history, progressTitleIds]);
+  const watchedTitleIds = useMemo(
+    () => buildWatchedTitleIds(history, progressTitleIds),
+    [history, progressTitleIds],
+  );
 
   const enabledServiceSet = useMemo(() => new Set(enabledServices), [enabledServices]);
 
-  const drawCandidates = useMemo(() => {
-    if (enabledServiceSet.size === 0) return [];
-    return eligibleTitles.filter((title) => {
-      const serviceMatches = getTitleServices(title).some((service) =>
-        enabledServiceSet.has(service),
-      );
-      if (!serviceMatches) return false;
-      const kindMatches = filters.kind === 'Todos' || title.kind === filters.kind;
-      if (!kindMatches) return false;
-      const genreMatches =
-        filters.selectedGenres.length === 0 ||
-        filters.selectedGenres.some((selectedGenre) => title.genres.includes(selectedGenre));
-      if (!genreMatches) return false;
-      if (filters.hideWatched && watchedTitleIds.has(title.id)) return false;
-      return true;
-    });
-  }, [
-    eligibleTitles,
-    enabledServiceSet,
-    filters.hideWatched,
-    filters.kind,
-    filters.selectedGenres,
-    watchedTitleIds,
-  ]);
+  const drawCandidates = useMemo(
+    () =>
+      filterRouletteCandidates({
+        eligibleTitles,
+        enabledServiceSet,
+        filters,
+        watchedTitleIds,
+      }),
+    [eligibleTitles, enabledServiceSet, filters, watchedTitleIds],
+  );
 
-  const candidateFeatured = eligibleTitles[0] ?? availableTitles[0] ?? null;
   const [lockedFeatured, setLockedFeatured] = useState<MediaTitle | null>(null);
-
-  const lockedStillValid =
-    lockedFeatured !== null &&
-    activeServiceSet.size > 0 &&
-    getTitleServices(lockedFeatured).some((service) => activeServiceSet.has(service));
-
-  const nextLockedFeatured = lockedStillValid ? lockedFeatured : candidateFeatured;
+  const nextLockedFeatured = resolveLockedFeaturedTitle({
+    lockedFeatured,
+    activeServiceSet,
+    eligibleTitles,
+    availableTitles,
+  });
   if (nextLockedFeatured?.id !== lockedFeatured?.id) {
     setLockedFeatured(nextLockedFeatured);
   }
@@ -180,13 +147,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   );
 
   const startDraw = useCallback(() => {
-    if (drawCandidates.length === 0) return;
-
-    const candidates =
-      drawCandidates.length > 1
-        ? drawCandidates.filter((title) => title.id !== lastDrawnId)
-        : drawCandidates;
-    const winner = quickSortByRandom(candidates)[0];
+    const winner = pickRouletteWinner(drawCandidates, lastDrawnId);
     if (!winner) return;
 
     drawEntryPromiseRef.current = null;
@@ -202,41 +163,21 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   }, [drawCandidates, lastDrawnId, reducedMotion]);
 
   const activeWinner = spinSession?.winner ?? null;
-
-  useEffect(() => {
-    if (!activeWinner) return;
-    let active = true;
-
-    void Promise.all([
-      fetchTitleDuration(activeWinner),
-      fetchTitleTrailerUrl(activeWinner),
-    ]).then(([resolvedDuration, resolvedTrailer]) => {
-      if (!active) return;
-      setWinnerDetails({
-        id: activeWinner.id,
-        duration: resolvedDuration || activeWinner.duration,
-        trailerUrl: resolvedTrailer,
-      });
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [activeWinner]);
+  const { duration: resolvedWinnerDuration, trailerUrl: winnerTrailerUrl } =
+    useTitleQuickDetails(activeWinner);
 
   useEffect(() => {
     if (!drawNonce || handledDrawNonceRef.current === drawNonce) return;
     handledDrawNonceRef.current = drawNonce;
 
-    const validKinds: DrawKindFilter[] = ['Todos', 'Filme', 'Série', 'Anime'];
-    const parsedKind = validKinds.includes(drawKind as DrawKindFilter)
-      ? (drawKind as DrawKindFilter)
-      : 'Todos';
-    const genres = drawGenre ? [drawGenre] : [];
-    const shouldAutoSpin = autoSpin === '1';
+    const { kind, genres, shouldAutoSpin } = parseRouletteDeepLinkPreset({
+      drawKind,
+      drawGenre,
+      autoSpin,
+    });
 
     const frame = requestAnimationFrame(() => {
-      applyPreset({ kind: parsedKind, genres });
+      applyPreset({ kind, genres });
       setIncompleteConfirmVisible(false);
       setPhase('filtros');
       setSpinSession(null);
@@ -331,16 +272,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
     }
   }, [commitDrawAction, isSaved, spinSession, toggleSavedTitle]);
 
-  const winnerDuration = activeWinner
-    ? winnerDetails.id === activeWinner.id
-      ? winnerDetails.duration
-      : getCachedTitleDuration(activeWinner)
-    : '';
-  const winnerTrailerUrl = activeWinner
-    ? winnerDetails.id === activeWinner.id
-      ? winnerDetails.trailerUrl
-      : getCachedTitleTrailerUrl(activeWinner)
-    : null;
+  const winnerDuration = resolvedWinnerDuration ?? '';
   const isWinnerSaved = activeWinner ? isSaved(activeWinner.id) : false;
 
   return {

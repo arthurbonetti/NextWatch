@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { MediaKind } from '@/constants/catalog';
 
@@ -61,14 +61,9 @@ export function usePersistedDrawFilters(userId: string | null, activeServiceName
     filters: DEFAULT_FILTERS,
     ready: false,
   });
-  const latestStateRef = useRef(state);
-  latestStateRef.current = state;
 
   useEffect(() => {
     let cancelled = false;
-    setState((prev) =>
-      prev.key === storageKey ? prev : { key: storageKey, filters: DEFAULT_FILTERS, ready: false },
-    );
 
     void AsyncStorage.getItem(storageKey)
       .then((raw) => {

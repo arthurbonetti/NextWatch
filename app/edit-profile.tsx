@@ -28,6 +28,7 @@ import {
 import { Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { useProfile } from '@/hooks/useProfile';
 import {
   isStrongPassword,
   MAX_NAME_LENGTH,
@@ -75,13 +76,14 @@ type ProfileSnapshot = {
 };
 
 export default function EditProfileScreen() {
-  const { user, authReady, isConnected, updateProfile, updatePassword } = useAuth();
+  const { user, authReady, isConnected, updatePassword } = useAuth();
+  const { profile, updateProfile } = useProfile();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const [name, setName] = useState(user?.name ?? '');
-  const [avatarType, setAvatarType] = useState<AvatarType>(user?.avatarType ?? 'initials');
-  const [avatarPreset, setAvatarPreset] = useState<AvatarPresetId | null>(user?.avatarPreset ?? null);
+  const [name, setName] = useState(profile?.name ?? user?.name ?? '');
+  const [avatarType, setAvatarType] = useState<AvatarType>(profile?.avatarType ?? 'initials');
+  const [avatarPreset, setAvatarPreset] = useState<AvatarPresetId | null>(profile?.avatarPreset ?? null);
   const [pendingUpload, setPendingUpload] = useState<PendingAvatarUpload | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [pickerError, setPickerError] = useState('');
@@ -100,25 +102,25 @@ export default function EditProfileScreen() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
   const syncedSnapshotRef = useRef<ProfileSnapshot | null>(
-    user
+    profile
       ? {
-          userId: user.id,
-          name: user.name,
-          avatarType: user.avatarType,
-          avatarPreset: user.avatarPreset,
-          avatarPath: user.avatarPath,
+          userId: profile.userId,
+          name: profile.name,
+          avatarType: profile.avatarType,
+          avatarPreset: profile.avatarPreset,
+          avatarPath: profile.avatarPath,
         }
       : null,
   );
 
   useEffect(() => {
-    if (!user) {
+    if (!profile) {
       syncedSnapshotRef.current = null;
       return;
     }
 
     const prev = syncedSnapshotRef.current;
-    const isDifferentUser = !prev || prev.userId !== user.id;
+    const isDifferentUser = !prev || prev.userId !== profile.userId;
     const hasNoLocalEdits =
       prev !== null &&
       name === prev.name &&
@@ -127,31 +129,36 @@ export default function EditProfileScreen() {
       pendingUpload === null;
 
     if (isDifferentUser || hasNoLocalEdits) {
-      setName(user.name);
-      setAvatarType(user.avatarType);
-      setAvatarPreset(user.avatarPreset);
+      setName(profile.name);
+      setAvatarType(profile.avatarType);
+      setAvatarPreset(profile.avatarPreset);
       setPendingUpload(null);
       syncedSnapshotRef.current = {
-        userId: user.id,
-        name: user.name,
-        avatarType: user.avatarType,
-        avatarPreset: user.avatarPreset,
-        avatarPath: user.avatarPath,
+        userId: profile.userId,
+        name: profile.name,
+        avatarType: profile.avatarType,
+        avatarPreset: profile.avatarPreset,
+        avatarPath: profile.avatarPath,
       };
     }
-  }, [avatarPreset, avatarType, name, pendingUpload, user]);
+  }, [avatarPreset, avatarType, name, pendingUpload, profile]);
 
   if (!authReady) return null;
   if (!user) return <Redirect href="/(auth)/login" />;
 
+  const currentProfileName = profile?.name ?? user.name;
+  const currentAvatarType = profile?.avatarType ?? 'initials';
+  const currentAvatarPreset = profile?.avatarPreset ?? null;
+  const currentAvatarUrl = profile?.avatarUrl ?? null;
+
   const activePreset = avatarType === 'preset' ? getAvatarPresetById(avatarPreset) : null;
-  const previewAvatarUrl = avatarType === 'custom' ? (pendingUpload?.uri ?? user.avatarUrl) : null;
+  const previewAvatarUrl = avatarType === 'custom' ? (pendingUpload?.uri ?? currentAvatarUrl) : null;
 
   const trimmedName = name.trim().slice(0, MAX_NAME_LENGTH);
   const hasProfileChanges =
-    trimmedName !== user.name ||
-    avatarType !== user.avatarType ||
-    (avatarType === 'preset' && avatarPreset !== user.avatarPreset) ||
+    trimmedName !== currentProfileName ||
+    avatarType !== currentAvatarType ||
+    (avatarType === 'preset' && avatarPreset !== currentAvatarPreset) ||
     (avatarType === 'custom' && pendingUpload !== null);
 
   const handleSelectPreset = (presetId: AvatarPresetId) => {
@@ -370,7 +377,7 @@ export default function EditProfileScreen() {
               <View style={styles.previewArea}>
                 <UserAvatar
                   size={104}
-                  name={name || user.name}
+                  name={name || currentProfileName}
                   avatarType={avatarType}
                   avatarPreset={avatarPreset}
                   avatarUrl={previewAvatarUrl}

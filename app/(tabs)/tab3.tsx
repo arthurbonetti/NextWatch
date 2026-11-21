@@ -16,6 +16,7 @@ import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useCatalog } from '@/hooks/useCatalog';
 import { useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
+import { useProfile } from '@/hooks/useProfile';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCount } from '@/utils/format';
@@ -35,7 +36,8 @@ export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
   const { colors, themeMode, resolvedMode, setThemeMode } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { user, token, signOut, refreshProfile } = useAuth();
+  const { user, token, signOut } = useAuth();
+  const { profile, refreshProfile } = useProfile();
   const { subscriptions } = useSubscriptions();
   const { savedTitles, findSavedTitle, refreshMyList } = useMyList();
   const { titles, status, isFetchingCatalog, errorMessage, findTitle, refreshCatalog } = useCatalog();
@@ -137,16 +139,16 @@ export default function ProfileTabScreen() {
               accessibilityLabel="Alterar ícone do perfil">
               <UserAvatar
                 size={78}
-                name={user?.name}
-                avatarType={user?.avatarType}
-                avatarPreset={user?.avatarPreset}
-                avatarUrl={user?.avatarUrl}
+                name={profile?.name ?? user?.name}
+                avatarType={profile?.avatarType}
+                avatarPreset={profile?.avatarPreset}
+                avatarUrl={profile?.avatarUrl}
               />
               <View style={styles.avatarEditBadge}>
                 <MaterialIcons name="edit" size={14} color={colors.textOnAccent} />
               </View>
             </Pressable>
-            <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{user?.name ?? 'Usuário'}</AppText>
+            <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{profile?.name ?? user?.name ?? 'Usuário'}</AppText>
             <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
             <Pressable
               style={({ pressed }) => [styles.editProfileButton, pressed && styles.pressed]}

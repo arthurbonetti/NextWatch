@@ -1,6 +1,6 @@
 /** Factory centralizada de query keys do TanStack Query. */
 export const queryKeys = {
-  userProfile: (userId: string | null) => ['userProfile', userId] as const,
+  profile: (userId: string | null) => ['profile', userId] as const,
   subscriptions: (userId: string | null) => ['subscriptions', userId] as const,
   myList: (userId: string | null) => ['myList', userId] as const,
   drawHistory: (userId: string | null) => ['drawHistory', userId] as const,
@@ -15,5 +15,6 @@ export const queryKeys = {
   titleDetails: (titleId: string) => ['titleDetails', titleId] as const,
   seasonEpisodes: (titleId: string, seasonNumber: number) => ['seasonEpisodes', titleId, seasonNumber] as const,
   titleDuration: (titleId: string) => ['titleDuration', titleId] as const,
+  titleTrailerUrl: (titleId: string) => ['titleTrailerUrl', titleId] as const,
   titleTotalEpisodes: (titleId: string) => ['titleTotalEpisodes', titleId] as const,
 };

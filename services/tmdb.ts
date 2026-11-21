@@ -902,7 +902,13 @@ export function getCachedTitleDuration(title: MediaTitle): string {
   return resolvedDurationCache.get(title.id) ?? title.duration;
 }
 
-export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
+export async function fetchTitleDuration(
+  title: MediaTitle,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   const cached = resolvedDurationCache.get(title.id);
   if (cached) {
     return cached;
@@ -915,7 +921,7 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
 
   const existingPromise = pendingDurationCache.get(title.id);
   if (existingPromise) {
-    return existingPromise;
+    return raceWithAbort(existingPromise, signal);
   }
 
   const promise = request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
@@ -943,7 +949,7 @@ export async function fetchTitleDuration(title: MediaTitle): Promise<string> {
     });
 
   pendingDurationCache.set(title.id, promise);
-  return promise;
+  return raceWithAbort(promise, signal);
 }
 
 type TmdbVideoItem = {
@@ -994,7 +1000,13 @@ export function getCachedTitleTrailerUrl(title: MediaTitle): string | null {
   return resolvedTrailerCache.get(title.id) ?? null;
 }
 
-export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | null> {
+export async function fetchTitleTrailerUrl(
+  title: MediaTitle,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   if (resolvedTrailerCache.has(title.id)) {
     return resolvedTrailerCache.get(title.id) ?? null;
   }
@@ -1006,7 +1018,7 @@ export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | 
 
   const existingPromise = pendingTrailerCache.get(title.id);
   if (existingPromise) {
-    return existingPromise;
+    return raceWithAbort(existingPromise, signal);
   }
 
   const promise = (async () => {
@@ -1032,7 +1044,7 @@ export async function fetchTitleTrailerUrl(title: MediaTitle): Promise<string | 
     });
 
   pendingTrailerCache.set(title.id, promise);
-  return promise;
+  return raceWithAbort(promise, signal);
 }
 
 const richDetailsCache = new Map<string, RichTitleDetails>();
@@ -1089,7 +1101,13 @@ export function findCachedRelatedTitle(id: string): MediaTitle | undefined {
   return relatedTitlesById.get(id);
 }
 
-export async function fetchTitleById(titleId: string): Promise<MediaTitle | null> {
+export async function fetchTitleById(
+  titleId: string,
+  signal?: AbortSignal,
+): Promise<MediaTitle | null> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
   const cached = relatedTitlesById.get(titleId);
   if (cached) return cached;
 
@@ -1100,7 +1118,7 @@ export async function fetchTitleById(titleId: string): Promise<MediaTitle | null
   }
 
   const pending = pendingTitleByIdCache.get(titleId);
-  if (pending) return pending;
+  if (pending) return raceWithAbort(pending, signal);
 
   const promise = request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
     language: 'pt-BR',
@@ -1138,7 +1156,7 @@ export async function fetchTitleById(titleId: string): Promise<MediaTitle | null
     });
 
   pendingTitleByIdCache.set(titleId, promise);
-  return promise;
+  return raceWithAbort(promise, signal);
 }
 
 export function getCachedRichTitleDetails(titleId: string): RichTitleDetails | null {
@@ -1147,8 +1165,11 @@ export function getCachedRichTitleDetails(titleId: string): RichTitleDetails | n
 
 export async function fetchRichTitleDetails(
   title: MediaTitle,
-  options?: { throwOnError?: boolean },
+  options?: { throwOnError?: boolean; signal?: AbortSignal },
 ): Promise<RichTitleDetails | null> {
+  if (options?.signal?.aborted) {
+    throw createAbortError();
+  }
   const cached = richDetailsCache.get(title.id);
   if (cached) return cached;
 
@@ -1262,9 +1283,9 @@ export async function fetchRichTitleDetails(
   }
 
   if (options?.throwOnError) {
-    return pending;
+    return raceWithAbort(pending, options.signal);
   }
-  return pending.catch(() => null);
+  return raceWithAbort(pending.catch(() => null), options?.signal);
 }
 
 type TmdbSeasonDetailsResponse = {
@@ -1284,8 +1305,11 @@ export function getCachedTvSeasonEpisodes(titleId: string, seasonNumber: number)
 export async function fetchTvSeasonEpisodes(
   titleId: string,
   seasonNumber: number,
-  options?: { throwOnError?: boolean },
+  options?: { throwOnError?: boolean; signal?: AbortSignal },
 ): Promise<EpisodeSummary[]> {
+  if (options?.signal?.aborted) {
+    throw createAbortError();
+  }
   const cacheKey = `${titleId}:s${seasonNumber}`;
   const cached = seasonEpisodesCache.get(cacheKey);
   if (cached) return cached;
@@ -1325,9 +1349,9 @@ export async function fetchTvSeasonEpisodes(
   }
 
   if (options?.throwOnError) {
-    return pending;
+    return raceWithAbort(pending, options.signal);
   }
-  return pending.catch(() => []);
+  return raceWithAbort(pending.catch(() => []), options?.signal);
 }
 
 function mapMedia(item: TmdbMediaResult, endpoint: MediaEndpoint, services: string[]): MediaTitle {

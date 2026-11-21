@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,14 +10,20 @@ import {
   fetchAllCatalogForProviders,
   fetchRichTitleDetails,
   fetchTitleById,
+  fetchTitleDuration,
+  fetchTitleTrailerUrl,
   fetchTvSeasonEpisodes,
+  findCachedRelatedTitle,
   getCachedRichTitleDetails,
+  getCachedTitleDuration,
+  getCachedTitleTotalEpisodes,
+  getCachedTitleTrailerUrl,
   getCachedTvSeasonEpisodes,
   getDevCatalogMetrics,
   hasCatalogBackend,
   searchCatalogTitles,
 } from '@/services/tmdb';
-import type { EpisodeSummary, RichTitleDetails } from '@/types/media';
+import type { EpisodeSummary, RichTitleDetails, SeasonSummary } from '@/types/media';
 
 export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 
@@ -153,7 +159,9 @@ export function useCatalog() {
 
   const findTitle = useCallback(
     (id: string) =>
-      titlesById.get(id) ?? queryClient.getQueryData<MediaTitle>(queryKeys.titleById(id)),
+      titlesById.get(id) ??
+      queryClient.getQueryData<MediaTitle>(queryKeys.titleById(id)) ??
+      findCachedRelatedTitle(id),
     [queryClient, titlesById],
   );
 
@@ -249,8 +257,222 @@ export function useTitleById(titleId: string, enabled = true) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
-    queryFn: () => fetchTitleById(titleId),
+    queryFn: ({ signal }) => fetchTitleById(titleId, signal),
   });
+}
+
+export function useTitleQuickDetails(title: MediaTitle | null) {
+  const titleId = title?.id ?? '';
+
+  const durationQuery = useQuery<string>({
+    queryKey: queryKeys.titleDuration(titleId),
+    enabled: Boolean(title),
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 0,
+    queryFn: async ({ signal }) => {
+      if (!title) return '';
+      const resolved = await fetchTitleDuration(title, signal);
+      return resolved || title.duration;
+    },
+  });
+
+  const trailerQuery = useQuery<string | null>({
+    queryKey: queryKeys.titleTrailerUrl(titleId),
+    enabled: Boolean(title),
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 0,
+    queryFn: ({ signal }) => (title ? fetchTitleTrailerUrl(title, signal) : Promise.resolve(null)),
+  });
+
+  const duration = title
+    ? (durationQuery.data || getCachedTitleDuration(title))
+    : undefined;
+  const trailerUrl = title
+    ? (trailerQuery.data !== undefined ? trailerQuery.data : getCachedTitleTrailerUrl(title))
+    : null;
+
+  return {
+    duration,
+    trailerUrl,
+  };
+}
+
+export function useTitleDurationPrefetch() {
+  const queryClient = useQueryClient();
+  const [durationsById, setDurationsById] = useState<Record<string, string>>({});
+  const fetchedDurationIdsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const prefetchDurations = useCallback(
+    (items: readonly MediaTitle[]) => {
+      for (const title of items) {
+        const cached =
+          queryClient.getQueryData<string>(queryKeys.titleDuration(title.id)) ??
+          getCachedTitleDuration(title);
+        if (title.duration || cached || fetchedDurationIdsRef.current.has(title.id)) {
+          continue;
+        }
+        fetchedDurationIdsRef.current.add(title.id);
+        void queryClient
+          .fetchQuery<string>({
+            queryKey: queryKeys.titleDuration(title.id),
+            staleTime: 1000 * 60 * 30,
+            gcTime: 1000 * 60 * 60,
+            queryFn: ({ signal }) => fetchTitleDuration(title, signal),
+          })
+          .then((resolved) => {
+            if (!mountedRef.current || !resolved) return;
+            setDurationsById((prev) =>
+              prev[title.id] === resolved ? prev : { ...prev, [title.id]: resolved },
+            );
+          })
+          .catch(() => {
+            fetchedDurationIdsRef.current.delete(title.id);
+          });
+      }
+    },
+    [queryClient],
+  );
+
+  const getDuration = useCallback(
+    (title: MediaTitle): string =>
+      durationsById[title.id] ??
+      queryClient.getQueryData<string>(queryKeys.titleDuration(title.id)) ??
+      getCachedTitleDuration(title),
+    [durationsById, queryClient],
+  );
+
+  return {
+    prefetchDurations,
+    getDuration,
+  };
+}
+
+export function useTitlesDurations(titles: readonly MediaTitle[]) {
+  const queryClient = useQueryClient();
+  const titlesMissingDuration = useMemo(
+    () => titles.filter((title) => !title.duration && !getCachedTitleDuration(title)),
+    [titles],
+  );
+
+  const durationQueries = useQueries({
+    queries: titlesMissingDuration.map((title) => ({
+      queryKey: queryKeys.titleDuration(title.id),
+      staleTime: 1000 * 60 * 30,
+      gcTime: 1000 * 60 * 60,
+      refetchOnWindowFocus: false,
+      retry: 0,
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchTitleDuration(title, signal),
+    })),
+  });
+
+  const resolvedById = useMemo(() => {
+    const map: Record<string, string> = {};
+    titlesMissingDuration.forEach((title, idx) => {
+      const resolved = durationQueries[idx]?.data;
+      if (resolved) {
+        map[title.id] = resolved;
+      }
+    });
+    return map;
+  }, [durationQueries, titlesMissingDuration]);
+
+  const getDuration = useCallback(
+    (title: MediaTitle): string =>
+      resolvedById[title.id] ??
+      queryClient.getQueryData<string>(queryKeys.titleDuration(title.id)) ??
+      getCachedTitleDuration(title),
+    [queryClient, resolvedById],
+  );
+
+  return { getDuration };
+}
+
+export function useTitleTotalEpisodes(title: MediaTitle | undefined, enabled: boolean) {
+  const cachedTotal = title ? getCachedTitleTotalEpisodes(title.id) : null;
+  const { data: queriedTotal } = useQuery<number | null>({
+    queryKey: queryKeys.titleTotalEpisodes(title?.id ?? ''),
+    enabled: Boolean(title && enabled && cachedTotal === null),
+    staleTime: 1000 * 60 * 30,
+    refetchOnWindowFocus: false,
+    retry: 0,
+    queryFn: async ({ signal }) => {
+      if (!title) return null;
+      await fetchTitleDuration(title, signal);
+      return getCachedTitleTotalEpisodes(title.id);
+    },
+  });
+
+  return cachedTotal ?? queriedTotal ?? null;
+}
+
+export function useTitlesByIds(
+  ids: readonly string[],
+  options: {
+    enabled: boolean;
+    resolveKnown?: (id: string) => MediaTitle | undefined;
+  },
+) {
+  const { enabled, resolveKnown } = options;
+  const queryClient = useQueryClient();
+
+  const missingIds = useMemo(
+    () =>
+      ids.filter(
+        (id) =>
+          !resolveKnown?.(id) &&
+          !queryClient.getQueryData<MediaTitle>(queryKeys.titleById(id)) &&
+          !findCachedRelatedTitle(id),
+      ),
+    [ids, queryClient, resolveKnown],
+  );
+
+  const queries = useQueries({
+    queries: missingIds.map((id) => ({
+      queryKey: queryKeys.titleById(id),
+      enabled,
+      staleTime: 1000 * 60 * 30,
+      gcTime: 1000 * 60 * 60,
+      refetchOnWindowFocus: false,
+      retry: 0,
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchTitleById(id, signal),
+    })),
+  });
+
+  const fetchedById = useMemo(() => {
+    const map: Record<string, MediaTitle> = {};
+    missingIds.forEach((id, idx) => {
+      const resolved = queries[idx]?.data;
+      if (resolved) {
+        map[id] = resolved;
+      }
+    });
+    return map;
+  }, [missingIds, queries]);
+
+  const resolveTitle = useCallback(
+    (id: string): MediaTitle | undefined =>
+      resolveKnown?.(id) ??
+      queryClient.getQueryData<MediaTitle>(queryKeys.titleById(id)) ??
+      findCachedRelatedTitle(id) ??
+      fetchedById[id],
+    [fetchedById, queryClient, resolveKnown],
+  );
+
+  return { resolveTitle };
 }
 
 export function useTitleDetails(title: MediaTitle | undefined) {
@@ -266,9 +488,9 @@ export function useTitleDetails(title: MediaTitle | undefined) {
     refetchOnReconnect: false,
     retry: 0,
     initialData: () => (title ? (getCachedRichTitleDetails(title.id) ?? undefined) : undefined),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!title) return null;
-      const details = await fetchRichTitleDetails(title, { throwOnError: true });
+      const details = await fetchRichTitleDetails(title, { throwOnError: true, signal });
       if (details) {
         for (const related of details.similarTitles) {
           queryClient.setQueryData<MediaTitle>(queryKeys.titleById(related.id), related);
@@ -278,8 +500,14 @@ export function useTitleDetails(title: MediaTitle | undefined) {
     },
   });
 
+  const cachedDuration = title
+    ? (queryClient.getQueryData<string>(queryKeys.titleDuration(title.id)) ??
+      getCachedTitleDuration(title))
+    : '';
+
   return {
     details: query.data ?? null,
+    cachedDuration,
     isLoading: query.isLoading || (query.isFetching && query.data === undefined),
     error:
       query.error && !query.isFetching
@@ -293,7 +521,9 @@ export function useSeasonEpisodes(
   titleId: string,
   seasonNumber: number | null,
   enabled = true,
+  seasons?: readonly SeasonSummary[],
 ) {
+  const queryClient = useQueryClient();
   const validSeason = seasonNumber !== null && seasonNumber > 0 ? seasonNumber : 0;
 
   const query = useQuery<EpisodeSummary[]>({
@@ -308,11 +538,34 @@ export function useSeasonEpisodes(
       titleId && validSeason > 0
         ? (getCachedTvSeasonEpisodes(titleId, validSeason) ?? undefined)
         : undefined,
-    queryFn: () => fetchTvSeasonEpisodes(titleId, validSeason, { throwOnError: true }),
+    queryFn: ({ signal }) =>
+      fetchTvSeasonEpisodes(titleId, validSeason, { throwOnError: true, signal }),
   });
 
+  const episodes = query.data ?? EMPTY_EPISODES;
+
+  const episodesBySeason = useMemo(() => {
+    const base: Partial<Record<number, EpisodeSummary[]>> = {};
+    if (titleId && seasons) {
+      for (const season of seasons) {
+        const queryCached = queryClient.getQueryData<EpisodeSummary[]>(
+          queryKeys.seasonEpisodes(titleId, season.seasonNumber),
+        );
+        const cached = queryCached ?? getCachedTvSeasonEpisodes(titleId, season.seasonNumber);
+        if (cached) {
+          base[season.seasonNumber] = cached;
+        }
+      }
+    }
+    if (validSeason > 0 && episodes.length > 0) {
+      base[validSeason] = episodes;
+    }
+    return base;
+  }, [episodes, queryClient, seasons, titleId, validSeason]);
+
   return {
-    episodes: query.data ?? EMPTY_EPISODES,
+    episodes,
+    episodesBySeason,
     isLoading: query.isLoading || (query.isFetching && query.data === undefined),
     error: query.error && !query.isFetching ? 'Não foi possível carregar os episódios.' : null,
     refetch: query.refetch,

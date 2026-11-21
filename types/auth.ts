@@ -5,10 +5,6 @@ export type AuthUser = {
   name: string;
   email: string;
   createdAt: string;
-  avatarType: AvatarType;
-  avatarPreset: AvatarPresetId | null;
-  avatarPath: string | null;
-  avatarUrl: string | null;
 };
 
 export type AuthStatus = 'idle' | 'loading' | 'success' | 'error';

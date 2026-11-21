@@ -1,5 +1,4 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useQueryClient } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -49,13 +48,6 @@ import {
 import { useMyList } from '@/hooks/useMyList';
 import { useSeriesProgress } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { queryKeys } from '@/services/queryKeys';
-import {
-  findCachedRelatedTitle,
-  getCachedTitleDuration,
-  getCachedTvSeasonEpisodes,
-} from '@/services/tmdb';
-import type { EpisodeSummary } from '@/types/media';
 import { formatCount } from '@/utils/format';
 import { triggerLightImpactHaptic, triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
@@ -66,7 +58,6 @@ export default function TitleDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
-  const queryClient = useQueryClient();
   const { status, findTitle } = useCatalog();
   const { isSaved, toggleSavedTitle, findSavedTitle, storageReady } = useMyList();
   const { subscriptions } = useSubscriptions();
@@ -75,7 +66,7 @@ export default function TitleDetailsScreen() {
   const [savedSnapshot, setSavedSnapshot] = useState<MediaTitle | null>(null);
 
   const liveTitle = normalizedId
-    ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId) ?? findCachedRelatedTitle(normalizedId))
+    ? (findTitle(normalizedId) ?? findSavedTitle(normalizedId))
     : undefined;
   const titleByIdQuery = useTitleById(
     normalizedId,
@@ -111,6 +102,7 @@ export default function TitleDetailsScreen() {
 
   const {
     details: richDetails,
+    cachedDuration,
     isLoading: loadingRichDetails,
     error: richDetailsError,
     refetch: refetchRichDetails,
@@ -130,7 +122,7 @@ export default function TitleDetailsScreen() {
   }, [richSeasons, seasonSelection.seasonNumber, seasonSelection.titleId, titleId]);
 
   const {
-    episodes: activeSeasonEpisodes,
+    episodesBySeason,
     isLoading: loadingActiveSeasonEpisodes,
     error: activeSeasonError,
     refetch: refetchSeasonEpisodes,
@@ -138,36 +130,8 @@ export default function TitleDetailsScreen() {
     titleId,
     expandedSeason,
     Boolean(title && checkIsSerialTitle(title)),
-  );
-
-  const episodesBySeason = useMemo(() => {
-    const base: Partial<Record<number, EpisodeSummary[]>> = {};
-    if (titleId && richSeasons) {
-      for (const season of richSeasons) {
-        const queryCached = queryClient.getQueryData<EpisodeSummary[]>(
-          queryKeys.seasonEpisodes(titleId, season.seasonNumber),
-        );
-        const cached = queryCached ?? getCachedTvSeasonEpisodes(titleId, season.seasonNumber);
-        if (cached) {
-          base[season.seasonNumber] = cached;
-        }
-      }
-    }
-    if (
-      expandedSeason !== null &&
-      expandedSeason > 0 &&
-      activeSeasonEpisodes.length > 0
-    ) {
-      base[expandedSeason] = activeSeasonEpisodes;
-    }
-    return base;
-  }, [
-    activeSeasonEpisodes,
-    expandedSeason,
-    queryClient,
     richSeasons,
-    titleId,
-  ]);
+  );
 
   const seasonEpisodesError = expandedSeason !== null ? activeSeasonError : null;
 
@@ -301,7 +265,6 @@ export default function TitleDetailsScreen() {
 
   const isSerialTitle = checkIsSerialTitle(title);
   const accentColor = resolveTitleAccentColor(title.color, isDark);
-  const cachedDuration = getCachedTitleDuration(title);
   const rawDuration = richDetails?.duration ?? cachedDuration ?? title.duration;
   const safeDuration =
     rawDuration && rawDuration !== 'Duração não informada' && rawDuration !== title.kind

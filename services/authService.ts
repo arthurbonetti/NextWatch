@@ -6,8 +6,11 @@ import type {
 } from '@supabase/supabase-js';
 
 import { upsertUserProfile } from '@/services/repositories/profileRepo';
-import { SecureStore } from '@/services/secureStore';
-import { supabase } from '@/services/supabase';
+import {
+  migrateLegacySupabaseSession,
+  purgeLegacyAuthTokens,
+  supabase,
+} from '@/services/supabase';
 import {
   type AuthSession,
   type AuthUser,
@@ -24,8 +27,6 @@ import {
 
 export type AuthChangeEvent = Parameters<Parameters<SupabaseClient['auth']['onAuthStateChange']>[0]>[0];
 
-const LEGACY_ACCESS_TOKEN_KEY = 'accessToken';
-const LEGACY_REFRESH_TOKEN_KEY = 'refreshToken';
 const APP_STORAGE_PREFIX = '@nextwatch/';
 
 // Proteção auxiliar contra cliques repetidos no cliente (controle efetivo deve estar no Supabase Auth)
@@ -54,10 +55,6 @@ function toAuthUser(rawUser: SupabaseAuthUser, fallbackEmail = '', fallbackName?
     name: metadataName || fallbackName || email.split('@')[0] || 'Usuário',
     email,
     createdAt: rawUser.created_at || new Date().toISOString(),
-    avatarType: 'initials',
-    avatarPreset: null,
-    avatarPath: null,
-    avatarUrl: null,
   };
 }
 
@@ -99,11 +96,6 @@ function formatSupabaseError(errorMsg?: string): string {
     return 'Muitas solicitações. Aguarde alguns instantes e tente novamente.';
   }
   return 'Não foi possível concluir a autenticação. Verifique os dados e tente novamente.';
-}
-
-async function purgeLegacyTokens(): Promise<void> {
-  await SecureStore.deleteItemAsync(LEGACY_ACCESS_TOKEN_KEY).catch(() => {});
-  await SecureStore.deleteItemAsync(LEGACY_REFRESH_TOKEN_KEY).catch(() => {});
 }
 
 async function purgeLocalStorageCaches(): Promise<void> {
@@ -284,25 +276,9 @@ export async function restoreAuthSession(): Promise<AuthSession | null> {
     // Prossegue para tentativa de migração legada
   }
 
-  const legacyAccessToken = await SecureStore.getItemAsync(LEGACY_ACCESS_TOKEN_KEY).catch(() => null);
-  const legacyRefreshToken = await SecureStore.getItemAsync(LEGACY_REFRESH_TOKEN_KEY).catch(() => null);
-
-  if (legacyAccessToken && legacyRefreshToken) {
-    try {
-      const { data, error } = await supabase.auth.setSession({
-        access_token: legacyAccessToken,
-        refresh_token: legacyRefreshToken,
-      });
-      if (!error && data.session?.user) {
-        return toAuthSession(data.session);
-      }
-    } catch {
-      // Migração falhou (offline ou tokens expirados)
-    } finally {
-      await purgeLegacyTokens();
-    }
-  } else if (legacyAccessToken || legacyRefreshToken) {
-    await purgeLegacyTokens();
+  const migratedSession = await migrateLegacySupabaseSession();
+  if (migratedSession?.user) {
+    return toAuthSession(migratedSession);
   }
 
   return null;
@@ -337,7 +313,7 @@ export async function clearAuthSession(): Promise<void> {
       // Prossegue com limpeza local mesmo se offline
     }
   }
-  await purgeLegacyTokens();
+  await purgeLegacyAuthTokens();
   await purgeLocalStorageCaches();
 }
 
