@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
@@ -13,12 +13,16 @@ import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
 import { Subscription } from '@/constants/subscriptions';
+import { darkColors, Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCurrency } from '@/utils/format';
 
 export default function SubscriptionsScreen() {
   const { user, authReady } = useAuth();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { subscriptions, saveSubscription, toggleSubscription, removeSubscription } = useSubscriptions();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | undefined>();
@@ -62,7 +66,7 @@ export default function SubscriptionsScreen() {
               onPress={addSubscription}
               accessibilityRole="button"
               accessibilityLabel="Adicionar assinatura">
-              <MaterialIcons name="add" size={18} color="#182230" />
+              <MaterialIcons name="add" size={18} color={colors.textOnAccent} />
               <AppText tipo="legenda" peso="forte" style={styles.headerActionText}>Novo</AppText>
             </Pressable>
           </View>
@@ -72,7 +76,7 @@ export default function SubscriptionsScreen() {
           <View style={styles.totalCard}>
             <View style={styles.totalGlow} />
             <View style={styles.totalTopline}>
-              <View style={styles.totalIcon}><MaterialIcons name="account-balance-wallet" size={20} color="#f3b43f" /></View>
+              <View style={styles.totalIcon}><MaterialIcons name="account-balance-wallet" size={20} color={colors.accentPrimary} /></View>
               <AppText tipo="legenda" peso="forte" style={styles.totalLabel}>GASTO MENSAL ATIVO</AppText>
               <View style={styles.activeBadge}>
                 <View style={styles.activeDot} />
@@ -92,7 +96,7 @@ export default function SubscriptionsScreen() {
                 style={({ pressed }) => [styles.costLink, pressed && styles.pressed]}
                 accessibilityRole="button">
                 <AppText tipo="legenda" peso="forte" style={styles.costLinkText}>{showAnnualCost ? 'Ocultar resumo' : 'Ver projeção'}</AppText>
-                <MaterialIcons name={showAnnualCost ? 'expand-less' : 'expand-more'} size={16} color="#f3b43f" />
+                <MaterialIcons name={showAnnualCost ? 'expand-less' : 'expand-more'} size={16} color={colors.accentPrimary} />
               </Pressable>
             </View>
             {showAnnualCost && (
@@ -124,7 +128,7 @@ export default function SubscriptionsScreen() {
           <FadeInBlock delay={140}>
             <EmptyStateCard
               icon="subscriptions"
-              iconColor="#d77c29"
+              iconColor={colors.accentLink}
               title="Nenhuma assinatura cadastrada"
               description="Adicione os streamings que você assina para acompanhar gastos e liberar o catálogo na Roleta."
               actionLabel="Adicionar primeiro serviço"
@@ -169,7 +173,7 @@ export default function SubscriptionsScreen() {
 
                     {subscription.active && subscription.renewalAlert && (
                       <View style={styles.reminderBadge}>
-                        <MaterialIcons name="notifications-none" size={14} color="#944c0d" />
+                        <MaterialIcons name="notifications-none" size={14} color={colors.savedActiveText} />
                         <AppText tipo="legenda" peso="forte" tabular style={styles.reminderText} numberOfLines={1}>
                           Aviso {subscription.alertDays} {subscription.alertDays === 1 ? 'dia' : 'dias'} antes
                         </AppText>
@@ -183,14 +187,14 @@ export default function SubscriptionsScreen() {
                       onPress={() => editSubscription(subscription)}
                       accessibilityRole="button"
                       accessibilityLabel={`Editar ${subscription.provider}`}>
-                      <MaterialIcons name="edit" size={18} color="#5e5c57" />
+                      <MaterialIcons name="edit" size={18} color={colors.textSecondary} />
                     </Pressable>
                     <Pressable
                       style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
                       onPress={() => setDeletingSubscription(subscription)}
                       accessibilityRole="button"
                       accessibilityLabel={`Remover ${subscription.provider}`}>
-                      <MaterialIcons name="delete-outline" size={19} color="#c0392b" />
+                      <MaterialIcons name="delete-outline" size={19} color={colors.dangerText} />
                     </Pressable>
                     <SwitchToggle
                       value={subscription.active}
@@ -211,12 +215,12 @@ export default function SubscriptionsScreen() {
               style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
               onPress={addSubscription}
               accessibilityRole="button">
-              <View style={styles.addIcon}><MaterialIcons name="add" size={22} color="#182230" /></View>
+              <View style={styles.addIcon}><MaterialIcons name="add" size={22} color={colors.textOnAccent} /></View>
               <View style={styles.addCopy}>
                 <AppText peso="forte" style={styles.addTitle}>Adicionar outro streaming</AppText>
                 <AppText tipo="legenda" style={styles.addSubtitle}>Netflix, Disney+, Max, Prime Video e mais</AppText>
               </View>
-              <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
+              <MaterialIcons name="chevron-right" size={22} color={colors.textMuted} />
             </Pressable>
           </FadeInBlock>
         )}
@@ -249,67 +253,67 @@ export default function SubscriptionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
   container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 42 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, marginBottom: 20 },
   headerCopy: { flex: 1 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
-  headerActionBtn: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 13, backgroundColor: '#f3b43f' },
-  headerActionText: { color: '#182230', fontSize: 13 },
-  totalCard: { overflow: 'hidden', borderRadius: 20, borderWidth: 1, borderColor: '#263442', paddingHorizontal: 18, paddingTop: 18, paddingBottom: 16, backgroundColor: '#182230', marginBottom: 26 },
-  totalGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 95, top: -120, right: -40, backgroundColor: 'rgba(243,180,63,0.12)' },
-  totalTopline: { flexDirection: 'row', alignItems: 'center' },
-  totalIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#263b50', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  totalLabel: { color: '#f3b43f', letterSpacing: 1, flex: 1 },
-  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: 'rgba(46,139,87,0.22)' },
-  activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#55c596' },
-  activeText: { color: '#a5e6ca', fontSize: 11 },
-  totalValue: { color: '#fffdf8', fontSize: 32, lineHeight: 38, marginTop: 12, marginBottom: 12 },
-  totalCurrency: { color: 'rgba(255,253,248,0.75)', fontSize: 19, lineHeight: 26 },
-  totalFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 12 },
-  totalHint: { color: '#bdc6ce', fontSize: 12 },
-  costLink: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
-  costLinkText: { color: '#f3b43f', fontSize: 12 },
-  annualBreakdown: { gap: 8, marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: 'rgba(255,253,248,0.06)' },
-  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  annualText: { color: '#bdc6ce', fontSize: 12 },
-  annualValue: { color: '#fffdf8', fontSize: 13 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 3 },
+  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
+  headerActionBtn: { minHeight: 40, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 13, backgroundColor: theme.colors.accentPrimary },
+  headerActionText: { color: theme.colors.textOnAccent, fontSize: 13 },
+  totalCard: { overflow: 'hidden' as const, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.heroBorder, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 16, backgroundColor: theme.colors.heroBg, marginBottom: 26 },
+  totalGlow: { position: 'absolute' as const, width: 190, height: 190, borderRadius: 95, top: -120, right: -40, backgroundColor: withAlpha(theme.colors.accentPrimary, 0.12) },
+  totalTopline: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  totalIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: theme.colors.navyMuted, alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: 10 },
+  totalLabel: { color: theme.colors.accentPrimary, letterSpacing: 1, flex: 1 },
+  activeBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: withAlpha(darkColors.successText, 0.18) },
+  activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: darkColors.successText },
+  activeText: { color: darkColors.successText, fontSize: 11 },
+  totalValue: { color: theme.colors.textOnNavy, fontSize: 32, lineHeight: 38, marginTop: 12, marginBottom: 12 },
+  totalCurrency: { color: withAlpha(theme.colors.textOnNavy, 0.75), fontSize: 19, lineHeight: 26 },
+  totalFooter: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, borderTopWidth: 1, borderTopColor: theme.colors.cardBorderOverlay, paddingTop: 12 },
+  totalHint: { color: theme.colors.textOnNavyMuted, fontSize: 12 },
+  costLink: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, paddingVertical: 2 },
+  costLinkText: { color: theme.colors.accentPrimary, fontSize: 12 },
+  annualBreakdown: { gap: 8, marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: theme.colors.cardOverlaySubtle },
+  breakdownRow: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
+  annualText: { color: theme.colors.textOnNavyMuted, fontSize: 12 },
+  annualValue: { color: theme.colors.textOnNavy, fontSize: 13 },
+  sectionHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: 10, marginBottom: 13 },
   sectionHeaderCopy: { flex: 1 },
-  sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  sectionSubtitle: { color: '#5e5c57', marginTop: 2, fontSize: 13, lineHeight: 18 },
-  countBadge: { flexShrink: 0, textAlign: 'center', color: '#565d63', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 },
-  subscriptionCard: { borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', padding: 14, marginBottom: 12 },
+  sectionTitle: { color: theme.colors.textPrimary, fontSize: 18, lineHeight: 23 },
+  sectionSubtitle: { color: theme.colors.textSecondary, marginTop: 2, fontSize: 13, lineHeight: 18 },
+  countBadge: { flexShrink: 0, textAlign: 'center' as const, color: theme.colors.textSecondary, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 },
+  subscriptionCard: { borderRadius: 18, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface, padding: 14, marginBottom: 12 },
   subscriptionInactive: { opacity: 0.68 },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardTopRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 },
   serviceInfo: { flex: 1 },
-  serviceName: { color: '#182230', fontSize: 16, lineHeight: 21 },
-  billingText: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
-  priceArea: { alignItems: 'flex-end' },
-  price: { color: '#182230', fontSize: 16, lineHeight: 21 },
-  priceCaption: { color: '#5e5c57', fontSize: 12.5, marginTop: 1 },
-  cardDivider: { height: 1, backgroundColor: '#f1ece1', marginVertical: 11 },
-  cardBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  badgesRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, flex: 1 },
-  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
-  statusPillActive: { backgroundColor: 'rgba(46,139,87,0.12)' },
-  statusPillPaused: { backgroundColor: '#f1ece1' },
+  serviceName: { color: theme.colors.textPrimary, fontSize: 16, lineHeight: 21 },
+  billingText: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 },
+  priceArea: { alignItems: 'flex-end' as const },
+  price: { color: theme.colors.textPrimary, fontSize: 16, lineHeight: 21 },
+  priceCaption: { color: theme.colors.textSecondary, fontSize: 12.5, marginTop: 1 },
+  cardDivider: { height: 1, backgroundColor: theme.colors.borderSubtle, marginVertical: 11 },
+  cardBottomRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: 8 },
+  badgesRow: { flexDirection: 'row' as const, alignItems: 'center' as const, flexWrap: 'wrap' as const, gap: 6, flex: 1 },
+  statusPill: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  statusPillActive: { backgroundColor: theme.colors.bgSuccess },
+  statusPillPaused: { backgroundColor: theme.colors.bgSurfaceAlt },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusDotActive: { backgroundColor: '#2e8b57' },
-  statusDotPaused: { backgroundColor: '#6b5943' },
-  statusTextActive: { color: '#216941', fontSize: 12 },
-  statusTextPaused: { color: '#5e5c57', fontSize: 12 },
-  reminderBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#fff2d8' },
-  reminderText: { color: '#944c0d', fontSize: 12 },
-  subscriptionActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  iconActionBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center' },
-  switchHitArea: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingLeft: 2 },
-  addRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: '#d8d3c9', borderStyle: 'dashed', backgroundColor: '#fffdf8', marginTop: 6 },
-  addIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3b43f', marginRight: 12 },
+  statusDotActive: { backgroundColor: theme.colors.successText },
+  statusDotPaused: { backgroundColor: theme.colors.textMuted },
+  statusTextActive: { color: theme.colors.successText, fontSize: 12 },
+  statusTextPaused: { color: theme.colors.textSecondary, fontSize: 12 },
+  reminderBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: theme.colors.savedActiveBg },
+  reminderText: { color: theme.colors.savedActiveText, fontSize: 12 },
+  subscriptionActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
+  iconActionBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: theme.colors.bgSurfaceAlt, alignItems: 'center' as const, justifyContent: 'center' as const },
+  switchHitArea: { minWidth: 44, minHeight: 44, alignItems: 'center' as const, justifyContent: 'center' as const, paddingLeft: 2 },
+  addRow: { minHeight: 70, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderStyle: 'dashed' as const, backgroundColor: theme.colors.bgSurface, marginTop: 6 },
+  addIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: theme.colors.accentPrimary, marginRight: 12 },
   addCopy: { flex: 1 },
-  addTitle: { color: '#182230', fontSize: 14.5, lineHeight: 19 },
-  addSubtitle: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
+  addTitle: { color: theme.colors.textPrimary, fontSize: 14.5, lineHeight: 19 },
+  addSubtitle: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 },
 });

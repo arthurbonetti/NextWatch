@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   interpolateColor,
@@ -9,7 +9,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { THEME } from '@/constants/theme';
+import { Theme, THEME } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 
 type SwitchVisualProps = {
@@ -30,8 +31,15 @@ const THUMB_TRAVEL = 18;
  * respeitando a preferência de movimento reduzido do sistema.
  */
 export function SwitchVisual({ value }: SwitchVisualProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(value ? 1 : 0);
+
+  const trackOffColor = colors.handle;
+  const trackOnColor = isDark ? colors.accentPrimary : colors.navy;
+  const thumbOffColor = isDark ? colors.textPrimary : colors.bgCard;
+  const thumbOnColor = isDark ? colors.textOnAccent : colors.gold;
 
   useEffect(() => {
     progress.set(
@@ -50,18 +58,18 @@ export function SwitchVisual({ value }: SwitchVisualProps) {
     backgroundColor: interpolateColor(
       progress.get(),
       [0, 1],
-      [THEME.colors.handle, THEME.colors.navy],
+      [trackOffColor, trackOnColor],
     ),
-  }));
+  }), [trackOffColor, trackOnColor]);
 
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: progress.get() * THUMB_TRAVEL }],
     backgroundColor: interpolateColor(
       progress.get(),
       [0, 1],
-      [THEME.colors.bgCard, THEME.colors.gold],
+      [thumbOffColor, thumbOnColor],
     ),
-  }));
+  }), [thumbOffColor, thumbOnColor]);
 
   return (
     <Animated.View style={[styles.track, trackStyle]}>
@@ -74,6 +82,8 @@ export function SwitchVisual({ value }: SwitchVisualProps) {
  * Switch global acessível com área mínima de toque e feedback tátil consistente.
  */
 export function SwitchToggle({ value, onToggle, accessibilityLabel, style }: SwitchToggleProps) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       onPress={() => {
@@ -90,12 +100,12 @@ export function SwitchToggle({ value, onToggle, accessibilityLabel, style }: Swi
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   pressable: {
-    minWidth: THEME.touchTarget.min,
-    minHeight: THEME.touchTarget.min,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minWidth: theme.touchTarget.min,
+    minHeight: theme.touchTarget.min,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   pressed: {
     opacity: 0.86,
@@ -103,13 +113,13 @@ const styles = StyleSheet.create({
   track: {
     width: 44,
     height: 26,
-    borderRadius: THEME.radius.full,
+    borderRadius: theme.radius.full,
     padding: 3,
-    justifyContent: 'center',
+    justifyContent: 'center' as const,
   },
   thumb: {
     width: 20,
     height: 20,
-    borderRadius: THEME.radius.full,
+    borderRadius: theme.radius.full,
   },
 });

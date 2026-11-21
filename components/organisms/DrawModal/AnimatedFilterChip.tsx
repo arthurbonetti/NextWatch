@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect } from 'react';
-import { AccessibilityRole, Pressable, StyleSheet } from 'react-native';
+import { AccessibilityRole, Pressable } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -11,7 +11,8 @@ import Animated, {
 
 import { AppText } from '@/components/atoms/AppText';
 import { MaterialIconName } from '@/constants/catalog';
-import { THEME } from '@/constants/theme';
+import { Theme, THEME } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 
 type AnimatedFilterChipProps = {
@@ -35,9 +36,16 @@ export function AnimatedFilterChip({
   accessibilityRole = 'button',
   accessibilityLabel,
 }: AnimatedFilterChipProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const scale = useSharedValue(1);
   const progress = useSharedValue(selected ? 1 : 0);
+
+  const unselectedBg = colors.chipBg;
+  const selectedBg = colors.chipSelectedBg;
+  const unselectedBorder = colors.chipBorder;
+  const selectedBorder = colors.chipSelectedBorder;
 
   useEffect(() => {
     progress.set(
@@ -54,14 +62,14 @@ export function AnimatedFilterChip({
     backgroundColor: interpolateColor(
       progress.get(),
       [0, 1],
-      [THEME.colors.bgCard, THEME.colors.navy],
+      [unselectedBg, selectedBg],
     ),
     borderColor: interpolateColor(
       progress.get(),
       [0, 1],
-      [THEME.colors.borderMedium, THEME.colors.navy],
+      [unselectedBorder, selectedBorder],
     ),
-  }));
+  }), [unselectedBg, selectedBg, unselectedBorder, selectedBorder]);
 
   const handlePressIn = () => {
     if (reducedMotion) return;
@@ -95,7 +103,7 @@ export function AnimatedFilterChip({
         <MaterialIcons
           name={icon}
           size={16}
-          color={selected ? THEME.colors.gold : THEME.colors.textWarm}
+          color={selected ? colors.chipSelectedIcon : colors.chipIcon}
         />
         <AppText
           tipo="legenda"
@@ -109,29 +117,29 @@ export function AnimatedFilterChip({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   pressable: {
     flexShrink: 0,
   },
   chip: {
-    minHeight: THEME.touchTarget.min,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.sm,
-    borderRadius: THEME.radius.pill,
+    minHeight: theme.touchTarget.min,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.sm,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
-    paddingHorizontal: THEME.spacing.xl,
-    paddingVertical: THEME.spacing.base,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.base,
   },
   label: {
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodySm,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodySm,
   },
   labelUnselected: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.chipText,
   },
   labelSelected: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.chipSelectedText,
   },
 });

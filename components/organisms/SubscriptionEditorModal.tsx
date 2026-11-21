@@ -1,13 +1,14 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SwitchToggle } from '@/components/atoms/SwitchToggle';
 import { SUBSCRIPTION_PROVIDERS, Subscription, SubscriptionProvider } from '@/constants/subscriptions';
-import { THEME } from '@/constants/theme';
+import { Theme } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 
 type Props = {
@@ -35,6 +36,9 @@ function generateSubscriptionId(providerName: string): string {
 }
 
 export function SubscriptionEditorModal({ visible = true, initialSubscription, onClose, onSave }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const [provider, setProvider] = useState(initialSubscription?.provider ?? SUBSCRIPTION_PROVIDERS[0].name);
   const [monthlyPrice, setMonthlyPrice] = useState(initialSubscription?.monthlyPrice.toFixed(2).replace('.', ',') ?? '');
   const [billingDay, setBillingDay] = useState(initialSubscription?.billingDay.toString() ?? '');
@@ -181,7 +185,7 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
                 <AppText tipo="legenda" peso="forte" style={[styles.providerName, selected && styles.providerNameSelected]}>
                   {item.name}
                 </AppText>
-                {selected && <MaterialIcons name="check-circle" size={15} color={THEME.colors.gold} />}
+                {selected && <MaterialIcons name="check-circle" size={15} color={colors.chipSelectedIcon} />}
               </Pressable>
             );
           })}
@@ -199,9 +203,9 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
                 onBlur={() => setFocusedField((prev) => (prev === 'price' ? null : prev))}
                 keyboardType="decimal-pad"
                 placeholder="39,90"
-                placeholderTextColor={THEME.colors.textSubtle}
+                placeholderTextColor={colors.textMuted}
                 style={styles.input}
-                selectionColor={THEME.colors.accentDeep}
+                selectionColor={colors.accentLink}
               />
             </View>
           </View>
@@ -215,9 +219,9 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
                 onBlur={() => setFocusedField((prev) => (prev === 'day' ? null : prev))}
                 keyboardType="number-pad"
                 placeholder="18"
-                placeholderTextColor={THEME.colors.textSubtle}
+                placeholderTextColor={colors.textMuted}
                 style={styles.input}
-                selectionColor={THEME.colors.accentDeep}
+                selectionColor={colors.accentLink}
                 maxLength={2}
               />
               <AppText tipo="legenda" style={styles.daySuffix}>de cada mês</AppText>
@@ -228,7 +232,7 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
         <View style={styles.alertCard}>
           <View style={styles.alertHeader}>
             <View style={styles.alertIcon}>
-              <MaterialIcons name="notifications-active" size={19} color={THEME.colors.accentDeep} />
+              <MaterialIcons name="notifications-active" size={19} color={colors.accentLink} />
             </View>
             <View style={styles.alertCopy}>
               <AppText tipo="legenda" peso="forte" style={styles.alertTitle}>Avisar antes de renovar</AppText>
@@ -269,46 +273,46 @@ export function SubscriptionEditorModal({ visible = true, initialSubscription, o
           <AppText peso="forte" style={styles.saveText}>
             {initialSubscription ? 'Salvar alterações' : 'Adicionar assinatura'}
           </AppText>
-          <MaterialIcons name="check" size={19} color={THEME.colors.navy} />
+          <MaterialIcons name="check" size={19} color={colors.textOnAccent} />
         </Pressable>
       </ScrollView>
     </AnimatedModalShell>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   formScroll: { flexShrink: 1 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: THEME.spacing.s20 },
-  eyebrow: { color: THEME.colors.accent, letterSpacing: 1.4, marginBottom: 5 },
-  title: { color: THEME.colors.textPrimary, fontSize: THEME.fontSizes.title, lineHeight: THEME.lineHeights.title, letterSpacing: -0.35 },
-  label: { color: THEME.colors.textSubtle, letterSpacing: 0.8, marginBottom: THEME.spacing.base },
-  providers: { gap: THEME.spacing.md, paddingBottom: THEME.spacing.s22 },
-  providerChip: { minHeight: THEME.touchTarget.min, flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: THEME.colors.borderMedium, borderRadius: THEME.radius.lg, backgroundColor: THEME.colors.bgCard, paddingHorizontal: 11, paddingVertical: 9 },
-  providerChipSelected: { borderColor: THEME.colors.navy, backgroundColor: THEME.colors.navy },
-  providerName: { color: THEME.colors.textPrimary, fontSize: 12.5 },
-  providerNameSelected: { color: THEME.colors.textOnNavy },
-  fieldsRow: { flexDirection: 'row', gap: THEME.spacing.lg, marginBottom: THEME.spacing.s18 },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: theme.spacing.s20 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.4, marginBottom: 5 },
+  title: { color: theme.colors.textPrimary, fontSize: theme.fontSizes.title, lineHeight: theme.lineHeights.title, letterSpacing: -0.35 },
+  label: { color: theme.colors.textSecondary, letterSpacing: 0.8, marginBottom: theme.spacing.base },
+  providers: { gap: theme.spacing.md, paddingBottom: theme.spacing.s22 },
+  providerChip: { minHeight: theme.touchTarget.min, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 7, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderRadius: theme.radius.lg, backgroundColor: theme.colors.bgSurface, paddingHorizontal: 11, paddingVertical: 9 },
+  providerChipSelected: { borderColor: theme.colors.chipSelectedBorder, backgroundColor: theme.colors.chipSelectedBg },
+  providerName: { color: theme.colors.textPrimary, fontSize: 12.5 },
+  providerNameSelected: { color: theme.colors.chipSelectedText },
+  fieldsRow: { flexDirection: 'row' as const, gap: theme.spacing.lg, marginBottom: theme.spacing.s18 },
   priceField: { flex: 1.15 },
   dayField: { flex: 0.85 },
-  inputWrap: { minHeight: THEME.touchTarget.button, flexDirection: 'row', alignItems: 'center', borderRadius: THEME.radius.lg, borderWidth: 1, borderColor: THEME.colors.borderMedium, backgroundColor: THEME.colors.bgCanvas, paddingHorizontal: THEME.spacing.lg },
-  inputWrapFocused: { borderColor: THEME.colors.navy, backgroundColor: THEME.colors.bgCard },
-  currency: { color: THEME.colors.accentDeep, marginRight: 7 },
-  input: { flex: 1, color: THEME.colors.textPrimary, fontFamily: THEME.fonts.sans.semibold, fontSize: 16, lineHeight: 22, fontVariant: ['tabular-nums'], paddingVertical: 9 },
-  daySuffix: { color: THEME.colors.textSubtle, fontSize: THEME.fontSizes.caption },
-  alertCard: { borderRadius: THEME.radius.xl, borderWidth: 1, borderColor: THEME.colors.borderWarm, backgroundColor: THEME.colors.bgWarm, padding: 13, marginBottom: 17 },
-  alertHeader: { flexDirection: 'row', alignItems: 'center' },
-  alertIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: THEME.colors.bgHighlight, alignItems: 'center', justifyContent: 'center', marginRight: THEME.spacing.lg },
+  inputWrap: { minHeight: theme.touchTarget.button, flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurfaceAlt, paddingHorizontal: theme.spacing.lg },
+  inputWrapFocused: { borderColor: theme.colors.borderFocused, backgroundColor: theme.colors.bgSurface },
+  currency: { color: theme.colors.accentLink, marginRight: 7 },
+  input: { flex: 1, color: theme.colors.textPrimary, fontFamily: theme.fonts.sans.semibold, fontSize: 16, lineHeight: 22, fontVariant: ['tabular-nums' as const], paddingVertical: 9 },
+  daySuffix: { color: theme.colors.textMuted, fontSize: theme.fontSizes.caption },
+  alertCard: { borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurfaceAlt, padding: 13, marginBottom: 17 },
+  alertHeader: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  alertIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: theme.colors.savedActiveBg, alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: theme.spacing.lg },
   alertCopy: { flex: 1 },
-  alertTitle: { color: THEME.colors.textPrimary, fontSize: THEME.fontSizes.bodySm },
-  helper: { color: THEME.colors.textSubtle, fontSize: THEME.fontSizes.caption, lineHeight: 16, marginTop: 2 },
-  switchToggle: { marginLeft: THEME.spacing.md },
-  reminderOptions: { flexDirection: 'row', gap: 7, marginTop: THEME.spacing.lg, paddingLeft: 46 },
-  reminderChip: { minHeight: THEME.touchTarget.min - 4, borderRadius: 11, borderWidth: 1, borderColor: THEME.colors.borderWarm, paddingHorizontal: THEME.spacing.lg, paddingVertical: 7, justifyContent: 'center' },
-  reminderSelected: { borderColor: THEME.colors.accent, backgroundColor: THEME.colors.bgHighlight },
-  reminderText: { color: THEME.colors.textSubtle, fontSize: THEME.fontSizes.caption },
-  reminderSelectedText: { color: THEME.colors.accentText, fontSize: THEME.fontSizes.caption },
-  error: { color: THEME.colors.mcRed, marginBottom: 9 },
-  saveButton: { minHeight: THEME.touchTarget.cta, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: THEME.spacing.md, borderRadius: THEME.radius.lg, backgroundColor: THEME.colors.gold },
-  saveText: { color: THEME.colors.navy },
+  alertTitle: { color: theme.colors.textPrimary, fontSize: theme.fontSizes.bodySm },
+  helper: { color: theme.colors.textSecondary, fontSize: theme.fontSizes.caption, lineHeight: 16, marginTop: 2 },
+  switchToggle: { marginLeft: theme.spacing.md },
+  reminderOptions: { flexDirection: 'row' as const, gap: 7, marginTop: theme.spacing.lg, paddingLeft: 46 },
+  reminderChip: { minHeight: theme.touchTarget.min - 4, borderRadius: 11, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface, paddingHorizontal: theme.spacing.lg, paddingVertical: 7, justifyContent: 'center' as const },
+  reminderSelected: { borderColor: theme.colors.savedActiveBorder, backgroundColor: theme.colors.savedActiveBg },
+  reminderText: { color: theme.colors.textSecondary, fontSize: theme.fontSizes.caption },
+  reminderSelectedText: { color: theme.colors.savedActiveText, fontSize: theme.fontSizes.caption },
+  error: { color: theme.colors.dangerText, marginBottom: 9 },
+  saveButton: { minHeight: theme.touchTarget.cta, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: theme.spacing.md, borderRadius: theme.radius.lg, backgroundColor: theme.colors.accentPrimary },
+  saveText: { color: theme.colors.textOnAccent },
 });

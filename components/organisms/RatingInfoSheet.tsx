@@ -1,10 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
 import { formatAverageRating, getMetacriticScore, MediaTitle } from '@/constants/catalog';
-import { THEME } from '@/constants/theme';
+import { Theme } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { formatCount } from '@/utils/format';
 
 type RatingInfoSheetProps = {
@@ -15,6 +16,8 @@ type RatingInfoSheetProps = {
 };
 
 export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingInfoSheetProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const metacriticScore = getMetacriticScore(title);
   const formattedVotes = typeof voteCount === 'number' && voteCount > 0 ? formatCount(voteCount) : null;
 
@@ -27,7 +30,7 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
       sheetStyle={styles.card}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <MaterialIcons name="star" size={18} color={THEME.colors.gold} />
+          <MaterialIcons name="star" size={18} color={colors.accentPrimary} />
           <AppText tipo="subtitulo" peso="forte" style={styles.title}>
             Fontes das avaliações
           </AppText>
@@ -36,7 +39,7 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
 
       <View style={styles.scoreHero}>
         <View style={styles.scoreBadge}>
-          <MaterialIcons name="star" size={15} color={THEME.colors.gold} />
+          <MaterialIcons name="star" size={15} color={colors.accentPrimary} />
           <AppText tipo="subtitulo" peso="forte" style={styles.scoreText}>
             {formatAverageRating(title)}
           </AppText>
@@ -79,50 +82,50 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   card: {
-    backgroundColor: THEME.colors.bgCard,
-    borderTopLeftRadius: THEME.radius.xl,
-    borderTopRightRadius: THEME.radius.xl,
-    paddingHorizontal: THEME.spacing.lg,
-    gap: THEME.spacing.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: THEME.spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
   },
   title: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 17,
   },
   scoreHero: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.md,
-    backgroundColor: THEME.colors.bgSubtle,
-    borderRadius: THEME.radius.md,
-    padding: THEME.spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
   },
   scoreBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 5,
-    backgroundColor: THEME.colors.navy,
-    borderRadius: THEME.radius.sm,
+    backgroundColor: theme.colors.heroBg,
+    borderRadius: theme.radius.sm,
     paddingHorizontal: 11,
     paddingVertical: 7,
   },
   scoreText: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 16,
   },
   scoreMeta: {
@@ -130,32 +133,32 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   scoreSource: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 14,
   },
   votesText: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
   },
   rows: {
-    gap: THEME.spacing.sm,
+    gap: theme.spacing.sm,
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.sm,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: theme.colors.accentPrimary,
     marginTop: 6,
   },
   infoText: {
     flex: 1,
-    color: THEME.colors.textStrongBody,
+    color: theme.colors.textStrongBody,
     fontSize: 13,
     lineHeight: 19,
   },

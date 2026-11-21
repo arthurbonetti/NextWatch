@@ -1,7 +1,10 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Href, router } from 'expo-router';
 import { useState } from 'react';
-import { Animated, Platform, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { Animated, Platform, Pressable, StyleProp, ViewStyle } from 'react-native';
+
+import { Theme } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type BackButtonProps = {
   onPress?: () => void;
@@ -19,6 +22,8 @@ export function BackButton({
   accessibilityLabel = 'Voltar',
   style,
 }: BackButtonProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [pressAnim] = useState(() => new Animated.Value(0));
 
   const animateTo = (toValue: number) => {
@@ -62,22 +67,22 @@ export function BackButton({
       accessibilityLabel={accessibilityLabel}>
       <Animated.View style={[styles.button, style, { transform: [{ scale: buttonScale }] }]}>
         <Animated.View style={{ transform: [{ translateX: arrowTranslateX }] }}>
-          <MaterialIcons name="arrow-back" size={22} color="#182230" />
+          <MaterialIcons name="arrow-back" size={22} color={colors.textPrimary} />
         </Animated.View>
       </Animated.View>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   button: {
     width: 44,
     height: 44,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e8e2d5',
-    backgroundColor: '#fffdf8',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
 });

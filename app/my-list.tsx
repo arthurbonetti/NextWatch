@@ -18,8 +18,9 @@ import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
 import { isSerialTitle, MediaTitle } from '@/constants/catalog';
-import { resolveTitleAccentColor, THEME } from '@/constants/theme';
+import { resolveTitleAccentColor, Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { DrawHistoryEntry, useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
@@ -51,6 +52,9 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
   progressMap,
   onOpen,
 }: WatchedTitleCardProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const isSerial = title
     ? isSerialTitle(title)
     : drawEntry?.kind === 'Série' ||
@@ -73,7 +77,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
   const totalEpisodes = cachedTotal ?? queriedTotal ?? null;
 
   const summary = summarizeWatchedProgress({ isSerial, progressMap, totalEpisodes });
-  const accentColor = title ? resolveTitleAccentColor(title.color) : THEME.colors.accent;
+  const accentColor = title ? resolveTitleAccentColor(title.color, isDark) : colors.accentLink;
   const displayTitle = title?.title ?? drawEntry?.title ?? 'Carregando obra…';
   const displayKind = title?.kind ?? drawEntry?.kind;
   const displayMeta = title
@@ -81,7 +85,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
     : (displayKind ?? '');
   const posterPath = title?.tmdbPosterPath ?? drawEntry?.tmdbPosterPath;
   const backdropPath = title?.tmdbBackdropPath;
-  const cardColor = title?.color ?? drawEntry?.color ?? THEME.colors.navyMuted;
+  const cardColor = title?.color ?? drawEntry?.color ?? colors.navyMuted;
 
   return (
     <Pressable
@@ -100,7 +104,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
               <MaterialIcons
                 name={title?.icon ?? (isSerial ? 'live-tv' : 'movie')}
                 size={22}
-                color="rgba(255,255,255,0.9)"
+                color={colors.textOnNavy}
               />
             }
           />
@@ -123,7 +127,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
               <MaterialIcons
                 name={summary.completed ? 'check-circle' : 'play-circle-outline'}
                 size={14}
-                color={summary.completed ? THEME.colors.successText : accentColor}
+                color={summary.completed ? colors.successText : accentColor}
               />
               <AppText
                 tipo="legenda"
@@ -158,7 +162,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
                   styles.progressFill,
                   {
                     width: `${summary.percent}%`,
-                    backgroundColor: summary.completed ? THEME.colors.successText : accentColor,
+                    backgroundColor: summary.completed ? colors.successText : accentColor,
                   },
                 ]}
               />
@@ -167,12 +171,14 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
         </View>
       </View>
 
-      <MaterialIcons name="chevron-right" size={20} color={THEME.colors.textSubtle} />
+      <MaterialIcons name="chevron-right" size={20} color={colors.textMuted} />
     </Pressable>
   );
 });
 
 export default function MyListScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const { user, token, authReady } = useAuth();
   const { savedTitles, storageReady, findSavedTitle, removeFromMyList, refreshMyList } = useMyList();
@@ -330,7 +336,7 @@ export default function MyListScreen() {
                   <MaterialIcons
                     name={tab.icon}
                     size={16}
-                    color={selected ? THEME.colors.gold : THEME.colors.textSecondary}
+                    color={selected ? colors.chipSelectedIcon : colors.chipText}
                   />
                   <AppText
                     tipo="legenda"
@@ -378,7 +384,7 @@ export default function MyListScreen() {
                       actionLabel={`Remover ${title.title} da fila`}
                       onAction={() => removeFromMyList(title.id)}
                       actionButtonStyle={styles.savedBadgeButton}
-                      actionIconColor="#e58c34"
+                      actionIconColor={colors.savedActiveIcon}
                     />
                   </FadeInBlock>
                 </Animated.View>
@@ -389,7 +395,7 @@ export default function MyListScreen() {
               <FadeInBlock delay={120}>
                 <EmptyStateCard
                   icon="bookmark-border"
-                  iconColor="#d77c29"
+                  iconColor={colors.accentLink}
                   title="Sua fila está vazia"
                   description={'Toque em "Salvar" nos detalhes de qualquer filme, série ou anime para guardá-lo aqui.'}
                   actionLabel="Explorar títulos"
@@ -425,7 +431,7 @@ export default function MyListScreen() {
               <FadeInBlock delay={120}>
                 <EmptyStateCard
                   icon="check-circle-outline"
-                  iconColor={THEME.colors.successText}
+                  iconColor={colors.successText}
                   title="Nenhuma obra assistida"
                   description="Marque filmes como assistidos ou acompanhe episódios nos detalhes das séries para ver seu progresso aqui."
                   actionLabel="Explorar títulos"
@@ -441,81 +447,88 @@ export default function MyListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: THEME.colors.bgCanvas },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
   container: {
-    width: '100%',
+    width: '100%' as const,
     maxWidth: 640,
-    alignSelf: 'center',
+    alignSelf: 'center' as const,
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 36,
   },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, marginBottom: 16 },
   headerCopy: { flex: 1 },
-  eyebrow: { color: THEME.colors.accent, letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: THEME.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 3 },
+  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
   countBadge: {
-    color: THEME.colors.textBody,
-    backgroundColor: THEME.colors.bgCard,
+    color: theme.colors.textSecondary,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
     borderRadius: 11,
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: 13,
   },
   tabBar: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 4,
     padding: 4,
     borderRadius: 15,
-    backgroundColor: THEME.colors.bgSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
     marginBottom: 18,
   },
   tabButton: {
     flex: 1,
-    minHeight: THEME.touchTarget.min,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: theme.touchTarget.min,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 6,
     borderRadius: 11,
     paddingHorizontal: 10,
   },
   tabButtonActive: {
-    backgroundColor: THEME.colors.navy,
+    backgroundColor: theme.colors.chipSelectedBg,
   },
-  tabText: { color: THEME.colors.textSecondary, fontSize: 13.5 },
-  tabTextActive: { color: THEME.colors.textOnNavy, fontSize: 13.5 },
+  tabText: { color: theme.colors.chipText, fontSize: 13.5 },
+  tabTextActive: { color: theme.colors.chipSelectedText, fontSize: 13.5 },
   tabCountPill: {
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 9,
-    backgroundColor: 'rgba(24, 34, 48, 0.08)',
+    backgroundColor: theme.isDark
+      ? withAlpha(theme.colors.textPrimary, 0.1)
+      : withAlpha(theme.colors.navy, 0.08),
   },
   tabCountPillActive: {
-    backgroundColor: 'rgba(255, 253, 248, 0.16)',
+    backgroundColor: theme.isDark
+      ? withAlpha(theme.colors.textOnAccent, 0.16)
+      : theme.colors.cardOverlaySubtle,
   },
-  tabCountText: { color: THEME.colors.textSecondary, fontSize: 11.5 },
-  tabCountTextActive: { color: THEME.colors.gold, fontSize: 11.5 },
+  tabCountText: { color: theme.colors.chipText, fontSize: 11.5 },
+  tabCountTextActive: {
+    color: theme.isDark ? theme.colors.chipSelectedText : theme.colors.accentPrimary,
+    fontSize: 11.5,
+  },
   savedBadgeButton: {
-    backgroundColor: THEME.colors.bgHighlight,
+    backgroundColor: theme.colors.savedActiveBg,
     borderWidth: 1,
-    borderColor: THEME.colors.accent,
+    borderColor: theme.colors.savedActiveBorder,
   },
   watchedCard: {
     minHeight: 104,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     padding: 10,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    backgroundColor: THEME.colors.bgCard,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
     marginBottom: 10,
     gap: 12,
   },
@@ -523,34 +536,34 @@ const styles = StyleSheet.create({
     width: 64,
     height: 86,
     borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
   },
   watchedCopy: { flex: 1, paddingVertical: 2 },
   watchedTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 14.5,
     lineHeight: 19,
     marginBottom: 2,
   },
-  watchedMeta: { color: THEME.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
+  watchedMeta: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
   progressBlock: { marginTop: 9, gap: 5 },
   progressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: 8,
   },
-  progressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
-  progressLabel: { color: THEME.colors.textBody, fontSize: 12 },
-  progressLabelDone: { color: THEME.colors.successText },
-  progressPercent: { color: THEME.colors.textPrimary, fontSize: 12 },
+  progressLabelRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, flex: 1 },
+  progressLabel: { color: theme.colors.textSecondary, fontSize: 12 },
+  progressLabelDone: { color: theme.colors.successText },
+  progressPercent: { color: theme.colors.textPrimary, fontSize: 12 },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: THEME.colors.bgSubtle,
-    overflow: 'hidden',
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    overflow: 'hidden' as const,
   },
-  progressFill: { height: '100%', borderRadius: 3 },
+  progressFill: { height: '100%' as const, borderRadius: 3 },
 });

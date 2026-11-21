@@ -17,7 +17,8 @@ import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
-import { THEME, withAlpha } from '@/constants/theme';
+import { Theme, THEME, withAlpha } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type TitleHeroProps = {
   title: MediaTitle;
@@ -42,10 +43,6 @@ const CERTIFICATION_COLORS: Record<string, string> = {
   '18': '#182230',
 };
 
-function getCertificationColor(cert: string): string {
-  return CERTIFICATION_COLORS[cert] ?? THEME.colors.navyElevated;
-}
-
 export function TitleHero({
   title,
   durationLabel,
@@ -59,8 +56,14 @@ export function TitleHero({
   onShare,
   onWatchTrailer,
 }: TitleHeroProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const posterReveal = useSharedValue(reducedMotion ? 1 : 0);
+
+  const getCertificationColor = (cert: string): string => {
+    return CERTIFICATION_COLORS[cert] ?? colors.heroBg;
+  };
 
   useEffect(() => {
     if (reducedMotion) {
@@ -127,9 +130,9 @@ export function TitleHero({
 
         <LinearGradient
           colors={[
-            THEME.colors.canvasFadeTransparent,
-            withAlpha(THEME.colors.bgCanvas, 0.52),
-            THEME.colors.bgCanvas,
+            colors.canvasFadeTransparent,
+            withAlpha(colors.bgPrimary, 0.58),
+            colors.bgPrimary,
           ]}
           locations={[0, 0.55, 1]}
           style={[styles.bottomGradient, { pointerEvents: 'none' }]}
@@ -143,7 +146,7 @@ export function TitleHero({
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={`Compartilhar ${title.title}`}>
-            <MaterialIcons name="share" size={19} color={THEME.colors.textPrimary} />
+            <MaterialIcons name="share" size={19} color={colors.textPrimary} />
           </Pressable>
         </View>
 
@@ -159,7 +162,11 @@ export function TitleHero({
               accessibilityRole="button"
               accessibilityLabel={`Assistir trailer de ${title.title}`}>
               <View style={[styles.trailerPlayCircle, { backgroundColor: accentColor }]}>
-                <MaterialIcons name="play-arrow" size={26} color={THEME.colors.textOnNavy} />
+                <MaterialIcons
+                  name="play-arrow"
+                  size={26}
+                  color={accentColor === colors.accentPrimary || accentColor === colors.gold ? colors.textOnAccent : colors.textOnNavy}
+                />
               </View>
               <AppText tipo="legenda" peso="forte" style={styles.trailerLabel}>
                 Trailer
@@ -174,7 +181,7 @@ export function TitleHero({
           sharedTransitionTag={`title-poster-${title.id}`}
           style={[
             styles.posterFrame,
-            { backgroundColor: accentColor, borderColor: THEME.colors.bgCard },
+            { backgroundColor: accentColor, borderColor: colors.bgSurface },
             posterEntranceStyle,
           ]}>
           <TitleArtwork
@@ -213,7 +220,7 @@ export function TitleHero({
                   style={[
                     styles.statusBadge,
                     {
-                      backgroundColor: withAlpha(accentColor, 0.14),
+                      backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
                       borderColor: withAlpha(accentColor, 0.36),
                     },
                   ]}>
@@ -239,68 +246,68 @@ export function TitleHero({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   container: {
-    width: '100%',
+    width: '100%' as const,
   },
   backdropFrame: {
-    width: '100%',
-    overflow: 'hidden',
-    position: 'relative',
+    width: '100%' as const,
+    overflow: 'hidden' as const,
+    position: 'relative' as const,
   },
   backdropArtwork: {
     ...StyleSheet.absoluteFill,
   },
   topScrim: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
   },
   bottomGradient: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
-    height: '62%',
+    height: '62%' as const,
   },
   topBar: {
-    position: 'absolute',
-    left: THEME.spacing.md,
-    right: THEME.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    position: 'absolute' as const,
+    left: theme.spacing.md,
+    right: theme.spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     zIndex: 10,
   },
   topIconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: withAlpha(THEME.colors.bgCard, 0.92),
+    backgroundColor: withAlpha(theme.colors.bgSurface, 0.92),
     borderWidth: 1,
-    borderColor: withAlpha(THEME.colors.borderLight, 0.9),
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: withAlpha(theme.colors.borderSubtle, 0.9),
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   pressed: {
     opacity: 0.78,
   },
   trailerCenterOverlay: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   trailerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.sm,
-    backgroundColor: withAlpha(THEME.colors.navy, 0.78),
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: withAlpha(theme.colors.heroBg, 0.78),
     borderWidth: 1.5,
-    borderRadius: THEME.radius.pill,
+    borderRadius: theme.radius.pill,
     paddingVertical: 6,
     paddingLeft: 6,
     paddingRight: 14,
@@ -313,36 +320,36 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   trailerLabel: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 13,
     letterSpacing: 0.2,
   },
   heroOverlayContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: THEME.spacing.md,
-    paddingHorizontal: THEME.spacing.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     marginTop: -62,
   },
   posterFrame: {
     width: 86,
     height: 128,
-    borderRadius: THEME.radius.md,
+    borderRadius: theme.radius.md,
     borderWidth: 2,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     flexShrink: 0,
   },
   posterFallback: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   posterFallbackText: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 28,
   },
   headlineColumn: {
@@ -351,9 +358,9 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
     gap: 6,
   },
   certificationBadge: {
@@ -361,19 +368,19 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   certificationText: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 11,
     lineHeight: 14,
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 5,
-    borderRadius: THEME.radius.pill,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 9,
     paddingVertical: 3,
@@ -384,17 +391,17 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   statusText: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 11,
     lineHeight: 14,
   },
   title: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 24,
     lineHeight: 28,
   },
   metaText: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },

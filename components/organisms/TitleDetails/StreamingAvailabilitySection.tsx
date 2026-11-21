@@ -1,10 +1,11 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { Subscription } from '@/constants/subscriptions';
-import { THEME, withAlpha } from '@/constants/theme';
+import { Theme, withAlpha } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { formatCurrency } from '@/utils/format';
 
 type StreamingAvailabilitySectionProps = {
@@ -20,6 +21,9 @@ export function StreamingAvailabilitySection({
   accentColor,
   onPressService,
 }: StreamingAvailabilitySectionProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   if (services.length === 0) {
     return null;
   }
@@ -61,7 +65,7 @@ export function StreamingAvailabilitySection({
                       styles.chipSubscribed,
                       {
                         borderColor: withAlpha(accentColor, 0.45),
-                        backgroundColor: THEME.colors.bgCard,
+                        backgroundColor: colors.bgSurface,
                       },
                     ]
                   : styles.chipUnsubscribed,
@@ -86,7 +90,7 @@ export function StreamingAvailabilitySection({
                   peso={isSubscribed ? 'forte' : 'medio'}
                   style={[
                     styles.statusLabel,
-                    isSubscribed ? { color: THEME.colors.successText } : styles.statusLabelMuted,
+                    isSubscribed ? { color: colors.successText } : styles.statusLabelMuted,
                   ]}
                   numberOfLines={1}>
                   {isSubscribed ? `Você assina${priceLabel}` : 'Não assino'}
@@ -96,7 +100,7 @@ export function StreamingAvailabilitySection({
               <MaterialIcons
                 name="open-in-new"
                 size={15}
-                color={isSubscribed ? THEME.colors.textPrimary : THEME.colors.textMuted}
+                color={isSubscribed ? colors.textPrimary : colors.textMuted}
               />
             </Pressable>
           );
@@ -106,36 +110,36 @@ export function StreamingAvailabilitySection({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   section: {
-    gap: THEME.spacing.sm,
+    gap: theme.spacing.sm,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 16,
   },
   chipsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
   },
   chip: {
     flexGrow: 1,
-    minWidth: '47%',
-    flexDirection: 'row',
-    alignItems: 'center',
+    minWidth: '47%' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 10,
-    borderRadius: THEME.radius.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 10,
   },
   chipSubscribed: {
-    backgroundColor: THEME.colors.bgCard,
+    backgroundColor: theme.colors.bgSurface,
   },
   chipUnsubscribed: {
-    backgroundColor: THEME.colors.bgSubtle,
-    borderColor: THEME.colors.borderLight,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderColor: theme.colors.borderSubtle,
     opacity: 0.72,
   },
   chipPressed: {
@@ -150,17 +154,17 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   serviceName: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 14,
   },
   serviceNameMuted: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
   },
   statusLabel: {
     fontSize: 11,
     lineHeight: 15,
   },
   statusLabelMuted: {
-    color: THEME.colors.textMuted,
+    color: theme.colors.textMuted,
   },
 });

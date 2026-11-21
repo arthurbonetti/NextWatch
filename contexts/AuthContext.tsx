@@ -1,6 +1,5 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { clearSubscriptionsLocalCache } from '@/hooks/useSubscriptions';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   clearAuthSession,
@@ -10,6 +9,7 @@ import {
   restoreAuthSession,
 } from '@/services/authService';
 import { queryClient } from '@/services/queryClient';
+import { clearSubscriptionsLocalCache } from '@/services/subscriptionsLocalCache';
 import type { AuthSession, AuthStatus, AuthUser } from '@/types/auth';
 
 type AuthContextValue = {

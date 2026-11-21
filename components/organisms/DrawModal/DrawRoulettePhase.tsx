@@ -22,7 +22,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { AppText } from '@/components/atoms/AppText';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
-import { THEME } from '@/constants/theme';
+import { Theme } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { formatCount } from '@/utils/format';
 import { triggerLightImpactHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 import { quickSortByRandom } from '@/utils/quickSort';
@@ -53,6 +54,9 @@ type ReelPosterItemProps = {
 };
 
 const ReelPosterItem = memo(function ReelPosterItem({ title, index, scrollX }: ReelPosterItemProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const animatedStyle = useAnimatedStyle(() => {
     const distance = Math.abs(scrollX.get() / STEP - index);
     const scale = interpolate(distance, [0, 1, 2.2], [1.02, 0.91, 0.84], Extrapolation.CLAMP);
@@ -72,7 +76,7 @@ const ReelPosterItem = memo(function ReelPosterItem({ title, index, scrollX }: R
         backdropPath={title.tmdbBackdropPath}
         fallback={
           <View style={styles.posterFallback}>
-            <MaterialIcons name={title.icon} size={32} color={THEME.colors.textOnNavy} />
+            <MaterialIcons name={title.icon} size={32} color={colors.textOnNavy} />
             <AppText tipo="legenda" peso="forte" numberOfLines={2} style={styles.posterFallbackText}>
               {title.title}
             </AppText>
@@ -116,12 +120,17 @@ export function DrawRoulettePhase({
   onFinish,
   onSkip,
 }: DrawRoulettePhaseProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const [viewportWidth, setViewportWidth] = useState(320);
   const scrollX = useSharedValue(0);
   const lockHighlight = useSharedValue(0);
   const lastHapticAtRef = useRef(0);
   const finishedRef = useRef(false);
+
+  const goldColor = colors.accentPrimary;
+  const goldLightColor = colors.goldLight;
 
   const reelItems = useMemo(
     () => buildReelItems(winner, candidates, spinKey),
@@ -237,15 +246,15 @@ export function DrawRoulettePhase({
 
   const stripAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: centerOffset - scrollX.get() }],
-  }));
+  }), [centerOffset]);
 
   const frameAnimatedStyle = useAnimatedStyle(() => {
     const highlight = lockHighlight.get();
     return {
       transform: [{ scale: 1 + highlight * 0.02 }],
-      borderColor: highlight > 0.2 ? THEME.colors.gold : THEME.colors.goldLight,
+      borderColor: highlight > 0.2 ? goldColor : goldLightColor,
     };
-  });
+  }, [goldColor, goldLightColor]);
 
   return (
     <Pressable
@@ -270,7 +279,7 @@ export function DrawRoulettePhase({
       <View style={styles.content}>
         <View style={styles.topText}>
           <View style={styles.eyebrowPill}>
-            <MaterialIcons name="casino" size={14} color={THEME.colors.gold} />
+            <MaterialIcons name="casino" size={14} color={colors.accentPrimary} />
             <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>
               A SORTE ESTÁ LANÇADA
             </AppText>
@@ -282,7 +291,7 @@ export function DrawRoulettePhase({
 
         <View style={styles.reelViewport} onLayout={handleViewportLayout}>
           <View style={[styles.pointerTop, { pointerEvents: 'none' }]}>
-            <MaterialIcons name="arrow-drop-down" size={26} color={THEME.colors.gold} />
+            <MaterialIcons name="arrow-drop-down" size={26} color={colors.accentPrimary} />
           </View>
 
           <Animated.View style={[styles.strip, stripAnimatedStyle]}>
@@ -294,7 +303,7 @@ export function DrawRoulettePhase({
           <Animated.View style={[styles.centerFrame, frameAnimatedStyle, { pointerEvents: 'none' }]} />
 
           <View style={[styles.pointerBottom, { pointerEvents: 'none' }]}>
-            <MaterialIcons name="arrow-drop-up" size={26} color={THEME.colors.gold} />
+            <MaterialIcons name="arrow-drop-up" size={26} color={colors.accentPrimary} />
           </View>
         </View>
 
@@ -303,7 +312,7 @@ export function DrawRoulettePhase({
             Escolhendo entre {formatCount(eligibleCount)} {eligibleCount === 1 ? 'título' : 'títulos'}…
           </AppText>
           <View style={styles.skipRow}>
-            <MaterialIcons name="touch-app" size={14} color={THEME.colors.textOnNavyMuted} />
+            <MaterialIcons name="touch-app" size={14} color={colors.textOnNavyMuted} />
             <AppText tipo="legenda" style={styles.skipHint}>
               Toque para revelar agora
             </AppText>
@@ -314,123 +323,123 @@ export function DrawRoulettePhase({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   root: {
-    borderRadius: THEME.radius.card,
-    overflow: 'hidden',
-    backgroundColor: THEME.colors.navy,
+    borderRadius: theme.radius.card,
+    overflow: 'hidden' as const,
+    backgroundColor: theme.colors.heroBg,
     borderWidth: 1,
-    borderColor: THEME.colors.borderDark,
+    borderColor: theme.colors.heroBorder,
   },
   backgroundLayer: {
     ...StyleSheet.absoluteFill,
   },
   backgroundScrim: {
-    backgroundColor: THEME.colors.backdropDark,
+    backgroundColor: theme.colors.backdropDark,
     opacity: 0.72,
   },
   content: {
-    paddingVertical: THEME.spacing.s28,
-    alignItems: 'center',
-    gap: THEME.spacing.s22,
+    paddingVertical: theme.spacing.s28,
+    alignItems: 'center' as const,
+    gap: theme.spacing.s22,
   },
   topText: {
-    alignItems: 'center',
-    paddingHorizontal: THEME.spacing.s20,
-    gap: THEME.spacing.sm,
+    alignItems: 'center' as const,
+    paddingHorizontal: theme.spacing.s20,
+    gap: theme.spacing.sm,
   },
   eyebrowPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.sm,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.xs,
-    borderRadius: THEME.radius.full,
-    backgroundColor: THEME.colors.cardOverlaySubtle,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.cardOverlaySubtle,
     borderWidth: 1,
-    borderColor: THEME.colors.cardBorderOverlay,
+    borderColor: theme.colors.cardBorderOverlay,
   },
   eyebrow: {
-    color: THEME.colors.gold,
+    color: theme.colors.accentPrimary,
     letterSpacing: 1.4,
   },
   headline: {
-    color: THEME.colors.textOnNavy,
-    fontSize: THEME.fontSizes.title,
-    lineHeight: THEME.lineHeights.title,
-    textAlign: 'center',
+    color: theme.colors.textOnNavy,
+    fontSize: theme.fontSizes.title,
+    lineHeight: theme.lineHeights.title,
+    textAlign: 'center' as const,
   },
   reelViewport: {
-    width: '100%',
-    height: POSTER_HEIGHT + THEME.spacing.s32,
-    justifyContent: 'center',
-    overflow: 'hidden',
+    width: '100%' as const,
+    height: POSTER_HEIGHT + theme.spacing.s32,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
   },
   strip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: POSTER_GAP,
   },
   posterCard: {
     width: POSTER_WIDTH,
     height: POSTER_HEIGHT,
-    borderRadius: THEME.radius.lg,
-    overflow: 'hidden',
+    borderRadius: theme.radius.lg,
+    overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: THEME.colors.cardBorderOverlay,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.cardBorderOverlay,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   posterFallback: {
-    padding: THEME.spacing.base,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.sm,
+    padding: theme.spacing.base,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.sm,
   },
   posterFallbackText: {
-    color: THEME.colors.textOnNavy,
-    textAlign: 'center',
-    fontSize: THEME.fontSizes.sm,
-    lineHeight: THEME.lineHeights.sm,
+    color: theme.colors.textOnNavy,
+    textAlign: 'center' as const,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: theme.lineHeights.sm,
   },
   centerFrame: {
-    position: 'absolute',
-    alignSelf: 'center',
-    width: POSTER_WIDTH + THEME.spacing.md,
-    height: POSTER_HEIGHT + THEME.spacing.md,
-    borderRadius: THEME.radius.xl,
+    position: 'absolute' as const,
+    alignSelf: 'center' as const,
+    width: POSTER_WIDTH + theme.spacing.md,
+    height: POSTER_HEIGHT + theme.spacing.md,
+    borderRadius: theme.radius.xl,
     borderWidth: 2.5,
   },
   pointerTop: {
-    position: 'absolute',
-    top: -THEME.spacing.xs,
-    alignSelf: 'center',
+    position: 'absolute' as const,
+    top: -theme.spacing.xs,
+    alignSelf: 'center' as const,
     zIndex: 3,
   },
   pointerBottom: {
-    position: 'absolute',
-    bottom: -THEME.spacing.xs,
-    alignSelf: 'center',
+    position: 'absolute' as const,
+    bottom: -theme.spacing.xs,
+    alignSelf: 'center' as const,
     zIndex: 3,
   },
   bottomCopy: {
-    alignItems: 'center',
-    paddingHorizontal: THEME.spacing.s20,
-    gap: THEME.spacing.xs,
+    alignItems: 'center' as const,
+    paddingHorizontal: theme.spacing.s20,
+    gap: theme.spacing.xs,
   },
   supportText: {
-    color: THEME.colors.textOnNavy,
-    fontSize: THEME.fontSizes.bodyMd,
-    lineHeight: THEME.lineHeights.bodyMd,
+    color: theme.colors.textOnNavy,
+    fontSize: theme.fontSizes.bodyMd,
+    lineHeight: theme.lineHeights.bodyMd,
   },
   skipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.xs,
-    marginTop: THEME.spacing.xxs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xxs,
   },
   skipHint: {
-    color: THEME.colors.textOnNavyMuted,
-    fontSize: THEME.fontSizes.caption,
+    color: theme.colors.textOnNavyMuted,
+    fontSize: theme.fontSizes.caption,
   },
 });

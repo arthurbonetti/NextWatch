@@ -1,11 +1,12 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, MediaTitle } from '@/constants/catalog';
-import { resolveTitleAccentColor, THEME, withAlpha } from '@/constants/theme';
+import { resolveTitleAccentColor, Theme, withAlpha } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type SimilarTitlesCarouselProps = {
   titles: MediaTitle[];
@@ -20,6 +21,9 @@ export function SimilarTitlesCarousel({
   onSelectTitle,
   onDrawSimilar,
 }: SimilarTitlesCarouselProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
@@ -31,14 +35,14 @@ export function SimilarTitlesCarousel({
           style={({ pressed }) => [
             styles.drawSimilarButton,
             {
-              backgroundColor: withAlpha(accentColor, 0.14),
+              backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
               borderColor: withAlpha(accentColor, 0.4),
             },
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Sortear outro título parecido">
-          <MaterialIcons name="casino" size={15} color={THEME.colors.textPrimary} />
+          <MaterialIcons name="casino" size={15} color={colors.textPrimary} />
           <AppText tipo="legenda" peso="forte" style={styles.drawSimilarText}>
             Sortear outro parecido
           </AppText>
@@ -51,7 +55,7 @@ export function SimilarTitlesCarousel({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
           {titles.map((item) => {
-            const cardAccent = resolveTitleAccentColor(item.color);
+            const cardAccent = resolveTitleAccentColor(item.color, isDark);
             return (
               <Pressable
                 key={item.id}
@@ -76,7 +80,7 @@ export function SimilarTitlesCarousel({
                     }
                   />
                   <View style={styles.ratingChip}>
-                    <MaterialIcons name="star" size={10} color={THEME.colors.gold} />
+                    <MaterialIcons name="star" size={10} color={colors.accentPrimary} />
                     <AppText tipo="legenda" peso="forte" style={styles.ratingText}>
                       {formatAverageRating(item)}
                     </AppText>
@@ -97,40 +101,40 @@ export function SimilarTitlesCarousel({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   section: {
-    gap: THEME.spacing.md,
+    gap: theme.spacing.md,
   },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 16,
   },
   drawSimilarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
-    borderRadius: THEME.radius.pill,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   drawSimilarText: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 12,
   },
   pressed: {
     opacity: 0.76,
   },
   scrollContent: {
-    gap: THEME.spacing.md,
-    paddingRight: THEME.spacing.lg,
+    gap: theme.spacing.md,
+    paddingRight: theme.spacing.lg,
   },
   posterCard: {
     width: 112,
@@ -139,44 +143,44 @@ const styles = StyleSheet.create({
   posterFrame: {
     width: 112,
     height: 166,
-    borderRadius: THEME.radius.md,
-    overflow: 'hidden',
-    position: 'relative',
+    borderRadius: theme.radius.md,
+    overflow: 'hidden' as const,
+    position: 'relative' as const,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
   },
   posterFallback: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   posterFallbackText: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 22,
   },
   ratingChip: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 6,
     right: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 3,
-    backgroundColor: withAlpha(THEME.colors.navy, 0.88),
-    borderRadius: THEME.radius.sm,
+    backgroundColor: withAlpha(theme.colors.heroBg, 0.88),
+    borderRadius: theme.radius.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   ratingText: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 10,
   },
   itemTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 12.5,
     lineHeight: 16,
   },
   itemMeta: {
-    color: THEME.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
   },
 });

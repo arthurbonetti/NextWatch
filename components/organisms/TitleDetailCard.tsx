@@ -29,7 +29,8 @@ import {
   MediaTitle,
 } from '@/constants/catalog';
 import { openStreamingService, Subscription } from '@/constants/subscriptions';
-import { resolveTitleAccentColor, THEME, withAlpha } from '@/constants/theme';
+import { resolveTitleAccentColor, Theme, THEME, withAlpha } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { formatCurrency } from '@/utils/format';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
@@ -69,6 +70,8 @@ function ConfettiParticle({
   spec: ConfettiSpec;
   progress: SharedValue<number>;
 }) {
+  const styles = useThemedStyles(createStyles);
+
   const style = useAnimatedStyle(() => {
     const master = progress.get();
     if (master <= spec.delay || master >= 1) {
@@ -118,19 +121,22 @@ function GoldConfettiBurst({
   accentColor: string;
   progress: SharedValue<number>;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const specs: ConfettiSpec[] = [
-    { dx: -110, dy: -26, rotate: 220, size: 8, delay: 0.0, color: THEME.colors.gold },
-    { dx: -82, dy: -46, rotate: -190, size: 7, delay: 0.04, color: THEME.colors.goldLight },
-    { dx: -52, dy: -32, rotate: 160, size: 9, delay: 0.02, color: THEME.colors.accent },
-    { dx: -24, dy: -52, rotate: -240, size: 7, delay: 0.06, color: THEME.colors.gold },
+    { dx: -110, dy: -26, rotate: 220, size: 8, delay: 0.0, color: colors.accentPrimary },
+    { dx: -82, dy: -46, rotate: -190, size: 7, delay: 0.04, color: colors.goldLight },
+    { dx: -52, dy: -32, rotate: 160, size: 9, delay: 0.02, color: colors.accent },
+    { dx: -24, dy: -52, rotate: -240, size: 7, delay: 0.06, color: colors.accentPrimary },
     { dx: 18, dy: -48, rotate: 200, size: 8, delay: 0.03, color: accentColor },
-    { dx: 48, dy: -34, rotate: -170, size: 9, delay: 0.01, color: THEME.colors.goldLight },
-    { dx: 78, dy: -44, rotate: 230, size: 7, delay: 0.05, color: THEME.colors.gold },
-    { dx: 108, dy: -24, rotate: -210, size: 8, delay: 0.025, color: THEME.colors.accent },
-    { dx: -95, dy: 12, rotate: 180, size: 6, delay: 0.07, color: THEME.colors.goldLight },
-    { dx: -40, dy: 16, rotate: -150, size: 7, delay: 0.08, color: THEME.colors.gold },
-    { dx: 38, dy: 14, rotate: 195, size: 7, delay: 0.065, color: THEME.colors.accent },
-    { dx: 92, dy: 10, rotate: -185, size: 6, delay: 0.075, color: THEME.colors.goldLight },
+    { dx: 48, dy: -34, rotate: -170, size: 9, delay: 0.01, color: colors.goldLight },
+    { dx: 78, dy: -44, rotate: 230, size: 7, delay: 0.05, color: colors.accentPrimary },
+    { dx: 108, dy: -24, rotate: -210, size: 8, delay: 0.025, color: colors.accent },
+    { dx: -95, dy: 12, rotate: 180, size: 6, delay: 0.07, color: colors.goldLight },
+    { dx: -40, dy: 16, rotate: -150, size: 7, delay: 0.08, color: colors.accentPrimary },
+    { dx: 38, dy: 14, rotate: 195, size: 7, delay: 0.065, color: colors.accent },
+    { dx: 92, dy: 10, rotate: -185, size: 6, delay: 0.075, color: colors.goldLight },
   ];
 
   return (
@@ -192,6 +198,8 @@ export function TitleDetailCard({
   onSaveChange,
   onDrawAnother,
 }: TitleDetailCardProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
 
   const [prevTitleId, setPrevTitleId] = useState(title.id);
@@ -214,7 +222,7 @@ export function TitleDetailCard({
   }
 
   const displayDuration = duration || title.duration;
-  const accentColor = resolveTitleAccentColor(title.color);
+  const accentColor = resolveTitleAccentColor(title.color, isDark);
   const uniqueTitleServices = Array.from(new Set(getTitleServices(title)));
   const enabledSet = enabledServices ? new Set(enabledServices) : null;
   const matchedSubscriptions = activeSubscriptions.filter((sub) =>
@@ -253,6 +261,13 @@ export function TitleDetailCard({
   const saveProgress = useSharedValue(saved ? 1 : 0);
   const diceRotation = useSharedValue(0);
   const drawerChevronRotation = useSharedValue(0);
+
+  const ratingBaseBorder = colors.heroBorder;
+  const ratingGlowBorder = colors.accentPrimary;
+  const saveInactiveBg = colors.bgSurfaceAlt;
+  const saveActiveBg = isDark ? colors.savedActiveBg : colors.navy;
+  const saveInactiveBorder = colors.borderSubtle;
+  const saveActiveBorder = isDark ? colors.savedActiveBorder : colors.navy;
 
   useEffect(() => {
     if (reducedMotion) {
@@ -310,22 +325,22 @@ export function TitleDetailCard({
     borderColor: interpolateColor(
       ratingGlow.get(),
       [0, 1],
-      [THEME.colors.navy, THEME.colors.gold],
+      [ratingBaseBorder, ratingGlowBorder],
     ),
-  }));
+  }), [ratingBaseBorder, ratingGlowBorder]);
 
   const saveAnimatedStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       saveProgress.get(),
       [0, 1],
-      [THEME.colors.bgSubtle, THEME.colors.navy],
+      [saveInactiveBg, saveActiveBg],
     ),
     borderColor: interpolateColor(
       saveProgress.get(),
       [0, 1],
-      [THEME.colors.borderLight, THEME.colors.navy],
+      [saveInactiveBorder, saveActiveBorder],
     ),
-  }));
+  }), [saveInactiveBg, saveActiveBg, saveInactiveBorder, saveActiveBorder]);
 
   const diceAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${diceRotation.get()}deg` }],
@@ -410,7 +425,7 @@ export function TitleDetailCard({
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Fechar detalhes">
-        <MaterialIcons name="close" size={21} color={THEME.colors.textOnNavy} />
+        <MaterialIcons name="close" size={21} color={colors.textOnNavy} />
       </Pressable>
 
       <ScrollView
@@ -429,12 +444,12 @@ export function TitleDetailCard({
             backdropPath={title.tmdbBackdropPath}
             fallback={
               <View style={styles.backdropFallback}>
-                <MaterialIcons name={title.icon} size={48} color={THEME.colors.textOnNavy} />
+                <MaterialIcons name={title.icon} size={48} color={colors.textOnNavy} />
               </View>
             }
           />
           <LinearGradient
-            colors={[THEME.colors.cardFadeTransparent, THEME.colors.cardFadeMid, THEME.colors.bgCard]}
+            colors={[colors.cardFadeTransparent, colors.cardFadeMid, colors.bgSurface]}
             locations={[0.15, 0.72, 1]}
             style={styles.backdropGradient}
           />
@@ -445,7 +460,7 @@ export function TitleDetailCard({
             <Animated.View
               style={[
                 styles.posterOverlap,
-                { backgroundColor: title.color, borderColor: THEME.colors.bgCard },
+                { backgroundColor: title.color, borderColor: colors.bgSurface },
                 posterAnimatedStyle,
               ]}>
               <TitleArtwork
@@ -453,7 +468,7 @@ export function TitleDetailCard({
                 variant="poster"
                 posterPath={title.tmdbPosterPath}
                 backdropPath={title.tmdbBackdropPath}
-                fallback={<MaterialIcons name={title.icon} size={30} color={THEME.colors.textOnNavy} />}
+                fallback={<MaterialIcons name={title.icon} size={30} color={colors.textOnNavy} />}
               />
             </Animated.View>
 
@@ -476,8 +491,8 @@ export function TitleDetailCard({
               style={[
                 styles.reasonPill,
                 {
-                  backgroundColor: withAlpha(accentColor, 0.1),
-                  borderColor: withAlpha(accentColor, 0.28),
+                  backgroundColor: withAlpha(accentColor, isDark ? 0.16 : 0.1),
+                  borderColor: withAlpha(accentColor, isDark ? 0.36 : 0.28),
                 },
               ]}>
               <View style={[styles.reasonDot, { backgroundColor: accentColor }]} />
@@ -496,7 +511,7 @@ export function TitleDetailCard({
               accessibilityRole="button"
               accessibilityLabel={`Nota do público ${title.imdbRating} de 10 no ${ratingSourceName}. Toque para entender.`}>
               <Animated.View style={[styles.ratingBadge, ratingAnimatedStyle]}>
-                <MaterialIcons name="star" size={16} color={THEME.colors.gold} />
+                <MaterialIcons name="star" size={16} color={colors.accentPrimary} />
                 <AppText peso="forte" tabular style={styles.ratingValue}>
                   {title.imdbRating}
                 </AppText>
@@ -534,7 +549,7 @@ export function TitleDetailCard({
                 onPress={handleOpenTrailer}
                 accessibilityRole="button"
                 accessibilityLabel="Ver trailer no YouTube">
-                <MaterialIcons name="play-circle-outline" size={17} color={THEME.colors.accentText} />
+                <MaterialIcons name="play-circle-outline" size={17} color={colors.savedActiveText} />
                 <AppText tipo="legenda" peso="forte" style={styles.trailerButtonText}>
                   Ver trailer
                 </AppText>
@@ -578,7 +593,7 @@ export function TitleDetailCard({
                   style={styles.tooltipCloseButton}
                   accessibilityRole="button"
                   accessibilityLabel="Fechar explicação das notas">
-                  <MaterialIcons name="close" size={16} color={THEME.colors.textSubtle} />
+                  <MaterialIcons name="close" size={16} color={colors.textSubtle} />
                 </Pressable>
               </View>
               <AppText tipo="legenda" style={styles.ratingTooltipText}>
@@ -654,11 +669,12 @@ export function TitleDetailCard({
                 setExpanded((prev) => !prev);
               }}
               collapsedLines={4}
-              fadeColor={THEME.colors.bgCard}
+              fadeColor={colors.bgSurface}
               textStyle={styles.synopsis}
               staticBottomSpacing={THEME.spacing.xxl}
               buttonStyle={styles.expandButton}
               buttonTextStyle={styles.expandButtonText}
+              chevronColor={colors.accentLink}
             />
           </View>
 
@@ -675,9 +691,10 @@ export function TitleDetailCard({
                       saved={saved}
                       itemKey={title.id}
                       size={22}
-                      color={THEME.colors.gold}
-                      inactiveColor={THEME.colors.navy}
-                      badgeBorderColor={THEME.colors.navy}
+                      color={colors.savedActiveIcon}
+                      inactiveColor={isDark ? colors.textPrimary : colors.navy}
+                      badgeColor={colors.accentPrimary}
+                      badgeBorderColor={isDark ? colors.savedActiveBg : colors.navy}
                     />
                   </Animated.View>
                 </Pressable>
@@ -710,10 +727,10 @@ export function TitleDetailCard({
                   </AppText>
                   {hasMultipleWatchOptions ? (
                     <Animated.View style={drawerChevronAnimatedStyle}>
-                      <MaterialIcons name="chevron-right" size={21} color={THEME.colors.navy} />
+                      <MaterialIcons name="chevron-right" size={21} color={colors.textOnAccent} />
                     </Animated.View>
                   ) : (
-                    <MaterialIcons name="open-in-new" size={18} color={THEME.colors.navy} />
+                    <MaterialIcons name="open-in-new" size={18} color={colors.textOnAccent} />
                   )}
                 </Pressable>
               </View>
@@ -755,7 +772,7 @@ export function TitleDetailCard({
                               </AppText>
                             )}
                           </View>
-                          <MaterialIcons name="open-in-new" size={18} color={THEME.colors.accentText} />
+                          <MaterialIcons name="open-in-new" size={18} color={colors.accentLink} />
                         </Pressable>
                       </Animated.View>
                     ))}
@@ -780,7 +797,7 @@ export function TitleDetailCard({
                     <MaterialIcons
                       name={markedWatched ? 'check-circle' : 'visibility'}
                       size={17}
-                      color={markedWatched ? THEME.colors.successText : THEME.colors.textPrimary}
+                      color={markedWatched ? colors.successText : colors.textPrimary}
                     />
                     <AppText
                       tipo="legenda"
@@ -799,7 +816,7 @@ export function TitleDetailCard({
                     accessibilityRole="button"
                     accessibilityLabel="Sortear outro título">
                     <Animated.View style={diceAnimatedStyle}>
-                      <MaterialIcons name="casino" size={18} color={THEME.colors.accentText} />
+                      <MaterialIcons name="casino" size={18} color={colors.savedActiveText} />
                     </Animated.View>
                     <AppText tipo="legenda" peso="forte" style={styles.redrawText}>
                       Sortear outro
@@ -815,421 +832,421 @@ export function TitleDetailCard({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   card: {
-    width: '100%',
-    maxHeight: '100%',
-    borderRadius: THEME.radius.card,
+    width: '100%' as const,
+    maxHeight: '100%' as const,
+    borderRadius: theme.radius.card,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    backgroundColor: THEME.colors.bgCard,
-    overflow: 'hidden',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
+    overflow: 'hidden' as const,
   },
   pressed: {
     opacity: 0.85,
     transform: [{ scale: 0.98 }],
   },
   confettiAnchor: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 90,
-    left: '50%',
+    left: '50%' as const,
     zIndex: 10,
   },
   confettiDot: {
-    position: 'absolute',
-    borderRadius: THEME.radius.xs,
+    position: 'absolute' as const,
+    borderRadius: theme.radius.xs,
   },
   backdropContainer: {
     height: 156,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   backdropFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   backdropGradient: {
     ...StyleSheet.absoluteFill,
   },
   closeButton: {
-    position: 'absolute',
-    top: THEME.spacing.md,
-    right: THEME.spacing.md,
+    position: 'absolute' as const,
+    top: theme.spacing.md,
+    right: theme.spacing.md,
     zIndex: 5,
-    width: THEME.touchTarget.min,
-    height: THEME.touchTarget.min,
-    borderRadius: THEME.radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME.colors.closeOverlay,
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radius.full,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.closeOverlay,
   },
   scrollView: {
     flexShrink: 1,
   },
   scrollContent: {
-    paddingBottom: THEME.spacing.s20,
+    paddingBottom: theme.spacing.s20,
   },
   bodyPadding: {
-    paddingHorizontal: THEME.spacing.s18,
+    paddingHorizontal: theme.spacing.s18,
   },
   headerOverlapRow: {
     zIndex: 2,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: THEME.spacing.xl,
-    marginTop: -(THEME.spacing.s32 + THEME.spacing.xxl),
-    marginBottom: THEME.spacing.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: theme.spacing.xl,
+    marginTop: -(theme.spacing.s32 + theme.spacing.xxl),
+    marginBottom: theme.spacing.lg,
   },
   posterOverlap: {
     width: 84,
     height: 122,
-    borderRadius: THEME.radius.md,
+    borderRadius: theme.radius.md,
     borderWidth: 2.5,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   headerCopy: {
     flex: 1,
-    paddingTop: THEME.spacing.s32 + THEME.spacing.s20,
+    paddingTop: theme.spacing.s32 + theme.spacing.s20,
   },
   eyebrow: {
     letterSpacing: 1.3,
-    marginBottom: THEME.spacing.xs,
+    marginBottom: theme.spacing.xs,
   },
   title: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.title,
-    lineHeight: THEME.lineHeights.title,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.title,
+    lineHeight: theme.lineHeights.title,
     letterSpacing: -0.4,
-    marginBottom: THEME.spacing.xs,
+    marginBottom: theme.spacing.xs,
   },
   meta: {
-    color: THEME.colors.textSecondary,
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodySm,
   },
   reasonPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.md,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.md,
-    borderRadius: THEME.radius.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    marginBottom: THEME.spacing.lg,
+    marginBottom: theme.spacing.lg,
   },
   reasonDot: {
-    width: THEME.spacing.md,
-    height: THEME.spacing.md,
-    borderRadius: THEME.radius.full,
+    width: theme.spacing.md,
+    height: theme.spacing.md,
+    borderRadius: theme.radius.full,
   },
   reasonText: {
     flex: 1,
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodySm,
   },
   ratingRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: THEME.spacing.md,
-    marginBottom: THEME.spacing.lg,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   ratingBadge: {
-    minHeight: THEME.touchTarget.min - THEME.spacing.xs,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.xs,
-    paddingHorizontal: THEME.spacing.base,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.navy,
+    minHeight: theme.touchTarget.min - theme.spacing.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.base,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.heroBg,
     borderWidth: 1.5,
   },
   ratingValue: {
-    color: THEME.colors.textOnNavy,
-    fontSize: THEME.fontSizes.body,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textOnNavy,
+    fontSize: theme.fontSizes.body,
+    lineHeight: theme.lineHeights.bodySm,
   },
   ratingSource: {
-    color: THEME.colors.gold,
-    fontSize: THEME.fontSizes.xs,
-    lineHeight: THEME.lineHeights.xs,
+    color: theme.colors.accentPrimary,
+    fontSize: theme.fontSizes.xs,
+    lineHeight: theme.lineHeights.xs,
     letterSpacing: 0.4,
   },
   metacriticBadge: {
-    minHeight: THEME.touchTarget.min - THEME.spacing.xs,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.xs,
-    paddingHorizontal: THEME.spacing.md,
-    borderRadius: THEME.radius.md,
+    minHeight: theme.touchTarget.min - theme.spacing.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radius.md,
   },
-  mcGreen: { backgroundColor: THEME.colors.mcGreen },
-  mcYellow: { backgroundColor: THEME.colors.mcYellow },
-  mcRed: { backgroundColor: THEME.colors.mcRed },
+  mcGreen: { backgroundColor: theme.colors.mcGreen },
+  mcYellow: { backgroundColor: theme.colors.mcYellow },
+  mcRed: { backgroundColor: theme.colors.mcRed },
   metacriticScore: {
-    color: THEME.colors.textOnNavy,
-    fontSize: THEME.fontSizes.body,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textOnNavy,
+    fontSize: theme.fontSizes.body,
+    lineHeight: theme.lineHeights.bodySm,
   },
   metacriticLabel: {
-    color: THEME.colors.textOnNavy,
-    fontSize: THEME.fontSizes.xs,
-    lineHeight: THEME.lineHeights.xs,
+    color: theme.colors.textOnNavy,
+    fontSize: theme.fontSizes.xs,
+    lineHeight: theme.lineHeights.xs,
   },
   trailerButton: {
-    minHeight: THEME.touchTarget.min,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.sm,
-    paddingHorizontal: THEME.spacing.lg,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.bgHighlight,
+    minHeight: theme.touchTarget.min,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.savedActiveBg,
     borderWidth: 1,
-    borderColor: THEME.colors.borderWarm,
+    borderColor: theme.colors.savedActiveBorder,
   },
   trailerButtonText: {
-    color: THEME.colors.accentText,
-    fontSize: THEME.fontSizes.bodySm,
+    color: theme.colors.savedActiveText,
+    fontSize: theme.fontSizes.bodySm,
   },
   providerLogosRight: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginLeft: 'auto' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   ratingTooltipSpacer: {
-    paddingBottom: THEME.spacing.lg,
+    paddingBottom: theme.spacing.lg,
   },
   ratingTooltip: {
-    borderRadius: THEME.radius.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    backgroundColor: THEME.colors.bgSubtle,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.base,
-    gap: THEME.spacing.xs,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.base,
+    gap: theme.spacing.xs,
   },
   ratingTooltipHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: THEME.spacing.xxs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: theme.spacing.xxs,
   },
   ratingTooltipTitle: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.caption,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.caption,
   },
   tooltipCloseButton: {
-    minWidth: THEME.touchTarget.min,
-    minHeight: THEME.touchTarget.min,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    minWidth: theme.touchTarget.min,
+    minHeight: theme.touchTarget.min,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'center' as const,
   },
   ratingTooltipText: {
-    color: THEME.colors.textSecondary,
-    fontSize: THEME.fontSizes.caption,
-    lineHeight: THEME.lineHeights.caption,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.caption,
+    lineHeight: theme.lineHeights.caption,
   },
   allProvidersSpacer: {
-    paddingBottom: THEME.spacing.lg,
+    paddingBottom: theme.spacing.lg,
   },
   allProvidersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
   },
   providerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.sm,
-    paddingHorizontal: THEME.spacing.md,
-    paddingVertical: THEME.spacing.xs,
-    borderRadius: THEME.radius.sm,
-    backgroundColor: THEME.colors.bgSubtle,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.bgSurfaceAlt,
   },
   providerPillText: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.sm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sm,
   },
   subscriptionBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.base,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.base,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.bgWarm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.base,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.base,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     borderWidth: 1,
-    borderColor: THEME.colors.borderWarm,
-    marginBottom: THEME.spacing.lg,
+    borderColor: theme.colors.borderSubtle,
+    marginBottom: theme.spacing.lg,
   },
   subscriptionBannerText: {
     flex: 1,
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodySm,
   },
   genres: {
-    color: THEME.colors.textWarm,
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodySm,
-    marginBottom: THEME.spacing.lg,
+    color: theme.colors.textWarm,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodySm,
+    marginBottom: theme.spacing.lg,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.sub,
-    lineHeight: THEME.lineHeights.sub,
-    marginBottom: THEME.spacing.sm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.sub,
+    lineHeight: theme.lineHeights.sub,
+    marginBottom: theme.spacing.sm,
   },
   synopsis: {
-    color: THEME.colors.textBody,
-    fontSize: THEME.fontSizes.body,
-    lineHeight: THEME.lineHeights.sub,
+    color: theme.colors.textStrongBody,
+    fontSize: theme.fontSizes.body,
+    lineHeight: theme.lineHeights.sub,
   },
   expandButton: {
-    minHeight: THEME.touchTarget.min,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.xs,
-    marginTop: THEME.spacing.xs,
-    marginBottom: THEME.spacing.md,
+    minHeight: theme.touchTarget.min,
+    alignSelf: 'flex-start' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
   },
   expandButtonText: {
-    color: THEME.colors.accentText,
-    fontSize: THEME.fontSizes.bodySm,
+    color: theme.colors.accentLink,
+    fontSize: theme.fontSizes.bodySm,
   },
   actionsBlock: {
-    gap: THEME.spacing.base,
-    paddingTop: THEME.spacing.xs,
+    gap: theme.spacing.base,
+    paddingTop: theme.spacing.xs,
   },
   primaryActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.base,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.base,
   },
   saveButton: {
-    width: THEME.touchTarget.button,
-    height: THEME.touchTarget.button,
-    borderRadius: THEME.radius.lg,
+    width: theme.touchTarget.button,
+    height: theme.touchTarget.button,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   primaryCta: {
     flex: 1,
-    minHeight: THEME.touchTarget.button,
-    borderRadius: THEME.radius.lg,
-    backgroundColor: THEME.colors.gold,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.md,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.sm,
+    minHeight: theme.touchTarget.button,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.accentPrimary,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
   },
   primaryCtaText: {
-    color: THEME.colors.navy,
-    fontSize: THEME.fontSizes.body,
+    color: theme.colors.textOnAccent,
+    fontSize: theme.fontSizes.body,
     flexShrink: 1,
   },
   primaryCtaMultiText: {
-    fontSize: THEME.fontSizes.bodyMd,
-    lineHeight: THEME.lineHeights.bodySm,
-    textAlign: 'center',
+    fontSize: theme.fontSizes.bodyMd,
+    lineHeight: theme.lineHeights.bodySm,
+    textAlign: 'center' as const,
   },
   streamingDrawerSpacer: {
-    paddingTop: THEME.spacing.base,
+    paddingTop: theme.spacing.base,
   },
   streamingDrawer: {
-    borderRadius: THEME.radius.lg,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.borderWarm,
-    backgroundColor: THEME.colors.bgSubtle,
-    padding: THEME.spacing.md,
-    gap: THEME.spacing.md,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
   },
   streamingDrawerLabel: {
-    color: THEME.colors.textWarm,
-    fontSize: THEME.fontSizes.caption,
-    paddingHorizontal: THEME.spacing.xs,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.caption,
+    paddingHorizontal: theme.spacing.xs,
   },
   streamingDrawerList: {
-    gap: THEME.spacing.sm,
+    gap: theme.spacing.sm,
   },
   streamingOptionRow: {
-    minHeight: THEME.touchTarget.min + THEME.spacing.xs,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.base,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.md,
-    borderRadius: THEME.radius.md,
+    minHeight: theme.touchTarget.min + theme.spacing.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.base,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    backgroundColor: THEME.colors.bgCard,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
   },
   streamingOptionCopy: {
     flex: 1,
   },
   streamingOptionName: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.bodyMd,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.bodyMd,
+    lineHeight: theme.lineHeights.bodySm,
   },
   streamingOptionMeta: {
-    color: THEME.colors.textMuted,
-    fontSize: THEME.fontSizes.caption,
-    lineHeight: THEME.lineHeights.caption,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.caption,
+    lineHeight: theme.lineHeights.caption,
   },
   secondaryActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.base,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.base,
   },
   secondaryActionButton: {
     flex: 1,
-    minHeight: THEME.touchTarget.min,
-    borderRadius: THEME.radius.md,
+    minHeight: theme.touchTarget.min,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderMedium,
-    backgroundColor: THEME.colors.bgSubtle,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.sm,
-    paddingHorizontal: THEME.spacing.lg,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
   },
   watchedConfirmedButton: {
-    backgroundColor: THEME.colors.bgSuccess,
-    borderColor: THEME.colors.borderSuccess,
+    backgroundColor: theme.colors.bgSuccess,
+    borderColor: theme.colors.borderSuccess,
   },
   secondaryActionText: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.bodySm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.bodySm,
   },
   watchedConfirmedText: {
-    color: THEME.colors.successText,
+    color: theme.colors.successText,
   },
   redrawButton: {
-    minHeight: THEME.touchTarget.min,
-    borderRadius: THEME.radius.md,
+    minHeight: theme.touchTarget.min,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderWarm,
-    backgroundColor: THEME.colors.bgHighlight,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.sm,
-    paddingHorizontal: THEME.spacing.xl,
+    borderColor: theme.colors.savedActiveBorder,
+    backgroundColor: theme.colors.savedActiveBg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xl,
   },
   redrawText: {
-    color: THEME.colors.accentText,
-    fontSize: THEME.fontSizes.bodySm,
+    color: theme.colors.savedActiveText,
+    fontSize: theme.fontSizes.bodySm,
   },
 });

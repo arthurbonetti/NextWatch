@@ -1,29 +1,74 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
+import { SpinningIcon } from '@/components/atoms/SpinningIcon';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
+import { Theme, ThemeMode } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useCatalog } from '@/hooks/useCatalog';
 import { useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
-import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
+import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCount } from '@/utils/format';
+import { triggerSelectionHaptic } from '@/utils/haptics';
 
 const PREVIEW_HISTORY_LIMIT = 3;
 
+type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
+
+const THEME_OPTIONS: { id: ThemeMode; label: string; icon: MaterialIconName }[] = [
+  { id: 'light', label: 'Claro', icon: 'light-mode' },
+  { id: 'dark', label: 'Escuro', icon: 'dark-mode' },
+  { id: 'system', label: 'Sistema', icon: 'brightness-auto' },
+];
+
 export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, themeMode, resolvedMode, setThemeMode } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user, token, signOut } = useAuth();
   const { subscriptions } = useSubscriptions();
   const { savedTitles, findSavedTitle, refreshMyList } = useMyList();
-  const { titles, status, errorMessage, findTitle, refreshCatalog } = useCatalog();
+  const { titles, status, isFetchingCatalog, errorMessage, findTitle, refreshCatalog } = useCatalog();
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  const isRefreshingCatalog = status === 'loading' || isFetchingCatalog || isManualRefreshing;
+
+  const handleRefreshCatalog = async () => {
+    if (isRefreshingCatalog) return;
+    setIsManualRefreshing(true);
+    const startedAt = Date.now();
+    try {
+      await refreshCatalog();
+    } finally {
+      const remaining = Math.max(0, 650 - (Date.now() - startedAt));
+      if (remaining === 0) {
+        setIsManualRefreshing(false);
+      } else {
+        refreshTimerRef.current = setTimeout(() => {
+          refreshTimerRef.current = null;
+          setIsManualRefreshing(false);
+        }, remaining);
+      }
+    }
+  };
   const { history, refreshDrawHistory } = useDrawHistory();
   const { progressTitleIds, refreshProgressIds } = useWatchedProgressIds(user?.id ?? null, token);
 
@@ -71,6 +116,12 @@ export default function ProfileTabScreen() {
     router.replace('/(auth)/login');
   };
 
+  const handleSelectTheme = (mode: ThemeMode) => {
+    if (mode === themeMode) return;
+    triggerSelectionHaptic();
+    setThemeMode(mode);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
@@ -114,21 +165,77 @@ export default function ProfileTabScreen() {
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             onPress={() => router.push('/my-list')}
             accessibilityRole="button">
-            <MaterialIcons name="bookmarks" size={22} color="#a3520d" />
+            <MaterialIcons name="bookmarks" size={22} color={colors.accentLink} />
             <AppText peso="forte" style={styles.rowText}>Minhas Listas</AppText>
             <AppText tipo="legenda" peso="forte" tabular style={styles.rowCount}>
               {myListsCount}
             </AppText>
-            <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
+            <MaterialIcons name="chevron-right" size={22} color={colors.textMuted} />
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             onPress={() => router.push('/subscriptions')}
             accessibilityRole="button">
-            <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
+            <MaterialIcons name="subscriptions" size={22} color={colors.accentLink} />
             <AppText peso="forte" style={styles.rowText}>Gerenciar assinaturas</AppText>
-            <MaterialIcons name="chevron-right" size={22} color="#7b7b78" />
+            <MaterialIcons name="chevron-right" size={22} color={colors.textMuted} />
           </Pressable>
+        </FadeInBlock>
+
+        <FadeInBlock delay={90}>
+          <View style={styles.appearanceCard}>
+            <View style={styles.appearanceHeader}>
+              <View style={styles.appearanceIconBox}>
+                <MaterialIcons
+                  name={resolvedMode === 'dark' ? 'dark-mode' : 'light-mode'}
+                  size={19}
+                  color={colors.accentLink}
+                />
+              </View>
+              <View style={styles.appearanceCopy}>
+                <AppText peso="forte" style={styles.appearanceTitle}>Aparência</AppText>
+                <AppText tipo="legenda" style={styles.muted}>
+                  {themeMode === 'system'
+                    ? `Seguindo o sistema (${resolvedMode === 'dark' ? 'Escuro' : 'Claro'})`
+                    : themeMode === 'dark'
+                      ? 'Tema escuro ativo'
+                      : 'Tema claro ativo'}
+                </AppText>
+              </View>
+            </View>
+
+            <View style={styles.themeSegmented} accessibilityRole="radiogroup" accessibilityLabel="Selecionar tema do aplicativo">
+              {THEME_OPTIONS.map((option) => {
+                const selected = themeMode === option.id;
+                return (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => handleSelectTheme(option.id)}
+                    style={({ pressed }) => [
+                      styles.themeOption,
+                      selected && styles.themeOptionActive,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected, selected }}
+                    accessibilityLabel={`Tema ${option.label}`}>
+                    <MaterialIcons
+                      name={option.icon}
+                      size={16}
+                      color={selected ? colors.chipSelectedIcon : colors.chipIcon}
+                    />
+                    <AppText
+                      tipo="legenda"
+                      peso="forte"
+                      numberOfLines={1}
+                      style={selected ? styles.themeOptionTextActive : styles.themeOptionText}>
+                      {option.label}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </FadeInBlock>
 
         <FadeInBlock delay={105}>
@@ -150,7 +257,7 @@ export default function ProfileTabScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ver todo o histórico de sorteios">
                   <AppText tipo="legenda" peso="forte" style={styles.seeAllText}>Ver tudo</AppText>
-                  <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
+                  <MaterialIcons name="chevron-right" size={18} color={colors.accentLink} />
                 </Pressable>
               )}
             </View>
@@ -206,11 +313,16 @@ export default function ProfileTabScreen() {
             </View>
             <Pressable
               style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}
-              onPress={() => { void refreshCatalog(); }}
-              disabled={status === 'loading'}
+              onPress={() => { void handleRefreshCatalog(); }}
+              disabled={isRefreshingCatalog}
               accessibilityRole="button"
               accessibilityLabel="Atualizar catálogo">
-              <MaterialIcons name="refresh" size={20} color={status === 'loading' ? '#aaa59b' : '#a3520d'} />
+              <SpinningIcon
+                name="refresh"
+                size={20}
+                color={colors.accentLink}
+                spinning={isRefreshingCatalog}
+              />
             </Pressable>
           </View>
 
@@ -221,10 +333,10 @@ export default function ProfileTabScreen() {
               onPress={() => { void handleSignOut(); }}
               accessibilityRole="button">
               <View style={styles.logoutIconBox}>
-                <MaterialIcons name="logout" size={20} color="#c0392b" />
+                <MaterialIcons name="logout" size={20} color={colors.dangerText} />
               </View>
               <AppText peso="forte" style={styles.logoutText}>Sair da conta</AppText>
-              <MaterialIcons name="chevron-right" size={22} color="#c0392b" />
+              <MaterialIcons name="chevron-right" size={22} color={colors.dangerText} />
             </Pressable>
           </View>
 
@@ -237,64 +349,128 @@ export default function ProfileTabScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 14 },
-  profileCard: { alignItems: 'center', backgroundColor: '#fffdf8', borderRadius: 22, borderWidth: 1, borderColor: '#e8e2d5', paddingVertical: 22, paddingHorizontal: 20, marginBottom: 22 },
-  avatar: { width: 74, height: 74, borderRadius: 37, backgroundColor: '#182230', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  avatarText: { color: '#f3b43f', fontSize: 28 },
-  name: { color: '#182230', fontSize: 22, lineHeight: 27, letterSpacing: -0.3, marginBottom: 3 },
-  muted: { color: '#5e5c57', fontSize: 13, lineHeight: 18 },
-  sectionTitle: { color: '#182230', fontSize: 18, lineHeight: 23, marginBottom: 12 },
-  stats: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, marginBottom: 20 },
-  stat: { flex: 1, alignItems: 'center' },
-  statDivider: { width: 1, height: 34, backgroundColor: '#e8e2d5' },
-  number: { color: '#182230', textAlign: 'center', fontSize: 18, lineHeight: 24, marginBottom: 2 },
-  currencyPrefix: { color: '#657078', fontSize: 12.5, lineHeight: 18 },
-  row: { minHeight: 58, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', borderRadius: 16, paddingHorizontal: 16, marginBottom: 10 },
-  rowText: { color: '#182230', flex: 1, fontSize: 15, lineHeight: 20, marginLeft: 12 },
-  rowCount: { color: '#8b5827', backgroundColor: '#f1e8d7', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, fontSize: 12, marginRight: 6 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 14 },
+  profileCard: { alignItems: 'center' as const, backgroundColor: theme.colors.bgSurface, borderRadius: 22, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingVertical: 22, paddingHorizontal: 20, marginBottom: 22 },
+  avatar: { width: 74, height: 74, borderRadius: 37, backgroundColor: theme.colors.avatarBg, borderWidth: 2, borderColor: theme.colors.avatarBorder, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: 12 },
+  avatarText: { color: theme.colors.avatarText, fontSize: 28 },
+  name: { color: theme.colors.textPrimary, fontSize: 22, lineHeight: 27, letterSpacing: -0.3, marginBottom: 3 },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  sectionTitle: { color: theme.colors.textPrimary, fontSize: 18, lineHeight: 23, marginBottom: 12 },
+  stats: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-around' as const, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8, marginBottom: 20 },
+  stat: { flex: 1, alignItems: 'center' as const },
+  statDivider: { width: 1, height: 34, backgroundColor: theme.colors.borderSubtle },
+  number: { color: theme.colors.textPrimary, textAlign: 'center' as const, fontSize: 18, lineHeight: 24, marginBottom: 2 },
+  currencyPrefix: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 18 },
+  row: { minHeight: 58, flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderRadius: 16, paddingHorizontal: 16, marginBottom: 10 },
+  rowText: { color: theme.colors.textPrimary, flex: 1, fontSize: 15, lineHeight: 20, marginLeft: 12 },
+  rowCount: { color: theme.colors.accentLink, backgroundColor: theme.colors.bgSurfaceAlt, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, fontSize: 12, marginRight: 6 },
+  appearanceCard: {
+    backgroundColor: theme.colors.bgSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 12,
+  },
+  appearanceHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+  },
+  appearanceIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  appearanceCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  appearanceTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  themeSegmented: {
+    flexDirection: 'row' as const,
+    gap: 6,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+  themeOption: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  themeOptionActive: {
+    backgroundColor: theme.colors.chipSelectedBg,
+  },
+  themeOptionText: {
+    color: theme.colors.chipText,
+    fontSize: 12.5,
+  },
+  themeOptionTextActive: {
+    color: theme.colors.chipSelectedText,
+    fontSize: 12.5,
+  },
   historySection: { marginTop: 14, marginBottom: 18 },
-  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  historyHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: 10, marginBottom: 12 },
   historyHeaderCopy: { flex: 1 },
-  historyTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  seeAllLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 6, paddingLeft: 8 },
-  seeAllText: { color: '#a3520d', fontSize: 14, lineHeight: 19 },
+  historyTitle: { color: theme.colors.textPrimary, fontSize: 18, lineHeight: 23 },
+  seeAllLinkBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2, paddingVertical: 6, paddingLeft: 8 },
+  seeAllText: { color: theme.colors.accentLink, fontSize: 14, lineHeight: 19 },
   historyList: { gap: 8 },
   catalogNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5dac3',
-    backgroundColor: '#f1e8d7',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     marginTop: 4,
   },
   catalogNoticeCopy: { flex: 1 },
-  catalogNoticeTitle: { color: '#8b5827', fontSize: 13.5, lineHeight: 18, marginBottom: 2 },
-  catalogNoticeText: { color: '#63594a', fontSize: 12.5, lineHeight: 17 },
+  catalogNoticeTitle: { color: theme.colors.textPrimary, fontSize: 13.5, lineHeight: 18, marginBottom: 2 },
+  catalogNoticeText: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
   refreshButton: {
     width: 44,
     height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     borderRadius: 12,
-    backgroundColor: '#fffdf8',
+    backgroundColor: theme.colors.bgSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
   accountDangerSection: { marginTop: 22 },
-  sectionDivider: { height: 1, backgroundColor: '#e8e2d5', marginBottom: 18 },
+  sectionDivider: { height: 1, backgroundColor: theme.colors.borderSubtle, marginBottom: 18 },
   logoutCard: {
     minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fffdf8',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: '#f1d6d3',
+    borderColor: theme.colors.dangerBorder,
     borderRadius: 16,
     paddingHorizontal: 14,
   },
@@ -302,10 +478,10 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: '#fdecea',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: theme.colors.dangerIconBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  logoutText: { color: '#c0392b', flex: 1, fontSize: 15, lineHeight: 20, marginLeft: 12 },
-  credits: { color: '#6b5943', fontSize: 12.5, lineHeight: 18, textAlign: 'center', marginTop: 22 },
+  logoutText: { color: theme.colors.dangerText, flex: 1, fontSize: 15, lineHeight: 20, marginLeft: 12 },
+  credits: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 18, textAlign: 'center' as const, marginTop: 22 },
 });

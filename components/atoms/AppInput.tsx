@@ -3,14 +3,15 @@ import { useState } from 'react';
 import {
   Pressable,
   StyleProp,
-  StyleSheet,
   TextInput,
   TextInputProps,
   TextStyle,
   View,
 } from 'react-native';
 
+import { Theme } from '@/constants/theme';
 import { FONT_FAMILIES } from '@/constants/typography';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 import { AppText } from './AppText';
 
@@ -29,6 +30,8 @@ export function AppInput({
   onBlur,
   ...props
 }: CampoProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [focused, setFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
 
@@ -50,8 +53,8 @@ export function AppInput({
         ]}
       >
         <TextInput
-          placeholderTextColor="#9a978f"
-          selectionColor="#d77c29"
+          placeholderTextColor={colors.textMuted}
+          selectionColor={colors.accentLink}
           secureTextEntry={isSecure && !passwordVisible}
           onFocus={(e) => {
             setFocused(true);
@@ -75,7 +78,7 @@ export function AppInput({
             <MaterialIcons
               name={passwordVisible ? 'visibility-off' : 'visibility'}
               size={20}
-              color={focused ? '#182230' : '#7b7b78'}
+              color={focused ? colors.textPrimary : colors.textMuted}
             />
           </Pressable>
         )}
@@ -90,23 +93,23 @@ export function AppInput({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   wrapper: {
     marginBottom: 16,
   },
   rotulo: {
-    color: '#182230',
+    color: theme.colors.textPrimary,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 7,
   },
   inputContainer: {
     minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: '#ded8cd',
-    backgroundColor: '#f7f5f0',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     borderRadius: 14,
     paddingHorizontal: 15,
   },
@@ -116,24 +119,24 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILIES.sans.regular,
     fontSize: 16,
     lineHeight: 22,
-    color: '#182230',
+    color: theme.colors.textPrimary,
   },
   eyeButton: {
     paddingLeft: 10,
     paddingVertical: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   inputFocado: {
-    borderColor: '#182230',
-    backgroundColor: '#fffdf8',
+    borderColor: theme.colors.borderFocused,
+    backgroundColor: theme.colors.bgSurface,
   },
   inputErro: {
-    borderColor: '#c0392b',
-    backgroundColor: '#fdecea',
+    borderColor: theme.colors.dangerText,
+    backgroundColor: theme.colors.dangerIconBg,
   },
   textoErro: {
-    color: '#c0392b',
+    color: theme.colors.dangerText,
     marginTop: 6,
   },
 });

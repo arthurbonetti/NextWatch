@@ -2,6 +2,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet } from 'react-native';
 
+import { useTheme } from '@/contexts/ThemeContext';
+
 type BookmarkIconProps = {
   saved: boolean;
   itemKey?: string;
@@ -19,11 +21,17 @@ export function BookmarkIcon({
   saved,
   itemKey,
   size = 22,
-  color = '#e58c34',
+  color,
   inactiveColor,
-  badgeColor = '#d77c29',
-  badgeBorderColor = '#fff2d8',
+  badgeColor,
+  badgeBorderColor,
 }: BookmarkIconProps) {
+  const { colors } = useTheme();
+  const resolvedColor = color ?? colors.savedActiveIcon;
+  const resolvedInactiveColor = inactiveColor ?? resolvedColor;
+  const resolvedBadgeColor = badgeColor ?? colors.accentPrimary;
+  const resolvedBadgeBorderColor = badgeBorderColor ?? colors.savedActiveBg;
+
   const [popScale] = useState(() => new Animated.Value(1));
   const [checkAnim] = useState(() => new Animated.Value(saved ? 1 : 0));
   const prevSavedRef = useRef(saved);
@@ -100,7 +108,7 @@ export function BookmarkIcon({
       <MaterialIcons
         name={saved ? 'bookmark' : 'bookmark-border'}
         size={size}
-        color={saved ? color : (inactiveColor ?? color)}
+        color={saved ? resolvedColor : resolvedInactiveColor}
       />
       <Animated.View
         style={[
@@ -110,8 +118,8 @@ export function BookmarkIcon({
             width: badgeSize,
             height: badgeSize,
             borderRadius: Math.ceil(badgeSize / 2),
-            backgroundColor: badgeColor,
-            borderColor: badgeBorderColor,
+            backgroundColor: resolvedBadgeColor,
+            borderColor: resolvedBadgeBorderColor,
             opacity: checkAnim,
             transform: [
               {
@@ -123,7 +131,7 @@ export function BookmarkIcon({
             ],
           },
         ]}>
-        <MaterialIcons name="check" size={checkIconSize} color="#fffdf8" />
+        <MaterialIcons name="check" size={checkIconSize} color={colors.textOnAccent} />
       </Animated.View>
     </Animated.View>
   );

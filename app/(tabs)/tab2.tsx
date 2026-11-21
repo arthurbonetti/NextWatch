@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View, type ViewToken } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, TextInput, View, type ViewToken } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
@@ -19,7 +19,9 @@ import {
   MediaTitle,
   rankTitlesBySearchRelevance,
 } from '@/constants/catalog';
+import { Theme } from '@/constants/theme';
 import { FONT_FAMILIES } from '@/constants/typography';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useCatalog, useCatalogSearch } from '@/hooks/useCatalog';
 import { useMyList } from '@/hooks/useMyList';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
@@ -39,6 +41,8 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 const COLLAPSED_GENRE_COUNT = 7;
 
 export default function ExploreScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { titles, status: catalogStatus, isFetchingCatalog, refreshCatalog } = useCatalog();
   const { isSaved, toggleSavedTitle, refreshMyList } = useMyList();
@@ -280,13 +284,13 @@ export default function ExploreScreen() {
             actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
             onAction={() => toggleSavedTitle(item)}
             actionButtonStyle={saved ? styles.savedButtonActive : undefined}
-            actionIconColor={saved ? '#e58c34' : '#657078'}
+            actionIconColor={saved ? colors.savedActiveIcon : colors.textSecondary}
             imagePriority={index === 0 ? 'high' : 'normal'}
           />
         </FadeInBlock>
       );
     },
-    [durationsById, isSaved, openTitle, toggleSavedTitle],
+    [colors.savedActiveIcon, colors.textSecondary, durationsById, isSaved, openTitle, styles.savedButtonActive, toggleSavedTitle],
   );
 
   return (
@@ -306,8 +310,9 @@ export default function ExploreScreen() {
           <RefreshControl
             refreshing={pullRefreshing}
             onRefresh={() => { void handlePullRefresh(); }}
-            tintColor="#a3520d"
-            colors={['#a3520d', '#f3b43f']}
+            tintColor={colors.accentLink}
+            colors={[colors.accentLink, colors.accentPrimary]}
+            progressBackgroundColor={colors.bgSurface}
           />
         }
         ListHeaderComponent={
@@ -320,22 +325,22 @@ export default function ExploreScreen() {
 
               <View style={styles.searchRow}>
                 <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
-                  <MaterialIcons name="search" size={21} color={searchFocused ? '#a3520d' : '#8b8a84'} />
+                  <MaterialIcons name="search" size={21} color={searchFocused ? colors.accentLink : colors.textMuted} />
                   <TextInput
                     value={search}
                     onChangeText={handleSearchChange}
                     onFocus={() => setSearchFocused(true)}
                     onBlur={() => setSearchFocused(false)}
                     placeholder="Buscar filme, série ou gênero"
-                    placeholderTextColor="#7a7973"
-                    selectionColor="#a3520d"
+                    placeholderTextColor={colors.textMuted}
+                    selectionColor={colors.accentLink}
                     style={styles.searchInput}
                     returnKeyType="search"
                     accessibilityLabel="Pesquisar títulos"
                   />
                   {search.length > 0 && (
                     <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
-                      <MaterialIcons name="close" size={18} color="#7a7973" />
+                      <MaterialIcons name="close" size={18} color={colors.textMuted} />
                     </Pressable>
                   )}
                 </View>
@@ -352,7 +357,7 @@ export default function ExploreScreen() {
                       ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
                       : 'Abrir filtros e ordenação'
                   }>
-                  <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? '#a3520d' : '#182230'} />
+                  <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? colors.savedActiveText : colors.textPrimary} />
                   {activeSheetFilterCount > 0 && (
                     <View style={styles.filterCount}>
                       <AppText peso="forte" tabular style={styles.filterCountText}>
@@ -395,7 +400,7 @@ export default function ExploreScreen() {
                       <AppText tipo="legenda" peso="forte" style={styles.activeFilterChipText}>
                         {chip.label}
                       </AppText>
-                      <MaterialIcons name="close" size={14} color="#a3520d" />
+                      <MaterialIcons name="close" size={14} color={colors.savedActiveText} />
                     </Pressable>
                   ))}
                   {activeFilterChips.length > 1 && (
@@ -440,6 +445,7 @@ export default function ExploreScreen() {
             {isInitialCatalogLoading ? (
               <EmptyStateCard
                 icon="autorenew"
+                spinIcon
                 title="Carregando catálogo…"
                 description="Buscando os primeiros títulos dos seus streamings ativos."
                 style={styles.emptyState}
@@ -648,79 +654,79 @@ export default function ExploreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
   container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
   header: { marginBottom: 16 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 5 },
-  title: { color: '#182230', fontSize: 25, lineHeight: 30 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, overflow: 'visible' },
-  searchBox: { flex: 1, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
-  searchBoxFocused: { borderColor: '#182230' },
-  searchInput: { flex: 1, color: '#182230', fontFamily: FONT_FAMILIES.sans.regular, fontSize: 16, lineHeight: 22, paddingVertical: 10 },
-  filterButton: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8', alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
-  filterButtonActive: { borderColor: '#a3520d', backgroundColor: '#fff2d8' },
-  filterCount: { position: 'absolute', top: -6, right: -6, zIndex: 2, minWidth: 21, height: 21, paddingHorizontal: 5, borderRadius: 10.5, borderWidth: 2, borderColor: '#f7f5f0', alignItems: 'center', justifyContent: 'center', backgroundColor: '#a3520d' },
-  filterCountText: { color: '#fffdf8', fontSize: 10.5, lineHeight: 13 },
-  quickFilters: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 12 },
-  quickChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fffdf8' },
-  quickChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  chipInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  quickText: { color: '#5e5c57', fontSize: 13 },
-  quickTextActive: { color: '#fffdf8', fontSize: 13 },
-  activeChipsRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 14 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 5 },
+  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30 },
+  searchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, marginBottom: 14, overflow: 'visible' as const },
+  searchBox: { flex: 1, minHeight: 50, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface },
+  searchBoxFocused: { borderColor: theme.colors.borderFocused },
+  searchInput: { flex: 1, color: theme.colors.textPrimary, fontFamily: FONT_FAMILIES.sans.regular, fontSize: 16, lineHeight: 22, paddingVertical: 10 },
+  filterButton: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface, alignItems: 'center' as const, justifyContent: 'center' as const, overflow: 'visible' as const },
+  filterButtonActive: { borderColor: theme.colors.savedActiveBorder, backgroundColor: theme.colors.savedActiveBg },
+  filterCount: { position: 'absolute' as const, top: -6, right: -6, zIndex: 2, minWidth: 21, height: 21, paddingHorizontal: 5, borderRadius: 10.5, borderWidth: 2, borderColor: theme.colors.bgPrimary, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: theme.colors.accentPrimary },
+  filterCountText: { color: theme.colors.textOnAccent, fontSize: 10.5, lineHeight: 13 },
+  quickFilters: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingBottom: 12 },
+  quickChip: { borderWidth: 1, borderColor: theme.colors.chipBorder, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: theme.colors.chipBg },
+  quickChipActive: { borderColor: theme.colors.chipSelectedBorder, backgroundColor: theme.colors.chipSelectedBg },
+  chipInner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
+  quickText: { color: theme.colors.chipText, fontSize: 13 },
+  quickTextActive: { color: theme.colors.chipSelectedText, fontSize: 13 },
+  activeChipsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 7, paddingBottom: 14 },
   activeFilterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 5,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e5dac3',
-    backgroundColor: '#f1e8d7',
+    borderColor: theme.colors.savedActiveBorder,
+    backgroundColor: theme.colors.savedActiveBg,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  activeFilterChipText: { color: '#182230', fontSize: 12.5 },
+  activeFilterChipText: { color: theme.colors.textPrimary, fontSize: 12.5 },
   clearAllChip: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e5dac3',
-    backgroundColor: '#fffdf8',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  clearAllChipText: { color: '#a3520d', fontSize: 12.5 },
-  sectionLabelRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 15, marginBottom: 8 },
-  filterLabel: { color: '#5e5c57', fontSize: 12, letterSpacing: 1, marginBottom: 8 },
+  clearAllChipText: { color: theme.colors.accentLink, fontSize: 12.5 },
+  sectionLabelRow: { flexDirection: 'row' as const, alignItems: 'baseline' as const, justifyContent: 'space-between' as const, marginTop: 15, marginBottom: 8 },
+  filterLabel: { color: theme.colors.textSecondary, fontSize: 12, letterSpacing: 1, marginBottom: 8 },
   secondFilterLabel: { marginTop: 15 },
-  sectionHint: { color: '#5e5c57', fontSize: 12 },
-  clearFilters: { color: '#a3520d', fontSize: 13 },
-  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: '#fffdf8' },
-  filterChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  filterChipText: { color: '#5e5c57', fontSize: 13 },
-  filterChipTextActive: { color: '#fffdf8', fontSize: 13 },
-  expandGenresChip: { borderWidth: 1, borderColor: '#e5dac3', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: '#f1e8d7' },
-  expandGenresText: { color: '#a3520d', fontSize: 13 },
-  resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 12 },
+  sectionHint: { color: theme.colors.textSecondary, fontSize: 12 },
+  clearFilters: { color: theme.colors.accentLink, fontSize: 13 },
+  filterChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 7 },
+  filterChip: { borderWidth: 1, borderColor: theme.colors.chipBorder, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: theme.colors.chipBg },
+  filterChipActive: { borderColor: theme.colors.chipSelectedBorder, backgroundColor: theme.colors.chipSelectedBg },
+  filterChipText: { color: theme.colors.chipText, fontSize: 13 },
+  filterChipTextActive: { color: theme.colors.chipSelectedText, fontSize: 13 },
+  expandGenresChip: { borderWidth: 1, borderColor: theme.colors.savedActiveBorder, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: theme.colors.savedActiveBg },
+  expandGenresText: { color: theme.colors.accentLink, fontSize: 13 },
+  resultsHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, gap: 10, marginTop: 4, marginBottom: 12 },
   resultsHeaderCopy: { flex: 1 },
-  resultsTitle: { color: '#182230', fontSize: 18, lineHeight: 23 },
-  resultsSubtitle: { color: '#5e5c57', fontSize: 13, lineHeight: 18, marginTop: 2 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  sheetEyebrow: { color: '#e58c34', letterSpacing: 1.3, marginBottom: 3 },
-  sheetTitle: { color: '#182230', fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
-  sheetHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  clearHeaderBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 12, backgroundColor: '#f1eee7' },
+  resultsTitle: { color: theme.colors.textPrimary, fontSize: 18, lineHeight: 23 },
+  resultsSubtitle: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
+  sheetHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: 14 },
+  sheetEyebrow: { color: theme.colors.accentLink, letterSpacing: 1.3, marginBottom: 3 },
+  sheetTitle: { color: theme.colors.textPrimary, fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
+  sheetHeaderActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
+  clearHeaderBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 12, backgroundColor: theme.colors.bgSurfaceAlt },
   sheetScroll: { flexShrink: 1, marginBottom: 14 },
   sheetScrollContent: { paddingBottom: 6 },
-  applyButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#f3b43f', alignItems: 'center', justifyContent: 'center' },
-  applyButtonDisabled: { backgroundColor: '#e8e2d5' },
-  applyButtonText: { color: '#182230', fontSize: 14.5 },
-  applyButtonTextDisabled: { color: '#5e5c57' },
-  secondaryResetButton: { minHeight: 40, marginTop: 8, alignItems: 'center', justifyContent: 'center' },
-  secondaryResetText: { color: '#a3520d', fontSize: 13.5 },
-  searchError: { color: '#c0392b', marginBottom: 8 },
-  savedButtonActive: { backgroundColor: '#fff2d8', borderWidth: 1, borderColor: '#e58c34' },
+  applyButton: { minHeight: 48, borderRadius: 14, backgroundColor: theme.colors.accentPrimary, alignItems: 'center' as const, justifyContent: 'center' as const },
+  applyButtonDisabled: { backgroundColor: theme.colors.bgSurfaceAlt },
+  applyButtonText: { color: theme.colors.textOnAccent, fontSize: 14.5 },
+  applyButtonTextDisabled: { color: theme.colors.textMuted },
+  secondaryResetButton: { minHeight: 40, marginTop: 8, alignItems: 'center' as const, justifyContent: 'center' as const },
+  secondaryResetText: { color: theme.colors.accentLink, fontSize: 13.5 },
+  searchError: { color: theme.colors.dangerText, marginBottom: 8 },
+  savedButtonActive: { backgroundColor: theme.colors.savedActiveBg, borderWidth: 1, borderColor: theme.colors.savedActiveBorder },
   emptyState: { marginTop: 10 },
 });

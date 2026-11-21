@@ -1,17 +1,21 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
+import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { isStrongPassword, isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } from '@/types/auth';
 
 export default function RegisterScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user, authReady, signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -93,7 +97,7 @@ export default function RegisterScreen() {
                     },
                   ],
                 }}>
-                <MaterialIcons name="arrow-back" size={18} color="#d77c29" />
+                <MaterialIcons name="arrow-back" size={18} color={colors.accentLink} />
               </Animated.View>
               <AppText tipo="legenda" peso="forte" style={styles.link}>Voltar para o login</AppText>
             </Pressable>
@@ -173,7 +177,7 @@ export default function RegisterScreen() {
               />
               {isLoading && (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#d77c29" />
+                  <ActivityIndicator size="small" color={colors.accentLink} />
                   <AppText tipo="legenda" style={styles.loadingText}>Preparando seu catálogo e painel…</AppText>
                 </View>
               )}
@@ -185,25 +189,25 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
   keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: 'center' },
-  container: { width: '100%', maxWidth: 460, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 24 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center' as const },
+  container: { width: '100%' as const, maxWidth: 460, alignSelf: 'center' as const, paddingHorizontal: 20, paddingVertical: 24 },
   pressed: { opacity: 0.84 },
-  backLink: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, marginBottom: 10 },
+  backLink: { alignSelf: 'flex-start' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingVertical: 8, marginBottom: 10 },
   card: {
-    backgroundColor: '#fffdf8',
+    backgroundColor: theme.colors.bgSurface,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#e8e2d5',
+    borderColor: theme.colors.borderSubtle,
     padding: 22,
   },
-  eyebrow: { color: '#e58c34', letterSpacing: 2.0, marginBottom: 6 },
-  title: { color: '#182230', fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
-  subtitle: { color: '#687078', fontSize: 15, lineHeight: 23, marginBottom: 18 },
-  submitButton: { backgroundColor: '#182230', borderRadius: 14, marginTop: 4 },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
-  loadingText: { color: '#5e5c57', fontSize: 13 },
-  link: { color: '#a3520d', fontSize: 14 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 2.0, marginBottom: 6 },
+  title: { color: theme.colors.textPrimary, fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
+  subtitle: { color: theme.colors.textSecondary, fontSize: 15, lineHeight: 23, marginBottom: 18 },
+  submitButton: { borderRadius: 14, marginTop: 4 },
+  loadingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 8, marginTop: 12 },
+  loadingText: { color: theme.colors.textSecondary, fontSize: 13 },
+  link: { color: theme.colors.accentLink, fontSize: 14 },
 });

@@ -8,6 +8,8 @@ import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, getTitleServices, MediaTitle } from '@/constants/catalog';
+import { Theme } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
@@ -31,9 +33,12 @@ export const MediaTitleCard = memo(function MediaTitleCard({
   actionLabel,
   onAction,
   actionButtonStyle,
-  actionIconColor = '#657078',
+  actionIconColor,
   imagePriority = 'normal',
 }: MediaTitleCardProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const resolvedActionIconColor = actionIconColor ?? colors.textSecondary;
   const displayDuration = duration || title.duration;
   const averageRating = formatAverageRating(title);
 
@@ -52,7 +57,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
             backdropPath={title.tmdbBackdropPath}
             priority={imagePriority}
             transition={imagePriority === 'high' ? 0 : 200}
-            fallback={<MaterialIcons name={title.icon} size={25} color="rgba(255,255,255,0.9)" />}
+            fallback={<MaterialIcons name={title.icon} size={25} color={colors.textOnNavy} />}
           />
         </Animated.View>
       </Pressable>
@@ -73,7 +78,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
           <ServiceLogoList services={getTitleServices(title)} size={20} maxVisible={3} gap={5} overflowGap={4} />
           {averageRating !== '—' && (
             <View style={styles.ratingBadge} accessibilityLabel={`Nota ${averageRating} de 10`}>
-              <MaterialIcons name="star" size={12} color="#f3b43f" />
+              <MaterialIcons name="star" size={12} color={colors.accentPrimary} />
               <AppText tipo="legenda" peso="forte" tabular style={styles.scoreMeta}>
                 {averageRating}
               </AppText>
@@ -92,59 +97,59 @@ export const MediaTitleCard = memo(function MediaTitleCard({
             saved={actionIcon === 'bookmark'}
             itemKey={title.id}
             size={18}
-            color={actionIconColor}
+            color={resolvedActionIconColor}
           />
         ) : (
-          <MaterialIcons name={actionIcon} size={18} color={actionIconColor} />
+          <MaterialIcons name={actionIcon} size={18} color={resolvedActionIconColor} />
         )}
       </Pressable>
     </View>
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
   resultCard: {
     minHeight: 110,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     padding: 10,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e8e2d5',
-    backgroundColor: '#fffdf8',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
     marginBottom: 10,
   },
   poster: {
     width: 72,
     height: 92,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 7,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   resultCopy: { flex: 1, paddingHorizontal: 12, paddingVertical: 4 },
-  resultTitle: { color: '#182230', fontSize: 14.5, lineHeight: 19, marginBottom: 3 },
-  resultMeta: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17 },
-  resultGenres: { color: '#6b5943', fontSize: 12.5, lineHeight: 17, marginTop: 2 },
-  serviceLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  resultTitle: { color: theme.colors.textPrimary, fontSize: 14.5, lineHeight: 19, marginBottom: 3 },
+  resultMeta: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
+  resultGenres: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 },
+  serviceLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8 },
   ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 3,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: '#182230',
+    backgroundColor: theme.colors.heroBg,
   },
-  scoreMeta: { color: '#fffdf8', fontSize: 11, lineHeight: 14 },
+  scoreMeta: { color: theme.colors.textOnNavy, fontSize: 11, lineHeight: 14 },
   actionButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1eee7',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.bgSurfaceAlt,
   },
 });

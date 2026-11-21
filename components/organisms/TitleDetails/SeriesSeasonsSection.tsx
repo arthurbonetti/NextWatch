@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -13,7 +13,8 @@ import Animated, {
 import { AppText } from '@/components/atoms/AppText';
 import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
-import { THEME, withAlpha } from '@/constants/theme';
+import { Theme, THEME, withAlpha } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import type { EpisodeSummary, SeasonSummary } from '@/types/media';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
@@ -65,6 +66,8 @@ function SeasonAccordion({
   onToggleEpisode,
   onToggleSeason,
 }: SeasonAccordionProps) {
+  const { colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
 
   const chevronRotation = useSharedValue(expanded ? 180 : 0);
@@ -116,7 +119,7 @@ function SeasonAccordion({
     <View
       style={[
         styles.seasonCard,
-        completed && { borderColor: withAlpha(THEME.colors.successText, 0.42) },
+        completed && { borderColor: withAlpha(colors.successText, 0.42) },
       ]}>
       <View style={styles.seasonHeader}>
         <Pressable
@@ -129,7 +132,7 @@ function SeasonAccordion({
           accessibilityState={{ expanded }}
           accessibilityLabel={`${seasonLabel}, ${season.episodeCount} episódios`}>
           <Animated.View style={chevronAnimatedStyle}>
-            <MaterialIcons name="expand-more" size={20} color={THEME.colors.textSecondary} />
+            <MaterialIcons name="expand-more" size={20} color={colors.textSecondary} />
           </Animated.View>
           <View style={styles.seasonInfo}>
             <View style={styles.seasonTitleRow}>
@@ -138,7 +141,7 @@ function SeasonAccordion({
               </AppText>
               {ratingText && (
                 <View style={styles.seasonRatingPill}>
-                  <MaterialIcons name="star" size={11} color={THEME.colors.gold} />
+                  <MaterialIcons name="star" size={11} color={colors.accentPrimary} />
                   <AppText tipo="legenda" peso="forte" style={styles.seasonRatingText}>
                     {ratingText}
                   </AppText>
@@ -159,7 +162,7 @@ function SeasonAccordion({
             completed
               ? styles.seasonMarkBtnDone
               : {
-                  backgroundColor: withAlpha(accentColor, 0.14),
+                  backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
                   borderColor: withAlpha(accentColor, 0.35),
                 },
             pressed && styles.pressed,
@@ -174,7 +177,7 @@ function SeasonAccordion({
           <MaterialIcons
             name={completed ? 'check-circle' : 'radio-button-unchecked'}
             size={15}
-            color={completed ? THEME.colors.successText : THEME.colors.textPrimary}
+            color={completed ? colors.successText : colors.textPrimary}
           />
           <AppText
             tipo="legenda"
@@ -211,7 +214,7 @@ function SeasonAccordion({
                   style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
                   accessibilityRole="button"
                   accessibilityLabel={`Tentar carregar episódios da ${seasonLabel} novamente`}>
-                  <MaterialIcons name="refresh" size={14} color={THEME.colors.accentText} />
+                  <MaterialIcons name="refresh" size={14} color={colors.savedActiveText} />
                   <AppText tipo="legenda" peso="forte" style={styles.retryButtonText}>
                     Tentar novamente
                   </AppText>
@@ -246,7 +249,7 @@ function SeasonAccordion({
                     <MaterialIcons
                       name={watched ? 'check-circle' : 'radio-button-unchecked'}
                       size={19}
-                      color={watched ? THEME.colors.successText : THEME.colors.textMuted}
+                      color={watched ? colors.successText : colors.textMuted}
                     />
                     <View style={styles.episodeTextCol}>
                       <AppText
@@ -328,6 +331,8 @@ export function SeriesSeasonsSection({
   onToggleEpisode,
   onToggleSeason,
 }: SeriesSeasonsSectionProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
 
   const totalEpisodes = useMemo(
@@ -375,7 +380,7 @@ export function SeriesSeasonsSection({
               styles.progressFill,
               {
                 backgroundColor:
-                  progressPercent === 100 ? THEME.colors.successText : accentColor,
+                  progressPercent === 100 ? colors.successText : accentColor,
               },
               barFillStyle,
             ]}
@@ -421,69 +426,69 @@ export function SeriesSeasonsSection({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   section: {
-    gap: THEME.spacing.sm,
+    gap: theme.spacing.sm,
   },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 16,
   },
   progressSummaryText: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 12.5,
   },
   progressCard: {
-    backgroundColor: THEME.colors.bgCard,
-    borderRadius: THEME.radius.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    padding: THEME.spacing.md,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.md,
     gap: 8,
   },
   progressTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: THEME.colors.bgSubtle,
-    overflow: 'hidden',
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    overflow: 'hidden' as const,
   },
   progressFill: {
-    height: '100%',
+    height: '100%' as const,
     borderRadius: 4,
   },
   progressHint: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
   },
   seasonsList: {
-    gap: THEME.spacing.sm,
+    gap: theme.spacing.sm,
   },
   seasonCard: {
-    backgroundColor: THEME.colors.bgCard,
-    borderRadius: THEME.radius.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    overflow: 'hidden',
+    borderColor: theme.colors.borderSubtle,
+    overflow: 'hidden' as const,
   },
   seasonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
     paddingVertical: 10,
-    paddingHorizontal: THEME.spacing.md,
+    paddingHorizontal: theme.spacing.md,
   },
   seasonToggleArea: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   seasonInfo: {
@@ -491,62 +496,62 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   seasonTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
   },
   seasonTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 14,
     flexShrink: 1,
   },
   seasonRatingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 3,
-    backgroundColor: THEME.colors.navy,
-    borderRadius: THEME.radius.sm,
+    backgroundColor: theme.colors.heroBg,
+    borderRadius: theme.radius.sm,
     paddingHorizontal: 6,
     paddingVertical: 1.5,
   },
   seasonRatingText: {
-    color: THEME.colors.textOnNavy,
+    color: theme.colors.textOnNavy,
     fontSize: 10.5,
   },
   seasonMeta: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 12,
   },
   seasonMarkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
-    borderRadius: THEME.radius.pill,
+    borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   seasonMarkBtnDone: {
-    backgroundColor: THEME.colors.bgSuccess,
-    borderColor: THEME.colors.borderSuccess,
+    backgroundColor: theme.colors.bgSuccess,
+    borderColor: theme.colors.borderSuccess,
   },
   seasonMarkText: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 12,
   },
   seasonMarkTextDone: {
-    color: THEME.colors.successText,
+    color: theme.colors.successText,
   },
   pressed: {
     opacity: 0.74,
   },
   episodesList: {
     borderTopWidth: 1,
-    borderTopColor: THEME.colors.borderLight,
-    paddingHorizontal: THEME.spacing.md,
-    paddingVertical: THEME.spacing.sm,
+    borderTopColor: theme.colors.borderSubtle,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     gap: 6,
-    backgroundColor: THEME.colors.bgSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
   },
   episodesItems: {
     gap: 6,
@@ -555,89 +560,91 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   episodesErrorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     gap: 10,
-    backgroundColor: THEME.colors.bgCard,
-    borderRadius: THEME.radius.sm,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   episodesErrorText: {
     flex: 1,
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 12,
   },
   retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: THEME.radius.pill,
-    backgroundColor: THEME.colors.bgHighlight,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.savedActiveBg,
     borderWidth: 1,
-    borderColor: THEME.colors.borderWarm,
+    borderColor: theme.colors.savedActiveBorder,
   },
   retryButtonText: {
-    color: THEME.colors.accentText,
+    color: theme.colors.savedActiveText,
     fontSize: 11.5,
   },
   episodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 10,
-    backgroundColor: THEME.colors.bgCard,
-    borderRadius: THEME.radius.sm,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   episodeRowWatched: {
-    backgroundColor: withAlpha(THEME.colors.bgSuccess, 0.55),
-    borderColor: THEME.colors.borderSuccess,
+    backgroundColor: theme.isDark
+      ? theme.colors.bgSuccess
+      : withAlpha(theme.colors.bgSuccess, 0.55),
+    borderColor: theme.colors.borderSuccess,
   },
   episodeTextCol: {
     flex: 1,
     gap: 1,
   },
   episodeName: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 13,
   },
   episodeNameWatched: {
-    color: THEME.colors.successText,
+    color: theme.colors.successText,
   },
   episodeSub: {
-    color: THEME.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
   },
   fallbackEpisodesWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 6,
   },
   fallbackEpisodePill: {
-    borderRadius: THEME.radius.sm,
+    borderRadius: theme.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    backgroundColor: THEME.colors.bgCard,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   fallbackEpisodePillWatched: {
-    backgroundColor: THEME.colors.bgSuccess,
-    borderColor: THEME.colors.borderSuccess,
+    backgroundColor: theme.colors.bgSuccess,
+    borderColor: theme.colors.borderSuccess,
   },
   fallbackEpisodeText: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 12,
   },
   fallbackEpisodeTextWatched: {
-    color: THEME.colors.successText,
+    color: theme.colors.successText,
   },
 });

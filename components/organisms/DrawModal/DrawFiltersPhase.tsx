@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -14,7 +14,8 @@ import { AnimatedFilterChip } from '@/components/organisms/DrawModal/AnimatedFil
 import { AnimatedRollingNumber } from '@/components/organisms/DrawModal/AnimatedRollingNumber';
 import { getGenreIcon, getKindIcon } from '@/constants/catalog';
 import { Subscription } from '@/constants/subscriptions';
-import { THEME } from '@/constants/theme';
+import { Theme, THEME } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { DrawFiltersState, DrawKindFilter } from '@/hooks/usePersistedDrawFilters';
 import { formatCount } from '@/utils/format';
 import { triggerSelectionHaptic } from '@/utils/haptics';
@@ -50,6 +51,9 @@ type ServiceTogglePillProps = {
 };
 
 function ServiceTogglePill({ provider, enabled, onPress }: ServiceTogglePillProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       onPress={() => {
@@ -69,7 +73,7 @@ function ServiceTogglePill({ provider, enabled, onPress }: ServiceTogglePillProp
         <MaterialIcons
           name={enabled ? 'check' : 'close'}
           size={10}
-          color={enabled ? THEME.colors.navy : THEME.colors.textOnNavy}
+          color={enabled ? colors.textOnAccent : colors.textOnNavy}
         />
       </View>
     </Pressable>
@@ -96,6 +100,8 @@ export function DrawFiltersPhase({
   onResetFilters,
   onDraw,
 }: DrawFiltersPhaseProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const ctaScale = useSharedValue(1);
 
@@ -183,7 +189,7 @@ export function DrawFiltersPhase({
             </View>
             {!hasEnabledService && (
               <View style={styles.warningBanner}>
-                <MaterialIcons name="warning-amber" size={16} color={THEME.colors.accentText} />
+                <MaterialIcons name="warning-amber" size={16} color={colors.accentLink} />
                 <AppText tipo="legenda" peso="semiforte" style={styles.warningText}>
                   Nenhum streaming selecionado. Toque em um logo acima para incluir no sorteio.
                 </AppText>
@@ -254,7 +260,7 @@ export function DrawFiltersPhase({
             style={({ pressed }) => [styles.watchedRow, pressed && styles.pressed]}>
             <View style={styles.watchedCopyRow}>
               <View style={styles.watchedIconWrap}>
-                <MaterialIcons name="visibility-off" size={18} color={THEME.colors.textWarm} />
+                <MaterialIcons name="visibility-off" size={18} color={colors.textSecondary} />
               </View>
               <View style={styles.watchedCopy}>
                 <AppText tipo="legenda" peso="forte" style={styles.watchedTitle}>
@@ -307,7 +313,7 @@ export function DrawFiltersPhase({
                   {eligibleCount === 1 ? ' título' : ' títulos'}
                 </AppText>
                 <View style={styles.ctaIconWrap}>
-                  <MaterialIcons name="auto-awesome" size={19} color={THEME.colors.navy} />
+                  <MaterialIcons name="auto-awesome" size={19} color={colors.textOnAccent} />
                 </View>
               </View>
             ) : (
@@ -322,7 +328,7 @@ export function DrawFiltersPhase({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   container: {
     flexShrink: 1,
   },
@@ -330,216 +336,216 @@ const styles = StyleSheet.create({
     opacity: 0.84,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: THEME.spacing.md,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.md,
   },
   headerCopy: {
     flex: 1,
   },
   eyebrow: {
-    color: THEME.colors.accent,
+    color: theme.colors.accentLink,
     letterSpacing: 1.3,
-    marginBottom: THEME.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   title: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.title,
-    lineHeight: THEME.lineHeights.title,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.title,
+    lineHeight: theme.lineHeights.title,
     letterSpacing: -0.35,
   },
   headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
   },
   resetButton: {
-    minHeight: THEME.touchTarget.min,
-    paddingHorizontal: THEME.spacing.lg,
-    borderRadius: THEME.radius.pill,
-    backgroundColor: THEME.colors.bgSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: theme.touchTarget.min,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   resetButtonText: {
-    color: THEME.colors.accentText,
-    fontSize: THEME.fontSizes.bodySm,
+    color: theme.colors.accentLink,
+    fontSize: theme.fontSizes.bodySm,
   },
   description: {
-    color: THEME.colors.textSecondary,
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodyMd,
-    marginTop: THEME.spacing.md,
-    marginBottom: THEME.spacing.lg,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodyMd,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   scrollArea: {
     flexShrink: 1,
   },
   scrollContent: {
-    paddingBottom: THEME.spacing.md,
-    gap: THEME.spacing.xxl,
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.xxl,
   },
   sectionBlock: {
-    gap: THEME.spacing.md,
+    gap: theme.spacing.md,
   },
   sectionLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   filterLabel: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     letterSpacing: 1,
   },
   sectionHint: {
-    color: THEME.colors.textMuted,
-    fontSize: THEME.fontSizes.caption,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.caption,
   },
   servicesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: THEME.spacing.base,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.base,
   },
   serviceToggle: {
-    minWidth: THEME.touchTarget.button,
-    minHeight: THEME.touchTarget.button,
-    padding: THEME.spacing.sm,
-    borderRadius: THEME.radius.lg,
+    minWidth: theme.touchTarget.button,
+    minHeight: theme.touchTarget.button,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radius.lg,
     borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   serviceToggleEnabled: {
-    borderColor: THEME.colors.navy,
-    backgroundColor: THEME.colors.bgHighlight,
+    borderColor: theme.isDark ? theme.colors.accentPrimary : theme.colors.navy,
+    backgroundColor: theme.colors.savedActiveBg,
     opacity: 1,
   },
   serviceToggleDisabled: {
-    borderColor: THEME.colors.borderMedium,
-    backgroundColor: THEME.colors.bgSubtle,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     opacity: 0.48,
   },
   serviceStatusDot: {
-    position: 'absolute',
-    bottom: -THEME.spacing.xs,
-    right: -THEME.spacing.xs,
-    width: THEME.spacing.s18,
-    height: THEME.spacing.s18,
-    borderRadius: THEME.radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute' as const,
+    bottom: -theme.spacing.xs,
+    right: -theme.spacing.xs,
+    width: theme.spacing.s18,
+    height: theme.spacing.s18,
+    borderRadius: theme.radius.full,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     borderWidth: 1.5,
-    borderColor: THEME.colors.bgCard,
+    borderColor: theme.colors.bgSurface,
   },
   serviceStatusOn: {
-    backgroundColor: THEME.colors.gold,
+    backgroundColor: theme.colors.accentPrimary,
   },
   serviceStatusOff: {
-    backgroundColor: THEME.colors.textMuted,
+    backgroundColor: theme.colors.textMuted,
   },
   warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.md,
-    paddingHorizontal: THEME.spacing.lg,
-    paddingVertical: THEME.spacing.base,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.bgWarning,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.base,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bgWarning,
     borderWidth: 1,
-    borderColor: THEME.colors.borderWarning,
+    borderColor: theme.colors.borderWarning,
   },
   warningText: {
     flex: 1,
-    color: THEME.colors.accentText,
-    fontSize: THEME.fontSizes.caption,
-    lineHeight: THEME.lineHeights.caption,
+    color: theme.colors.accentLink,
+    fontSize: theme.fontSizes.caption,
+    lineHeight: theme.lineHeights.caption,
   },
   chipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: THEME.spacing.md,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.md,
   },
   watchedSection: {
-    paddingTop: THEME.spacing.xxs,
+    paddingTop: theme.spacing.xxs,
   },
   watchedRow: {
-    minHeight: THEME.touchTarget.min + THEME.spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: THEME.spacing.lg,
-    paddingHorizontal: THEME.spacing.xl,
-    paddingVertical: THEME.spacing.base,
-    borderRadius: THEME.radius.lg,
+    minHeight: theme.touchTarget.min + theme.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.base,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    backgroundColor: THEME.colors.bgSubtle,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
   },
   watchedCopyRow: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: THEME.spacing.base,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.base,
   },
   watchedIconWrap: {
-    width: THEME.spacing.s32,
-    height: THEME.spacing.s32,
-    borderRadius: THEME.radius.sm,
-    backgroundColor: THEME.colors.bgCard,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: theme.spacing.s32,
+    height: theme.spacing.s32,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   watchedCopy: {
     flex: 1,
   },
   watchedTitle: {
-    color: THEME.colors.textPrimary,
-    fontSize: THEME.fontSizes.bodySm,
-    lineHeight: THEME.lineHeights.bodySm,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSizes.bodySm,
+    lineHeight: theme.lineHeights.bodySm,
   },
   watchedHint: {
-    color: THEME.colors.textMuted,
-    fontSize: THEME.fontSizes.caption,
-    lineHeight: THEME.lineHeights.caption,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.caption,
+    lineHeight: theme.lineHeights.caption,
   },
   footer: {
-    paddingTop: THEME.spacing.lg,
-    gap: THEME.spacing.md,
+    paddingTop: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   emptyNotice: {
-    color: THEME.colors.accentText,
-    fontSize: THEME.fontSizes.caption,
-    textAlign: 'center',
+    color: theme.colors.accentLink,
+    fontSize: theme.fontSizes.caption,
+    textAlign: 'center' as const,
   },
   ctaButton: {
-    minHeight: THEME.touchTarget.cta,
-    borderRadius: THEME.radius.lg,
-    backgroundColor: THEME.colors.gold,
-    paddingHorizontal: THEME.spacing.xxl,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: theme.touchTarget.cta,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.accentPrimary,
+    paddingHorizontal: theme.spacing.xxl,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   ctaDisabled: {
-    backgroundColor: THEME.colors.bgSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     borderWidth: 1,
-    borderColor: THEME.colors.borderMedium,
+    borderColor: theme.colors.borderSubtle,
   },
   ctaContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   ctaIconWrap: {
-    marginLeft: THEME.spacing.md,
+    marginLeft: theme.spacing.md,
   },
   ctaText: {
-    color: THEME.colors.navy,
-    fontSize: THEME.fontSizes.body,
-    lineHeight: THEME.lineHeights.body,
+    color: theme.colors.textOnAccent,
+    fontSize: theme.fontSizes.body,
+    lineHeight: theme.lineHeights.body,
   },
   ctaTextDisabled: {
-    color: THEME.colors.textMuted,
-    fontSize: THEME.fontSizes.bodyMd,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSizes.bodyMd,
   },
 });

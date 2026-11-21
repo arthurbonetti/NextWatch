@@ -5,7 +5,6 @@ import {
   LayoutChangeEvent,
   Pressable,
   StyleProp,
-  StyleSheet,
   TextStyle,
   View,
   ViewStyle,
@@ -22,8 +21,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
-import { THEME, withAlpha } from '@/constants/theme';
+import { Theme, withAlpha } from '@/constants/theme';
 import { TextRole, TextWeight } from '@/constants/typography';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 const OPEN_EASING = Easing.bezier(0.22, 1, 0.36, 1);
 const CLOSE_EASING = Easing.bezier(0.4, 0, 0.2, 1);
@@ -89,6 +89,7 @@ function ExpandableBody({
   chevronColor,
   chevronSize,
 }: ExpandableBodyProps) {
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const prevExpandedRef = useRef(expanded);
 
@@ -230,9 +231,13 @@ export function ExpandableText({
   collapseAccessibilityLabel,
   buttonStyle,
   buttonTextStyle,
-  chevronColor = THEME.colors.accentText,
+  chevronColor,
   chevronSize = 18,
 }: ExpandableTextProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const resolvedChevronColor = chevronColor ?? colors.accentLink;
+
   const measureKey = `${collapsedLines}:${text}`;
   const [measured, setMeasured] = useState({ key: measureKey, collapsed: 0, full: 0 });
 
@@ -318,7 +323,7 @@ export function ExpandableText({
           collapseAccessibilityLabel={collapseAccessibilityLabel}
           buttonStyle={buttonStyle}
           buttonTextStyle={buttonTextStyle}
-          chevronColor={chevronColor}
+          chevronColor={resolvedChevronColor}
           chevronSize={chevronSize}
         />
       ) : (
@@ -340,37 +345,37 @@ export function ExpandableText({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   root: {
-    position: 'relative',
+    position: 'relative' as const,
   },
   measurerAnchor: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
     height: 0,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     opacity: 0,
   },
   measurerLayer: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
   },
   clipBox: {
-    position: 'relative',
-    overflow: 'hidden',
+    position: 'relative' as const,
+    overflow: 'hidden' as const,
   },
   revealVeil: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
   },
   bottomFadeWrap: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
@@ -380,14 +385,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expandButton: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignSelf: 'flex-start' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 3,
     paddingVertical: 4,
   },
   expandButtonText: {
-    color: THEME.colors.accentText,
+    color: theme.colors.accentLink,
     fontSize: 13.5,
   },
   pressed: {

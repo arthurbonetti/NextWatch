@@ -1,15 +1,19 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, Tabs } from 'expo-router';
 import { ComponentProps, useEffect, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type FloatingTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 function FloatingTabBar({ state, descriptors, navigation, insets }: FloatingTabBarProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: FloatingTabB
           const focused = state.index === index;
           const { options } = descriptors[route.key];
           const label = typeof options.tabBarLabel === 'string' ? options.tabBarLabel : (options.title ?? route.name);
-          const color = focused ? '#f3b43f' : '#a9b1b8';
+          const color = focused ? colors.tabBarActiveTint : colors.tabBarInactiveTint;
 
           const onPress = () => {
             const event = navigation.emit({
@@ -85,6 +89,7 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: FloatingTabB
 
 export default function TabLayout() {
   const { user, authReady } = useAuth();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   if (!authReady) return null;
@@ -93,7 +98,10 @@ export default function TabLayout() {
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} insets={insets} />}
-      screenOptions={{ headerShown: false }}>
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: colors.bgPrimary },
+      }}>
       <Tabs.Screen
         name="index"
         options={{
@@ -119,40 +127,47 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   wrapper: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     paddingHorizontal: 14,
   },
   dock: {
-    width: '100%',
+    width: '100%' as const,
     maxWidth: 400,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     padding: 6,
     borderRadius: 28,
-    backgroundColor: '#182230',
+    backgroundColor: theme.colors.tabBarBg,
     borderWidth: 1,
-    borderColor: '#263442',
-    boxShadow: '0px 10px 24px rgba(24, 34, 48, 0.24)',
+    borderColor: theme.colors.tabBarBorder,
+    shadowColor: theme.isDark ? theme.colors.bgPrimary : theme.colors.heroBg,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: theme.isDark ? 0.36 : 0.2,
+    shadowRadius: 18,
+    boxShadow: `0px 10px 24px ${theme.colors.tabBarShadow}`,
     elevation: 10,
   },
   item: {
     flex: 1,
     minHeight: 52,
     borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.transparent,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 2,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   itemActive: {
-    backgroundColor: 'rgba(243, 180, 63, 0.15)',
+    backgroundColor: theme.colors.tabBarActiveBg,
+    borderColor: theme.colors.tabBarActiveBorder,
   },
   itemPressed: {
     opacity: 0.85,
@@ -162,6 +177,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     letterSpacing: 0.2,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
 });

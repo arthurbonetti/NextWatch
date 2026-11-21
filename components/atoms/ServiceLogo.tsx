@@ -1,9 +1,11 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AppText } from './AppText';
 import { SUBSCRIPTION_PROVIDERS } from '@/constants/subscriptions';
+import { Theme } from '@/constants/theme';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 import { getDynamicProviderLogo, tmdbImageUri } from '@/utils/tmdbImage';
 
 type ServiceLogoProps = {
@@ -24,6 +26,7 @@ type ServiceLogoListProps = {
 
 // Logo do streaming (TMDB); para um serviço sem logo cadastrada, mostra a inicial sobre a cor da marca.
 export function ServiceLogo({ name, size }: ServiceLogoProps) {
+  const styles = useThemedStyles(createStyles);
   const [failedLogoPath, setFailedLogoPath] = useState<string | null>(null);
   const provider = SUBSCRIPTION_PROVIDERS.find((item) => item.name === name);
   const box = { width: size, height: size, borderRadius: Math.round(size * 0.29) };
@@ -63,6 +66,7 @@ export function ServiceLogoList({
   overflowExpanded = false,
   onPressOverflow,
 }: ServiceLogoListProps) {
+  const styles = useThemedStyles(createStyles);
   const hasOverflow = services.length > maxVisible;
   const visibleServices = hasOverflow ? services.slice(0, maxVisible) : services;
   const extraCount = services.length - visibleServices.length;
@@ -115,17 +119,17 @@ export function ServiceLogoList({
   );
 }
 
-const styles = StyleSheet.create({
-  fallback: { alignItems: 'center', justifyContent: 'center' },
-  symbol: { color: '#fff' },
-  list: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
+const createStyles = (theme: Theme) => ({
+  fallback: { alignItems: 'center' as const, justifyContent: 'center' as const },
+  symbol: { color: '#FFFFFF' },
+  list: { flexDirection: 'row' as const, alignItems: 'center' as const, flexShrink: 1 },
   moreBadge: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1e8d7',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     borderWidth: 1,
-    borderColor: '#d8ccb9',
+    borderColor: theme.colors.borderSubtle,
   },
   moreBadgePressed: { opacity: 0.8, transform: [{ scale: 0.92 }] },
-  moreText: { color: '#182230' },
+  moreText: { color: theme.colors.textPrimary },
 });

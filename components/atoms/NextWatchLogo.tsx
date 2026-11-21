@@ -1,5 +1,8 @@
 import { Image } from 'expo-image';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
+
+import { Theme } from '@/constants/theme';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 
 const LOGO_SOURCE = require('@/assets/images/nextwatch-logo.png');
 
@@ -8,6 +11,7 @@ type NextWatchLogoProps = {
 };
 
 export function NextWatchLogo({ size = 38 }: NextWatchLogoProps) {
+  const styles = useThemedStyles(createStyles);
   const radius = Math.round(size * 0.28);
 
   return (
@@ -26,15 +30,15 @@ export function NextWatchLogo({ size = 38 }: NextWatchLogoProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   frame: {
-    overflow: 'hidden',
-    backgroundColor: '#182230',
+    overflow: 'hidden' as const,
+    backgroundColor: theme.colors.heroBg,
     borderWidth: 1,
-    borderColor: '#263442',
+    borderColor: theme.colors.heroBorder,
   },
   image: {
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
   },
 });

@@ -2,9 +2,11 @@ import {
   Pressable,
   PressableProps,
   StyleProp,
-  StyleSheet,
   ViewStyle,
 } from 'react-native';
+
+import { Theme } from '@/constants/theme';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 
 import { AppText } from './AppText';
 
@@ -19,6 +21,8 @@ export function AppButton({
   disabled,
   ...props
 }: BotaoProps) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -38,17 +42,17 @@ export function AppButton({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   base: {
     borderRadius: 14,
     minHeight: 50,
     paddingHorizontal: 20,
     paddingVertical: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#182230',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.primaryButtonBg,
     borderWidth: 1,
-    borderColor: '#182230',
+    borderColor: theme.colors.primaryButtonBg,
   },
   pressionado: {
     opacity: 0.88,
@@ -61,6 +65,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.1,
-    color: '#fffdf8',
+    color: theme.colors.primaryButtonText,
   },
 });

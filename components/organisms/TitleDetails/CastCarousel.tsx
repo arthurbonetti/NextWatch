@@ -1,9 +1,10 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
-import { THEME } from '@/constants/theme';
+import { Theme } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { type CastMember } from '@/types/media';
 import { tmdbImageUri } from '@/utils/tmdbImage';
 
@@ -12,6 +13,9 @@ type CastCarouselProps = {
 };
 
 export function CastCarousel({ cast }: CastCarouselProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   if (cast.length === 0) {
     return null;
   }
@@ -41,7 +45,7 @@ export function CastCarousel({ cast }: CastCarouselProps) {
                     accessibilityLabel={member.name}
                   />
                 ) : (
-                  <MaterialIcons name="person" size={28} color={THEME.colors.textMuted} />
+                  <MaterialIcons name="person" size={28} color={colors.textMuted} />
                 )}
               </View>
               <AppText tipo="legenda" peso="forte" style={styles.actorName} numberOfLines={2}>
@@ -60,49 +64,49 @@ export function CastCarousel({ cast }: CastCarouselProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   section: {
-    gap: THEME.spacing.sm,
+    gap: theme.spacing.sm,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 16,
   },
   scrollContent: {
-    gap: THEME.spacing.md,
-    paddingRight: THEME.spacing.lg,
+    gap: theme.spacing.md,
+    paddingRight: theme.spacing.lg,
   },
   card: {
     width: 88,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     gap: 4,
   },
   avatarCircle: {
     width: 74,
     height: 74,
     borderRadius: 37,
-    backgroundColor: THEME.colors.bgSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    borderColor: theme.colors.borderSubtle,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
     marginBottom: 2,
   },
   avatarImage: {
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
   },
   actorName: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 12,
     lineHeight: 15,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   characterName: {
-    color: THEME.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     lineHeight: 14,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
 });

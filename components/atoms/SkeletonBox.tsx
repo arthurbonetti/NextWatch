@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { THEME } from '@/constants/theme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type SkeletonBoxProps = {
   width?: number | `${number}%`;
@@ -25,6 +26,9 @@ export function SkeletonBox({
   borderRadius = THEME.radius.sm,
   style,
 }: SkeletonBoxProps) {
+  const { colors } = useTheme();
+  const baseColor = colors.skeletonBase;
+  const highlightColor = colors.skeletonHighlight;
   const reducedMotion = useReducedMotion();
   const pulse = useSharedValue(0);
 
@@ -46,9 +50,9 @@ export function SkeletonBox({
     backgroundColor: interpolateColor(
       pulse.get(),
       [0, 1],
-      [THEME.colors.skeletonBase, THEME.colors.skeletonHighlight],
+      [baseColor, highlightColor],
     ),
-  }));
+  }), [baseColor, highlightColor]);
 
   return (
     <Animated.View

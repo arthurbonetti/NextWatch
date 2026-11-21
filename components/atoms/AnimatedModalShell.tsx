@@ -25,7 +25,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { ModalPortal } from '@/components/atoms/ModalPortal';
-import { THEME } from '@/constants/theme';
+import { Theme, THEME, withAlpha } from '@/constants/theme';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 
 const SHEET_ENTER_OFFSET = 72;
 const CENTER_ENTER_OFFSET = 14;
@@ -120,6 +121,7 @@ export function AnimatedModalShell({
   sheetStyle,
   contentContainerStyle,
 }: AnimatedModalShellProps) {
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -514,7 +516,7 @@ export function AnimatedModalShell({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   root: {
     flex: 1,
   },
@@ -522,53 +524,55 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
   },
   backdropScrim: {
-    backgroundColor: THEME.colors.backdropOverlay,
+    backgroundColor: theme.colors.backdropOverlay,
   },
   backdropScrimSolid: {
-    backgroundColor: 'rgba(18, 26, 38, 0.66)',
+    backgroundColor: theme.isDark
+      ? theme.colors.backdropDark
+      : withAlpha(theme.colors.navy, 0.68),
   },
   stage: {
     flex: 1,
   },
   stageBottom: {
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
   },
   stageCenter: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: THEME.spacing.xxl,
-    paddingVertical: THEME.spacing.s20,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: theme.spacing.xxl,
+    paddingVertical: theme.spacing.s20,
   },
   layoutWrapper: {
-    width: '100%',
-    alignSelf: 'center',
+    width: '100%' as const,
+    alignSelf: 'center' as const,
     flexShrink: 1,
   },
   sheetContainer: {
-    width: '100%',
-    alignSelf: 'center',
-    backgroundColor: THEME.colors.bgCard,
-    borderTopLeftRadius: THEME.radius.sheet,
-    borderTopRightRadius: THEME.radius.sheet,
+    width: '100%' as const,
+    alignSelf: 'center' as const,
+    backgroundColor: theme.colors.bgSurface,
+    borderTopLeftRadius: theme.radius.sheet,
+    borderTopRightRadius: theme.radius.sheet,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: THEME.colors.borderLight,
-    paddingHorizontal: THEME.spacing.s22,
-    overflow: 'hidden',
+    borderColor: theme.colors.borderSubtle,
+    paddingHorizontal: theme.spacing.s22,
+    overflow: 'hidden' as const,
   },
   centerContainer: {
-    width: '100%',
+    width: '100%' as const,
   },
   dragZone: {
-    paddingTop: THEME.spacing.lg,
-    paddingBottom: THEME.spacing.base,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.base,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   sheetHandle: {
     width: 42,
     height: 4,
-    borderRadius: THEME.radius.full,
-    backgroundColor: THEME.colors.handle,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.handle,
   },
 });

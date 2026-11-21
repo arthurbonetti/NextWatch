@@ -1,13 +1,14 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
+import { SpinningIcon } from '@/components/atoms/SpinningIcon';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { DrawFlowModal } from '@/components/organisms/DrawModal/DrawFlowModal';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
@@ -16,7 +17,9 @@ import {
   getTitleServices,
   MediaTitle,
 } from '@/constants/catalog';
+import { Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useRouletteFlow } from '@/hooks/useRouletteFlow';
 import {
   fetchTitleDuration,
@@ -28,6 +31,8 @@ import { formatCount, formatCurrency } from '@/utils/format';
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { drawGenre, drawKind, autoSpin, drawNonce } = useLocalSearchParams<{
     drawGenre?: string;
@@ -123,7 +128,7 @@ export default function HomeScreen() {
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Abrir Minhas Listas">
-                <MaterialIcons name="bookmark-border" size={28} color="#a3520d" />
+                <MaterialIcons name="bookmark-border" size={28} color={colors.accentLink} />
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
@@ -162,7 +167,7 @@ export default function HomeScreen() {
           </View>
           {isFetchingCatalog && availableTitles.length > 0 && (
             <View style={styles.syncNotice}>
-              <MaterialIcons name="autorenew" size={14} color="#d77c29" />
+              <SpinningIcon name="autorenew" size={14} color={colors.accentLink} />
               <AppText tipo="legenda" peso="medio" style={styles.syncNoticeText}>
                 Carregando mais títulos do catálogo…
               </AppText>
@@ -175,7 +180,7 @@ export default function HomeScreen() {
             <View style={styles.heroGlow} />
             <View style={styles.heroCopy}>
               <View style={styles.pill}>
-                <MaterialIcons name="casino" size={14} color="#f3b43f" />
+                <MaterialIcons name="casino" size={14} color={colors.accentPrimary} />
                 <AppText tipo="legenda" peso="forte" style={styles.pillText}>ROLETA DE CURADORIA</AppText>
               </View>
               <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.heroTitle}>Escolha o que assistir em segundos</AppText>
@@ -196,7 +201,7 @@ export default function HomeScreen() {
                 disabled={!storageReady || availableTitles.length === 0}
                 accessibilityRole="button">
                 <AppText peso="forte" style={styles.drawButtonText}>{isInitialCatalogLoading ? 'Carregando catálogo…' : 'Sortear título'}</AppText>
-                <MaterialIcons name="arrow-forward" size={18} color="#182230" />
+                <MaterialIcons name="arrow-forward" size={18} color={colors.textOnAccent} />
               </Pressable>
             </View>
             {featuredSample && (
@@ -215,7 +220,7 @@ export default function HomeScreen() {
                     transition={0}
                   />
                   <View style={styles.heroPosterBadge}>
-                    <MaterialIcons name="star" size={11} color="#f3b43f" />
+                    <MaterialIcons name="star" size={11} color={colors.accentPrimary} />
                     <AppText tipo="legenda" peso="forte" tabular style={styles.heroPosterBadgeText}>
                       {formatAverageRating(featuredSample)}
                     </AppText>
@@ -237,7 +242,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/subscriptions')}
               accessibilityRole="button">
               <AppText tipo="legenda" peso="forte" style={styles.link}>Gerenciar</AppText>
-              <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
+              <MaterialIcons name="chevron-right" size={18} color={colors.accentLink} />
             </Pressable>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serviceList}>
@@ -259,7 +264,7 @@ export default function HomeScreen() {
                 style={({ pressed }) => [styles.emptyServiceCard, pressed && styles.pressed]}
                 onPress={() => router.push('/subscriptions')}
                 accessibilityRole="button">
-                <MaterialIcons name="add-circle-outline" size={20} color="#a3520d" />
+                <MaterialIcons name="add-circle-outline" size={20} color={colors.accentLink} />
                 <AppText tipo="legenda" peso="forte" style={styles.link}>Ativar primeiro streaming</AppText>
               </Pressable>
             )}
@@ -277,7 +282,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/(tabs)/tab2')}
               accessibilityRole="button">
               <AppText tipo="legenda" peso="forte" style={styles.link}>Explorar catálogo</AppText>
-              <MaterialIcons name="chevron-right" size={18} color="#a3520d" />
+              <MaterialIcons name="chevron-right" size={18} color={colors.accentLink} />
             </Pressable>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.titleList}>
@@ -305,7 +310,7 @@ export default function HomeScreen() {
                       priority={index < 2 ? 'high' : 'normal'}
                       transition={index < 2 ? 0 : 200}
                     />
-                    {!hasArtwork && <MaterialIcons name={title.icon} size={34} color="rgba(255,255,255,0.9)" />}
+                    {!hasArtwork && <MaterialIcons name={title.icon} size={34} color={colors.textOnNavy} />}
                     {badgeServices.length > 0 && (
                       <View style={styles.posterServicesCorner}>
                         <ServiceLogoList
@@ -319,7 +324,7 @@ export default function HomeScreen() {
                       </View>
                     )}
                     <View style={[styles.posterRating, hasArtwork && styles.posterRatingCorner]}>
-                      <MaterialIcons name="star" size={12} color="#f3b43f" />
+                      <MaterialIcons name="star" size={12} color={colors.accentPrimary} />
                       <AppText tipo="legenda" peso="forte" tabular style={styles.posterRatingText}>{formatAverageRating(title)}</AppText>
                     </View>
                     {!hasArtwork && <AppText tipo="legenda" peso="forte" style={styles.posterLabel}>{title.title.toUpperCase()}</AppText>}
@@ -332,7 +337,7 @@ export default function HomeScreen() {
             {availableTitles.length === 0 && (
               isInitialCatalogLoading ? (
                 <View style={styles.emptyTitlesCard}>
-                  <MaterialIcons name="autorenew" size={22} color="#a3520d" />
+                  <SpinningIcon name="autorenew" size={22} color={colors.accentLink} />
                   <AppText tipo="legenda" peso="forte" style={styles.link}>
                     Carregando títulos dos seus streamings…
                   </AppText>
@@ -342,7 +347,7 @@ export default function HomeScreen() {
                   style={({ pressed }) => [styles.emptyTitlesCard, pressed && styles.pressed]}
                   onPress={() => router.push('/subscriptions')}
                   accessibilityRole="button">
-                  <MaterialIcons name="subscriptions" size={22} color="#a3520d" />
+                  <MaterialIcons name="subscriptions" size={22} color={colors.accentLink} />
                   <AppText tipo="legenda" peso="forte" style={styles.link}>Adicione uma assinatura para ver os títulos</AppText>
                 </Pressable>
               )
@@ -402,59 +407,59 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
-  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  brandTitle: { color: '#182230', fontSize: 17, lineHeight: 22, letterSpacing: 2.1 },
-  topbarActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  listsButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#182230', borderWidth: 2, borderColor: '#e8e2d5' },
-  avatarText: { color: '#f3b43f', fontSize: 17 },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
+  topbar: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 18 },
+  brandRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 11 },
+  brandTitle: { color: theme.colors.textPrimary, fontSize: 17, lineHeight: 22, letterSpacing: 2.1 },
+  topbarActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
+  listsButton: { minWidth: 44, minHeight: 44, alignItems: 'center' as const, justifyContent: 'center' as const },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: theme.colors.avatarBg, borderWidth: 2, borderColor: theme.colors.avatarBorder },
+  avatarText: { color: theme.colors.avatarText, fontSize: 17 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.98 }] },
-  statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffdf8', borderRadius: 18, borderWidth: 1, borderColor: '#e8e2d5', paddingVertical: 15, paddingHorizontal: 10, marginBottom: 22 },
+  statsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: theme.colors.bgSurface, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingVertical: 15, paddingHorizontal: 10, marginBottom: 22 },
   statsRowSyncing: { marginBottom: 10 },
-  syncNotice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 18 },
-  syncNoticeText: { color: '#6b5943', fontSize: 12.5, lineHeight: 17 },
-  statBlock: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
-  statNumber: { color: '#182230', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
-  statHighlight: { color: '#a3520d', fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
-  statLabel: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17, textAlign: 'center' },
-  statDivider: { width: 1, height: 34, backgroundColor: '#e8e2d5' },
-  muted: { color: '#5e5c57', fontSize: 13, lineHeight: 18 },
-  hero: { minHeight: 206, overflow: 'hidden', borderRadius: 22, backgroundColor: '#182230', borderWidth: 1, borderColor: '#263442', flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
-  heroGlow: { position: 'absolute', width: 210, height: 210, borderRadius: 105, right: -44, top: -36, backgroundColor: '#223246' },
+  syncNotice: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, marginBottom: 18 },
+  syncNoticeText: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
+  statBlock: { flex: 1, alignItems: 'center' as const, paddingHorizontal: 6 },
+  statNumber: { color: theme.colors.textPrimary, fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
+  statHighlight: { color: theme.colors.accentLink, fontSize: 21, lineHeight: 25, letterSpacing: -0.3, marginBottom: 4 },
+  statLabel: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17, textAlign: 'center' as const },
+  statDivider: { width: 1, height: 34, backgroundColor: theme.colors.borderSubtle },
+  muted: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  hero: { minHeight: 206, overflow: 'hidden' as const, borderRadius: 22, backgroundColor: theme.colors.heroBg, borderWidth: 1, borderColor: theme.colors.heroBorder, flexDirection: 'row' as const, alignItems: 'center' as const, marginBottom: 28 },
+  heroGlow: { position: 'absolute' as const, width: 210, height: 210, borderRadius: 105, right: -44, top: -36, backgroundColor: theme.colors.heroGlow },
   heroCopy: { flex: 1, paddingVertical: 18, paddingLeft: 18, paddingRight: 10, zIndex: 1 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  pillText: { color: '#f3b43f', letterSpacing: 1.3 },
-  heroTitle: { color: '#fffdf8', fontSize: 19, lineHeight: 25, letterSpacing: -0.3, marginBottom: 7 },
-  heroDescription: { color: '#bdc6ce', maxWidth: 240, fontSize: 13, lineHeight: 19, marginBottom: 16 },
-  drawButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, backgroundColor: '#f3b43f', paddingHorizontal: 16, paddingVertical: 11 },
+  pill: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginBottom: 10 },
+  pillText: { color: theme.colors.accentPrimary, letterSpacing: 1.3 },
+  heroTitle: { color: theme.colors.textOnNavy, fontSize: 19, lineHeight: 25, letterSpacing: -0.3, marginBottom: 7 },
+  heroDescription: { color: theme.colors.textOnNavyMuted, maxWidth: 240, fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  drawButton: { alignSelf: 'flex-start' as const, minHeight: 44, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, borderRadius: 12, backgroundColor: theme.colors.accentPrimary, paddingHorizontal: 16, paddingVertical: 11 },
   drawButtonDisabled: { opacity: 0.55 },
-  drawButtonText: { color: '#182230', fontSize: 14 },
+  drawButtonText: { color: theme.colors.textOnAccent, fontSize: 14 },
   heroShowcase: { paddingRight: 16, paddingVertical: 18, zIndex: 1 },
-  heroPosterFrame: { width: 90, height: 134, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,253,248,0.22)', overflow: 'hidden', justifyContent: 'flex-end', padding: 7 },
-  heroPosterBadge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(24,34,48,0.88)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
-  heroPosterBadgeText: { color: '#fffdf8', fontSize: 10 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
-  sectionTitle: { color: '#182230', fontSize: 19, lineHeight: 24 },
-  sectionLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 6, paddingLeft: 8 },
-  link: { color: '#a3520d', fontSize: 14, lineHeight: 19 },
+  heroPosterFrame: { width: 90, height: 134, borderRadius: 14, borderWidth: 1.5, borderColor: theme.colors.cardBorderOverlay, overflow: 'hidden' as const, justifyContent: 'flex-end' as const, padding: 7 },
+  heroPosterBadge: { alignSelf: 'flex-start' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 3, backgroundColor: withAlpha(theme.colors.heroBg, 0.88), borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
+  heroPosterBadgeText: { color: theme.colors.textOnNavy, fontSize: 10 },
+  sectionHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 13 },
+  sectionTitle: { color: theme.colors.textPrimary, fontSize: 19, lineHeight: 24 },
+  sectionLinkBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2, paddingVertical: 6, paddingLeft: 8 },
+  link: { color: theme.colors.accentLink, fontSize: 14, lineHeight: 19 },
   serviceList: { gap: 10, paddingBottom: 27 },
-  serviceCard: { width: 178, height: 70, padding: 11, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5', flexDirection: 'row', alignItems: 'center', gap: 10 },
-  emptyServiceCard: { minWidth: 200, height: 70, paddingHorizontal: 16, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#ded8cd', borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', gap: 9 },
+  serviceCard: { width: 178, height: 70, padding: 11, borderRadius: 16, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10 },
+  emptyServiceCard: { minWidth: 200, height: 70, paddingHorizontal: 16, borderRadius: 16, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderStyle: 'dashed' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 9 },
   serviceCopy: { flex: 1 },
-  serviceName: { color: '#182230', fontSize: 14, lineHeight: 19, marginBottom: 1 },
-  servicePrice: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17 },
+  serviceName: { color: theme.colors.textPrimary, fontSize: 14, lineHeight: 19, marginBottom: 1 },
+  servicePrice: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
   titleList: { gap: 13, paddingBottom: 28 },
-  emptyTitlesCard: { minHeight: 118, width: 260, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, padding: 14, borderRadius: 16, backgroundColor: '#fffdf8', borderWidth: 1, borderColor: '#e8e2d5' },
+  emptyTitlesCard: { minHeight: 118, width: 260, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 9, padding: 14, borderRadius: 16, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle },
   titleCard: { width: 136 },
-  poster: { height: 176, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(24,34,48,0.08)', justifyContent: 'center', alignItems: 'center', gap: 10, padding: 11, marginBottom: 9, overflow: 'hidden' },
-  posterRating: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(20,28,38,0.72)', borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
-  posterRatingCorner: { position: 'absolute', bottom: 8, left: 8 },
-  posterServicesCorner: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(20,28,38,0.74)', borderRadius: 9, padding: 3 },
-  posterRatingText: { color: '#fffdf8', fontSize: 10 },
-  posterLabel: { color: 'rgba(255,255,255,0.95)', textAlign: 'center', letterSpacing: 0.8 },
-  titleName: { color: '#182230', fontSize: 13, lineHeight: 18 },
+  poster: { height: 176, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, justifyContent: 'center' as const, alignItems: 'center' as const, gap: 10, padding: 11, marginBottom: 9, overflow: 'hidden' as const },
+  posterRating: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2, backgroundColor: withAlpha(theme.colors.heroBg, 0.76), borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
+  posterRatingCorner: { position: 'absolute' as const, bottom: 8, left: 8 },
+  posterServicesCorner: { position: 'absolute' as const, top: 8, right: 8, backgroundColor: withAlpha(theme.colors.heroBg, 0.78), borderRadius: 9, padding: 3 },
+  posterRatingText: { color: theme.colors.textOnNavy, fontSize: 10 },
+  posterLabel: { color: theme.colors.textOnNavy, textAlign: 'center' as const, letterSpacing: 0.8 },
+  titleName: { color: theme.colors.textPrimary, fontSize: 13, lineHeight: 18 },
 });

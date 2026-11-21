@@ -1,22 +1,28 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps, memo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ComponentProps, memo, useMemo } from 'react';
+import { Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
+import { Theme, ThemeColors } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { type DrawAction, type DrawHistoryEntry } from '@/types/drawHistory';
 import { formatShortDateTime } from '@/utils/format';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
-const ACTION_META: Record<DrawAction, { label: string; icon: MaterialIconName; bg: string; color: string }> = {
-  assistiu: { label: 'Assistiu', icon: 'check-circle', bg: '#e5efe7', color: '#216941' },
-  salvou: { label: 'Salvou', icon: 'bookmark', bg: '#fff2d8', color: '#944c0d' },
-  'sorteou outro': { label: 'Sorteou outro', icon: 'casino', bg: '#f1e8d7', color: '#8b5827' },
-  ignorou: { label: 'Ignorou', icon: 'close', bg: '#f1eee7', color: '#5e5c57' },
-};
+function getActionMeta(
+  colors: ThemeColors,
+): Record<DrawAction, { label: string; icon: MaterialIconName; bg: string; color: string }> {
+  return {
+    assistiu: { label: 'Assistiu', icon: 'check-circle', bg: colors.bgSuccess, color: colors.successText },
+    salvou: { label: 'Salvou', icon: 'bookmark', bg: colors.savedActiveBg, color: colors.savedActiveIcon },
+    'sorteou outro': { label: 'Sorteou outro', icon: 'casino', bg: colors.bgWarning, color: colors.accentLink },
+    ignorou: { label: 'Ignorou', icon: 'close', bg: colors.bgSurfaceAlt, color: colors.textSecondary },
+  };
+}
 
 type DrawHistoryCardProps = {
   entry: DrawHistoryEntry;
@@ -30,12 +36,16 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
   resolvedTitle,
   onPress,
 }: DrawHistoryCardProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const actionMetaMap = useMemo(() => getActionMeta(colors), [colors]);
+
   const displayTitle = resolvedTitle?.title ?? entry.title ?? entry.tmdbId;
   const displayKind = resolvedTitle?.kind ?? entry.kind;
   const posterPath = resolvedTitle?.tmdbPosterPath ?? entry.tmdbPosterPath;
   const backdropPath = resolvedTitle?.tmdbBackdropPath;
-  const cardColor = resolvedTitle?.color ?? entry.color ?? '#263b50';
-  const actionMeta = ACTION_META[entry.acao];
+  const cardColor = resolvedTitle?.color ?? entry.color ?? colors.navyMuted;
+  const actionMeta = actionMetaMap[entry.acao];
 
   return (
     <Pressable
@@ -52,7 +62,7 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
           variant="poster"
           posterPath={posterPath}
           backdropPath={backdropPath}
-          fallback={<MaterialIcons name={resolvedTitle?.icon ?? 'movie'} size={18} color="rgba(255,255,255,0.9)" />}
+          fallback={<MaterialIcons name={resolvedTitle?.icon ?? 'movie'} size={18} color={colors.textOnNavy} />}
         />
       </Animated.View>
       <View style={styles.copy}>
@@ -74,32 +84,32 @@ export const DrawHistoryCard = memo(function DrawHistoryCard({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 11,
     padding: 10,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#e8e2d5',
-    backgroundColor: '#fffdf8',
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
   },
   poster: {
     width: 38,
     height: 50,
     borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
   },
   copy: { flex: 1 },
-  title: { color: '#182230', fontSize: 14, lineHeight: 19, marginBottom: 2 },
-  meta: { color: '#5e5c57', fontSize: 12.5, lineHeight: 17 },
+  title: { color: theme.colors.textPrimary, fontSize: 14, lineHeight: 19, marginBottom: 2 },
+  meta: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
   actionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 4,
     borderRadius: 10,
     paddingHorizontal: 8,

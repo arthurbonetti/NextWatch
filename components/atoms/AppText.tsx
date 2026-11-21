@@ -1,5 +1,6 @@
 import { StyleSheet, Text, TextProps } from 'react-native';
 
+import { Theme } from '@/constants/theme';
 import {
   FONT_FAMILIES,
   TABULAR_NUMS_STYLE,
@@ -7,6 +8,7 @@ import {
   TextRole,
   TextWeight,
 } from '@/constants/typography';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 
 type TextoProps = TextProps & {
   tipo?: TextRole;
@@ -41,6 +43,7 @@ export function AppText({
   children,
   ...props
 }: TextoProps) {
+  const styles = useThemedStyles(createStyles);
   const resolvedFamily: TextFamily = familia ?? (tipo === 'destaque' || tipo === 'titulo' ? 'editorial' : 'sans');
   const fontFamily = resolveFontFamily(resolvedFamily, peso);
 
@@ -88,8 +91,8 @@ const estiloTipo = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   base: {
-    color: '#182230',
+    color: theme.colors.textPrimary,
   },
 });

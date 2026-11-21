@@ -14,7 +14,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
-import { THEME } from '@/constants/theme';
+import { Theme, THEME } from '@/constants/theme';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
@@ -49,6 +50,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const [cachedCopy, setCachedCopy] = useState({
     icon,
@@ -206,7 +209,7 @@ export function ConfirmDialog({
         <MaterialIcons
           name={activeCopy.icon}
           size={24}
-          color={isWarning ? THEME.colors.accentDeep : THEME.colors.mcRed}
+          color={isWarning ? colors.accentLink : colors.dangerText}
         />
       </View>
       <AppText tipo="legenda" peso="forte" style={[styles.eyebrow, isWarning && styles.eyebrowWarning]}>
@@ -231,7 +234,7 @@ export function ConfirmDialog({
             <MaterialIcons
               name={activeCopy.confirmIcon}
               size={18}
-              color={isWarning ? THEME.colors.navy : THEME.colors.textOnNavy}
+              color={isWarning ? colors.textOnAccent : colors.textOnNavy}
             />
           )}
           <AppText
@@ -282,85 +285,85 @@ export function ConfirmDialog({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => ({
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
   inlineBackdrop: {
     ...StyleSheet.absoluteFill,
-    padding: THEME.spacing.s24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME.colors.backdropDark,
+    padding: theme.spacing.s24,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.backdropDark,
     opacity: 1,
   },
   inlineCardWrap: {
-    width: '100%',
+    width: '100%' as const,
     maxWidth: 360,
   },
   card: {
-    width: '100%',
-    alignItems: 'center',
-    borderRadius: THEME.radius.card,
-    paddingHorizontal: THEME.spacing.s22,
-    paddingTop: THEME.spacing.s24,
-    paddingBottom: THEME.spacing.s20,
-    backgroundColor: THEME.colors.bgCard,
+    width: '100%' as const,
+    alignItems: 'center' as const,
+    borderRadius: theme.radius.card,
+    paddingHorizontal: theme.spacing.s22,
+    paddingTop: theme.spacing.s24,
+    paddingBottom: theme.spacing.s20,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: THEME.colors.borderLight,
+    borderColor: theme.colors.borderSubtle,
   },
   iconBadge: {
     width: 52,
     height: 52,
     borderRadius: 26,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: THEME.spacing.xl,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: theme.spacing.xl,
   },
-  iconBadgeDanger: { backgroundColor: THEME.colors.bgDanger, borderColor: THEME.colors.borderDanger },
-  iconBadgeWarning: { backgroundColor: THEME.colors.bgWarning, borderColor: THEME.colors.borderWarning },
-  eyebrow: { color: THEME.colors.mcRed, letterSpacing: 1.3, textAlign: 'center', marginBottom: THEME.spacing.sm },
-  eyebrowWarning: { color: THEME.colors.accent },
+  iconBadgeDanger: { backgroundColor: theme.colors.dangerIconBg, borderColor: theme.colors.dangerBorder },
+  iconBadgeWarning: { backgroundColor: theme.colors.bgWarning, borderColor: theme.colors.borderWarning },
+  eyebrow: { color: theme.colors.dangerText, letterSpacing: 1.3, textAlign: 'center' as const, marginBottom: theme.spacing.sm },
+  eyebrowWarning: { color: theme.colors.accentLink },
   title: {
-    color: THEME.colors.textPrimary,
+    color: theme.colors.textPrimary,
     fontSize: 21,
     lineHeight: 26,
     letterSpacing: -0.35,
-    textAlign: 'center',
-    marginBottom: THEME.spacing.md,
+    textAlign: 'center' as const,
+    marginBottom: theme.spacing.md,
   },
   message: {
-    color: THEME.colors.textSecondary,
+    color: theme.colors.textSecondary,
     fontSize: 13.5,
     lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: THEME.spacing.s20,
+    textAlign: 'center' as const,
+    marginBottom: theme.spacing.s20,
   },
-  actions: { width: '100%', gap: THEME.spacing.base },
+  actions: { width: '100%' as const, gap: theme.spacing.base },
   confirmButton: {
-    width: '100%',
+    width: '100%' as const,
     minHeight: 48,
-    borderRadius: THEME.radius.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: THEME.spacing.md,
-    paddingHorizontal: THEME.spacing.xxl,
+    borderRadius: theme.radius.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.xxl,
   },
-  confirmButtonDanger: { backgroundColor: THEME.colors.mcRed },
-  confirmButtonWarning: { backgroundColor: THEME.colors.gold },
-  confirmText: { fontSize: 14.5, textAlign: 'center' },
-  confirmTextDanger: { color: THEME.colors.textOnNavy },
-  confirmTextWarning: { color: THEME.colors.navy },
+  confirmButtonDanger: { backgroundColor: theme.colors.dangerSolidBg },
+  confirmButtonWarning: { backgroundColor: theme.colors.accentPrimary },
+  confirmText: { fontSize: 14.5, textAlign: 'center' as const },
+  confirmTextDanger: { color: theme.colors.textOnNavy },
+  confirmTextWarning: { color: theme.colors.textOnAccent },
   cancelButton: {
-    width: '100%',
+    width: '100%' as const,
     minHeight: 46,
-    borderRadius: THEME.radius.lg,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.borderMedium,
-    backgroundColor: THEME.colors.bgCanvas,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: THEME.spacing.xxl,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: theme.spacing.xxl,
   },
-  cancelText: { color: THEME.colors.textPrimary, fontSize: 14.5, textAlign: 'center' },
+  cancelText: { color: theme.colors.textPrimary, fontSize: 14.5, textAlign: 'center' as const },
 });

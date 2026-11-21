@@ -1,6 +1,6 @@
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
@@ -9,7 +9,9 @@ import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
+import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 import { DrawAction, useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
 import { formatCount } from '@/utils/format';
@@ -17,6 +19,7 @@ import { formatCount } from '@/utils/format';
 type HistoryFilter = 'all' | DrawAction;
 
 export default function DrawHistoryScreen() {
+  const styles = useThemedStyles(createStyles);
   const { user, authReady } = useAuth();
   const { findSavedTitle } = useMyList();
   const { history, storageReady, clearDrawHistory, refreshDrawHistory } = useDrawHistory();
@@ -160,22 +163,22 @@ export default function DrawHistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f7f5f0' },
-  container: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
+const createStyles = (theme: Theme) => ({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, marginBottom: 18 },
   headerCopy: { flex: 1 },
-  eyebrow: { color: '#e58c34', letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: '#182230', fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
-  clearButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#e8e2d5', backgroundColor: '#fffdf8' },
-  clearButtonText: { color: '#a3520d', fontSize: 13 },
+  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 3 },
+  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
+  clearButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface },
+  clearButtonText: { color: theme.colors.accentLink, fontSize: 13 },
   summaryRow: { marginBottom: 10 },
-  summaryText: { color: '#5e5c57', fontSize: 13 },
-  filterRow: { flexDirection: 'row', gap: 7, paddingBottom: 16 },
-  filterChip: { borderWidth: 1, borderColor: '#ded8cd', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fffdf8' },
-  filterChipActive: { borderColor: '#182230', backgroundColor: '#182230' },
-  filterChipText: { color: '#5e5c57', fontSize: 12.5 },
-  filterChipTextActive: { color: '#fffdf8', fontSize: 12.5 },
+  summaryText: { color: theme.colors.textSecondary, fontSize: 13 },
+  filterRow: { flexDirection: 'row' as const, gap: 7, paddingBottom: 16 },
+  filterChip: { borderWidth: 1, borderColor: theme.colors.chipBorder, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: theme.colors.chipBg },
+  filterChipActive: { borderColor: theme.colors.chipSelectedBorder, backgroundColor: theme.colors.chipSelectedBg },
+  filterChipText: { color: theme.colors.chipText, fontSize: 12.5 },
+  filterChipTextActive: { color: theme.colors.chipSelectedText, fontSize: 12.5 },
   list: { gap: 8 },
 });
