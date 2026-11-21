@@ -76,6 +76,7 @@ function RootLayoutShell() {
                 <Stack.Screen name="subscriptions" options={{ headerShown: false }} />
                 <Stack.Screen name="my-list" options={{ headerShown: false }} />
                 <Stack.Screen name="draw-history" options={{ headerShown: false }} />
+                <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
                 <Stack.Screen name="title/[id]" options={{ headerShown: false }} />
               </Stack>
               <ModalPortalHost />

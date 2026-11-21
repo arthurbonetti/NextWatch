@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { SpinningIcon } from '@/components/atoms/SpinningIcon';
+import { UserAvatar } from '@/components/atoms/UserAvatar';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { Theme, ThemeMode } from '@/constants/theme';
@@ -34,7 +35,7 @@ export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
   const { colors, themeMode, resolvedMode, setThemeMode } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { user, token, signOut } = useAuth();
+  const { user, token, signOut, refreshProfile } = useAuth();
   const { subscriptions } = useSubscriptions();
   const { savedTitles, findSavedTitle, refreshMyList } = useMyList();
   const { titles, status, isFetchingCatalog, errorMessage, findTitle, refreshCatalog } = useCatalog();
@@ -74,10 +75,11 @@ export default function ProfileTabScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      void refreshProfile();
       void refreshMyList({ minIntervalMs: 3000 });
       void refreshDrawHistory({ minIntervalMs: 3000 });
       void refreshProgressIds();
-    }, [refreshDrawHistory, refreshMyList, refreshProgressIds]),
+    }, [refreshDrawHistory, refreshMyList, refreshProfile, refreshProgressIds]),
   );
 
   const activeSubscriptions = useMemo(
@@ -109,7 +111,6 @@ export default function ProfileTabScreen() {
     () => history.slice(0, PREVIEW_HISTORY_LIMIT),
     [history],
   );
-  const initials = user?.name.trim().charAt(0).toLocaleUpperCase() ?? '?';
 
   const handleSignOut = async () => {
     await signOut();
@@ -129,11 +130,32 @@ export default function ProfileTabScreen() {
           <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>MEU PERFIL</AppText>
 
           <View style={styles.profileCard}>
-            <View style={styles.avatar}>
-              <AppText peso="forte" style={styles.avatarText}>{initials}</AppText>
-            </View>
+            <Pressable
+              style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
+              onPress={() => router.push('/edit-profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Alterar ícone do perfil">
+              <UserAvatar
+                size={78}
+                name={user?.name}
+                avatarType={user?.avatarType}
+                avatarPreset={user?.avatarPreset}
+                avatarUrl={user?.avatarUrl}
+              />
+              <View style={styles.avatarEditBadge}>
+                <MaterialIcons name="edit" size={14} color={colors.textOnAccent} />
+              </View>
+            </Pressable>
             <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{user?.name ?? 'Usuário'}</AppText>
             <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
+            <Pressable
+              style={({ pressed }) => [styles.editProfileButton, pressed && styles.pressed]}
+              onPress={() => router.push('/edit-profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Editar perfil">
+              <MaterialIcons name="edit" size={16} color={colors.accentLink} />
+              <AppText tipo="legenda" peso="forte" style={styles.editProfileText}>Editar perfil</AppText>
+            </Pressable>
           </View>
         </FadeInBlock>
 
@@ -355,8 +377,35 @@ const createStyles = (theme: Theme) => ({
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
   eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 14 },
   profileCard: { alignItems: 'center' as const, backgroundColor: theme.colors.bgSurface, borderRadius: 22, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingVertical: 22, paddingHorizontal: 20, marginBottom: 22 },
-  avatar: { width: 74, height: 74, borderRadius: 37, backgroundColor: theme.colors.avatarBg, borderWidth: 2, borderColor: theme.colors.avatarBorder, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: 12 },
-  avatarText: { color: theme.colors.avatarText, fontSize: 28 },
+  avatarButton: { position: 'relative' as const, marginBottom: 12 },
+  avatarEditBadge: {
+    position: 'absolute' as const,
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.colors.accentPrimary,
+    borderWidth: 2.5,
+    borderColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  editProfileButton: {
+    minHeight: 42,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 7,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+  editProfileText: { color: theme.colors.accentLink, fontSize: 13 },
   name: { color: theme.colors.textPrimary, fontSize: 22, lineHeight: 27, letterSpacing: -0.3, marginBottom: 3 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18 },
   sectionTitle: { color: theme.colors.textPrimary, fontSize: 18, lineHeight: 23, marginBottom: 12 },

@@ -5,6 +5,7 @@ import type {
   SupabaseClient,
 } from '@supabase/supabase-js';
 
+import { upsertUserProfile } from '@/services/repositories/profileRepo';
 import { SecureStore } from '@/services/secureStore';
 import { supabase } from '@/services/supabase';
 import {
@@ -16,6 +17,7 @@ import {
   MAX_NAME_LENGTH,
   MAX_PASSWORD_LENGTH,
   MIN_LOGIN_PASSWORD_LENGTH,
+  MIN_NAME_LENGTH,
   MIN_PASSWORD_LENGTH,
   type RegisterPayload,
 } from '@/types/auth';
@@ -52,6 +54,10 @@ function toAuthUser(rawUser: SupabaseAuthUser, fallbackEmail = '', fallbackName?
     name: metadataName || fallbackName || email.split('@')[0] || 'Usuário',
     email,
     createdAt: rawUser.created_at || new Date().toISOString(),
+    avatarType: 'initials',
+    avatarPreset: null,
+    avatarPath: null,
+    avatarUrl: null,
   };
 }
 
@@ -79,6 +85,9 @@ function formatSupabaseError(errorMsg?: string): string {
   }
   if (lower.includes('user already registered') || lower.includes('already exists')) {
     return 'Não foi possível concluir o cadastro com este e-mail. Tente fazer login.';
+  }
+  if (lower.includes('same_password') || lower.includes('different from the old password')) {
+    return 'A nova senha deve ser diferente da senha atual.';
   }
   if (lower.includes('password should be at least') || lower.includes('weak_password')) {
     return `A senha deve conter no mínimo ${MIN_PASSWORD_LENGTH} caracteres com letras e números.`;
@@ -150,7 +159,7 @@ export async function registerAccount({ name, email, password }: RegisterPayload
   const normalizedName = name.trim().slice(0, MAX_NAME_LENGTH);
   const normalizedEmail = email.trim().toLowerCase();
   if (
-    normalizedName.length < 2 ||
+    normalizedName.length < MIN_NAME_LENGTH ||
     !isValidEmail(normalizedEmail) ||
     !isStrongPassword(password)
   ) {
@@ -177,11 +186,90 @@ export async function registerAccount({ name, email, password }: RegisterPayload
     throw new Error(formatSupabaseError(error?.message));
   }
 
-  if (data.session) {
-    return toAuthSession(data.session, normalizedEmail, normalizedName);
+  const session = data.session
+    ? toAuthSession(data.session, normalizedEmail, normalizedName)
+    : await signInInternal(normalizedEmail, password, false);
+
+  void upsertUserProfile(session.user.id, {
+    displayName: normalizedName,
+    avatarType: 'initials',
+    avatarPreset: null,
+    avatarPath: null,
+  }).catch(() => {});
+
+  return session;
+}
+
+export async function updateAuthDisplayName(name: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Serviço de autenticação não configurado corretamente.');
   }
 
-  return signInInternal(normalizedEmail, password, false);
+  const normalizedName = name.trim().slice(0, MAX_NAME_LENGTH);
+  if (normalizedName.length < MIN_NAME_LENGTH) {
+    throw new Error(`Informe seu nome (pelo menos ${MIN_NAME_LENGTH} caracteres).`);
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    data: { name: normalizedName },
+  });
+
+  if (error) {
+    throw new Error(formatSupabaseError(error.message));
+  }
+}
+
+export async function changeUserPassword({
+  email,
+  currentPassword,
+  newPassword,
+}: {
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  if (!supabase) {
+    throw new Error('Serviço de autenticação não configurado corretamente.');
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (
+    !isValidEmail(normalizedEmail) ||
+    currentPassword.length < MIN_LOGIN_PASSWORD_LENGTH ||
+    currentPassword.length > MAX_PASSWORD_LENGTH
+  ) {
+    throw new Error('Informe sua senha atual corretamente.');
+  }
+
+  if (!isStrongPassword(newPassword)) {
+    throw new Error(
+      `A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres com letras e números.`,
+    );
+  }
+
+  if (newPassword === currentPassword) {
+    throw new Error('A nova senha deve ser diferente da senha atual.');
+  }
+
+  checkAuthRateLimit();
+
+  const { data: verifyData, error: verifyError } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password: currentPassword,
+  });
+
+  if (verifyError || !verifyData.session) {
+    throw new Error('Senha atual incorreta. Verifique e tente novamente.');
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword,
+    current_password: currentPassword,
+  });
+
+  if (updateError) {
+    throw new Error(formatSupabaseError(updateError.message));
+  }
 }
 
 export async function restoreAuthSession(): Promise<AuthSession | null> {

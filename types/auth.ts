@@ -1,8 +1,14 @@
+import type { AvatarPresetId, AvatarType } from '@/constants/avatars';
+
 export type AuthUser = {
   id: string;
   name: string;
   email: string;
   createdAt: string;
+  avatarType: AvatarType;
+  avatarPreset: AvatarPresetId | null;
+  avatarPath: string | null;
+  avatarUrl: string | null;
 };
 
 export type AuthStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -24,6 +30,26 @@ export type RegisterPayload = {
   password: string;
 };
 
+export type PendingAvatarUpload = {
+  uri: string;
+  bytes: Uint8Array;
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+  extension: 'jpg' | 'png' | 'webp';
+};
+
+export type UpdateProfilePayload = {
+  name: string;
+  avatarType: AvatarType;
+  avatarPreset: AvatarPresetId | null;
+  pendingUpload?: PendingAvatarUpload | null;
+};
+
+export type UpdatePasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
+};
+
+export const MIN_NAME_LENGTH = 2;
 export const MIN_PASSWORD_LENGTH = 8;
 export const MIN_LOGIN_PASSWORD_LENGTH = 6;
 export const MAX_PASSWORD_LENGTH = 128;

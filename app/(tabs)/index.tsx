@@ -10,6 +10,7 @@ import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
 import { ServiceLogo, ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { SpinningIcon } from '@/components/atoms/SpinningIcon';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
+import { UserAvatar } from '@/components/atoms/UserAvatar';
 import { DrawFlowModal } from '@/components/organisms/DrawModal/DrawFlowModal';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
 import {
@@ -131,12 +132,18 @@ export default function HomeScreen() {
                 <MaterialIcons name="bookmark-border" size={28} color={colors.accentLink} />
               </Pressable>
               <Pressable
-                style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
                 onPress={() => router.push('/(tabs)/tab3')}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Abrir perfil">
-                <AppText peso="forte" style={styles.avatarText}>{user?.name.charAt(0).toLocaleUpperCase() ?? 'N'}</AppText>
+                <UserAvatar
+                  size={44}
+                  name={user?.name}
+                  avatarType={user?.avatarType}
+                  avatarPreset={user?.avatarPreset}
+                  avatarUrl={user?.avatarUrl}
+                />
               </Pressable>
             </View>
           </View>
@@ -415,8 +422,7 @@ const createStyles = (theme: Theme) => ({
   brandTitle: { color: theme.colors.textPrimary, fontSize: 17, lineHeight: 22, letterSpacing: 2.1 },
   topbarActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   listsButton: { minWidth: 44, minHeight: 44, alignItems: 'center' as const, justifyContent: 'center' as const },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: theme.colors.avatarBg, borderWidth: 2, borderColor: theme.colors.avatarBorder },
-  avatarText: { color: theme.colors.avatarText, fontSize: 17 },
+  avatarButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
   pressed: { opacity: 0.86, transform: [{ scale: 0.98 }] },
   statsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: theme.colors.bgSurface, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingVertical: 15, paddingHorizontal: 10, marginBottom: 22 },
   statsRowSyncing: { marginBottom: 10 },

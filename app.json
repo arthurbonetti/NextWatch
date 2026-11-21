@@ -54,6 +54,13 @@
             "usesCleartextTraffic": false
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permitir que o NextWatch acesse sua galeria para escolher uma foto de perfil.",
+          "cameraPermission": false
+        }
       ]
     ],
     "experiments": {
