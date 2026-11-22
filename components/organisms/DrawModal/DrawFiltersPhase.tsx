@@ -8,9 +8,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
-import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { BottomFadeScrim } from '@/components/atoms/BottomFadeScrim';
+import { FilterChip } from '@/components/atoms/FilterChip';
+import { StreamingChip } from '@/components/atoms/StreamingChip';
 import { SwitchVisual } from '@/components/atoms/SwitchToggle';
-import { AnimatedFilterChip } from '@/components/organisms/DrawModal/AnimatedFilterChip';
 import { AnimatedRollingNumber } from '@/components/organisms/DrawModal/AnimatedRollingNumber';
 import { getGenreIcon, getKindIcon } from '@/constants/catalog';
 import { Subscription } from '@/constants/subscriptions';
@@ -43,42 +44,6 @@ const KIND_OPTIONS: { value: DrawKindFilter; label: string }[] = [
   { value: 'Série', label: 'Séries' },
   { value: 'Anime', label: 'Animes' },
 ];
-
-type ServiceTogglePillProps = {
-  provider: string;
-  enabled: boolean;
-  onPress: () => void;
-};
-
-function ServiceTogglePill({ provider, enabled, onPress }: ServiceTogglePillProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-
-  return (
-    <Pressable
-      onPress={() => {
-        triggerSelectionHaptic();
-        onPress();
-      }}
-      style={({ pressed }) => [
-        styles.serviceToggle,
-        enabled ? styles.serviceToggleEnabled : styles.serviceToggleDisabled,
-        pressed && styles.pressed,
-      ]}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: enabled }}
-      accessibilityLabel={`${provider}: ${enabled ? 'ligado para este sorteio' : 'desligado para este sorteio'}`}>
-      <ServiceLogo name={provider} size={32} />
-      <View style={[styles.serviceStatusDot, enabled ? styles.serviceStatusOn : styles.serviceStatusOff]}>
-        <MaterialIcons
-          name={enabled ? 'check' : 'close'}
-          size={10}
-          color={enabled ? colors.textOnAccent : colors.textOnNavy}
-        />
-      </View>
-    </Pressable>
-  );
-}
 
 /**
  * Tela 1 do fluxo de sorteio: filtros com chips, seleção de streamings,
@@ -158,125 +123,130 @@ export function DrawFiltersPhase({
           : 'Você ainda não tem títulos nos serviços ativos. Adicione ou ative uma assinatura para sortear.'}
       </AppText>
 
-      <ScrollView
-        style={styles.scrollArea}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        bounces={false}>
-        {activeSubscriptions.length > 0 && (
+      <View style={styles.scrollWrap}>
+        <ScrollView
+          style={styles.scrollArea}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}>
+          {activeSubscriptions.length > 0 && (
+            <View style={styles.sectionBlock}>
+              <View style={styles.sectionLabelRow}>
+                <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>
+                  SORTEANDO EM:
+                </AppText>
+                <AppText tipo="legenda" tabular style={styles.sectionHint}>
+                  {enabledServices.length} de {activeSubscriptions.length}{' '}
+                  {activeSubscriptions.length === 1 ? 'ativo' : 'ativos'}
+                </AppText>
+              </View>
+              <View style={styles.chipGrid}>
+                {activeSubscriptions.map((subscription) => {
+                  const isEnabled = !filters.disabledServices.includes(subscription.provider);
+                  return (
+                    <StreamingChip
+                      key={subscription.id}
+                      provider={subscription.provider}
+                      selected={isEnabled}
+                      onPress={() => onToggleService(subscription.provider)}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={`${subscription.provider}: ${isEnabled ? 'ligado para este sorteio' : 'desligado para este sorteio'}`}
+                    />
+                  );
+                })}
+              </View>
+              {!hasEnabledService && (
+                <View style={styles.warningBanner}>
+                  <MaterialIcons name="warning-amber" size={16} color={colors.accentLink} />
+                  <AppText tipo="legenda" peso="semiforte" style={styles.warningText}>
+                    Nenhum streaming selecionado. Toque em um serviço acima para incluir no sorteio.
+                  </AppText>
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={styles.sectionBlock}>
+            <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>
+              TIPO
+            </AppText>
+            <View style={styles.chipGrid}>
+              {KIND_OPTIONS.map((option) => (
+                <FilterChip
+                  key={option.value}
+                  label={option.label}
+                  icon={getKindIcon(option.value)}
+                  selected={filters.kind === option.value}
+                  onPress={() => onSelectKind(option.value)}
+                  accessibilityRole="radio"
+                />
+              ))}
+            </View>
+          </View>
+
           <View style={styles.sectionBlock}>
             <View style={styles.sectionLabelRow}>
               <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>
-                SORTEANDO EM:
+                GÊNERO
               </AppText>
-              <AppText tipo="legenda" tabular style={styles.sectionHint}>
-                {enabledServices.length} de {activeSubscriptions.length}{' '}
-                {activeSubscriptions.length === 1 ? 'ativo' : 'ativos'}
+              <AppText tipo="legenda" style={styles.sectionHint}>
+                {filters.selectedGenres.length > 0
+                  ? `${filters.selectedGenres.length} selecionado${filters.selectedGenres.length > 1 ? 's' : ''}`
+                  : 'Múltipla escolha'}
               </AppText>
             </View>
-            <View style={styles.servicesRow}>
-              {activeSubscriptions.map((subscription) => {
-                const isEnabled = !filters.disabledServices.includes(subscription.provider);
-                return (
-                  <ServiceTogglePill
-                    key={subscription.id}
-                    provider={subscription.provider}
-                    enabled={isEnabled}
-                    onPress={() => onToggleService(subscription.provider)}
-                  />
-                );
-              })}
-            </View>
-            {!hasEnabledService && (
-              <View style={styles.warningBanner}>
-                <MaterialIcons name="warning-amber" size={16} color={colors.accentLink} />
-                <AppText tipo="legenda" peso="semiforte" style={styles.warningText}>
-                  Nenhum streaming selecionado. Toque em um logo acima para incluir no sorteio.
-                </AppText>
-              </View>
-            )}
-          </View>
-        )}
-
-        <View style={styles.sectionBlock}>
-          <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>
-            TIPO
-          </AppText>
-          <View style={styles.chipGrid}>
-            {KIND_OPTIONS.map((option) => (
-              <AnimatedFilterChip
-                key={option.value}
-                label={option.label}
-                icon={getKindIcon(option.value)}
-                selected={filters.kind === option.value}
-                onPress={() => onSelectKind(option.value)}
-                accessibilityRole="radio"
-              />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionLabelRow}>
-            <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>
-              GÊNERO
-            </AppText>
-            <AppText tipo="legenda" style={styles.sectionHint}>
-              {filters.selectedGenres.length > 0
-                ? `${filters.selectedGenres.length} selecionado${filters.selectedGenres.length > 1 ? 's' : ''}`
-                : 'Múltipla escolha'}
-            </AppText>
-          </View>
-          <View style={styles.chipGrid}>
-            <AnimatedFilterChip
-              label="Tanto faz"
-              icon="auto-awesome"
-              selected={filters.selectedGenres.length === 0}
-              onPress={onClearGenres}
-              accessibilityRole="checkbox"
-            />
-            {availableGenres.map((genre) => (
-              <AnimatedFilterChip
-                key={genre}
-                label={genre}
-                icon={getGenreIcon(genre)}
-                selected={filters.selectedGenres.includes(genre)}
-                onPress={() => onToggleGenre(genre)}
+            <View style={styles.chipGrid}>
+              <FilterChip
+                label="Tanto faz"
+                icon="auto-awesome"
+                selected={filters.selectedGenres.length === 0}
+                onPress={onClearGenres}
                 accessibilityRole="checkbox"
               />
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.watchedSection}>
-          <Pressable
-            onPress={() => {
-              triggerSelectionHaptic();
-              onToggleHideWatched(!filters.hideWatched);
-            }}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: filters.hideWatched }}
-            accessibilityLabel="Ocultar já assistidos"
-            style={({ pressed }) => [styles.watchedRow, pressed && styles.pressed]}>
-            <View style={styles.watchedCopyRow}>
-              <View style={styles.watchedIconWrap}>
-                <MaterialIcons name="visibility-off" size={18} color={colors.textSecondary} />
-              </View>
-              <View style={styles.watchedCopy}>
-                <AppText tipo="legenda" peso="forte" style={styles.watchedTitle}>
-                  Ocultar já assistidos
-                </AppText>
-                {watchedCount > 0 && (
-                  <AppText tipo="legenda" tabular style={styles.watchedHint}>
-                    {formatCount(watchedCount)} {watchedCount === 1 ? 'título marcado' : 'títulos marcados'}
-                  </AppText>
-                )}
-              </View>
+              {availableGenres.map((genre) => (
+                <FilterChip
+                  key={genre}
+                  label={genre}
+                  icon={getGenreIcon(genre)}
+                  selected={filters.selectedGenres.includes(genre)}
+                  onPress={() => onToggleGenre(genre)}
+                  accessibilityRole="checkbox"
+                />
+              ))}
             </View>
-            <SwitchVisual value={filters.hideWatched} />
-          </Pressable>
-        </View>
-      </ScrollView>
+          </View>
+
+          <View style={styles.watchedSection}>
+            <Pressable
+              onPress={() => {
+                triggerSelectionHaptic();
+                onToggleHideWatched(!filters.hideWatched);
+              }}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: filters.hideWatched }}
+              accessibilityLabel="Ocultar já assistidos"
+              style={({ pressed }) => [styles.watchedRow, pressed && styles.pressed]}>
+              <View style={styles.watchedCopyRow}>
+                <View style={styles.watchedIconWrap}>
+                  <MaterialIcons name="visibility-off" size={18} color={colors.textSecondary} />
+                </View>
+                <View style={styles.watchedCopy}>
+                  <AppText tipo="legenda" peso="forte" style={styles.watchedTitle}>
+                    Ocultar já assistidos
+                  </AppText>
+                  {watchedCount > 0 && (
+                    <AppText tipo="legenda" tabular style={styles.watchedHint}>
+                      {formatCount(watchedCount)} {watchedCount === 1 ? 'título marcado' : 'títulos marcados'}
+                    </AppText>
+                  )}
+                </View>
+              </View>
+              <SwitchVisual value={filters.hideWatched} />
+            </Pressable>
+          </View>
+        </ScrollView>
+        <BottomFadeScrim color={colors.bgSurface} height={30} style={styles.scrollFadeScrim} />
+      </View>
 
       <View style={styles.footer}>
         {eligibleCount === 0 && (
@@ -379,12 +349,22 @@ const createStyles = (theme: Theme) => ({
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
   },
+  scrollWrap: {
+    position: 'relative' as const,
+    flexShrink: 1,
+  },
   scrollArea: {
     flexShrink: 1,
   },
   scrollContent: {
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.s32,
     gap: theme.spacing.xxl,
+  },
+  scrollFadeScrim: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   sectionBlock: {
     gap: theme.spacing.md,
@@ -401,48 +381,6 @@ const createStyles = (theme: Theme) => ({
   sectionHint: {
     color: theme.colors.textMuted,
     fontSize: theme.fontSizes.caption,
-  },
-  servicesRow: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    gap: theme.spacing.base,
-  },
-  serviceToggle: {
-    minWidth: theme.touchTarget.button,
-    minHeight: theme.touchTarget.button,
-    padding: theme.spacing.sm,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1.5,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  serviceToggleEnabled: {
-    borderColor: theme.isDark ? theme.colors.accentPrimary : theme.colors.navy,
-    backgroundColor: theme.colors.savedActiveBg,
-    opacity: 1,
-  },
-  serviceToggleDisabled: {
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.bgSurfaceAlt,
-    opacity: 0.48,
-  },
-  serviceStatusDot: {
-    position: 'absolute' as const,
-    bottom: -theme.spacing.xs,
-    right: -theme.spacing.xs,
-    width: theme.spacing.s18,
-    height: theme.spacing.s18,
-    borderRadius: theme.radius.full,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderWidth: 1.5,
-    borderColor: theme.colors.bgSurface,
-  },
-  serviceStatusOn: {
-    backgroundColor: theme.colors.accentPrimary,
-  },
-  serviceStatusOff: {
-    backgroundColor: theme.colors.textMuted,
   },
   warningBanner: {
     flexDirection: 'row' as const,
@@ -527,9 +465,9 @@ const createStyles = (theme: Theme) => ({
     justifyContent: 'center' as const,
   },
   ctaDisabled: {
-    backgroundColor: theme.colors.bgSurfaceAlt,
+    backgroundColor: theme.colors.buttonDisabledBg,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: theme.colors.buttonDisabledBorder,
   },
   ctaContent: {
     flexDirection: 'row' as const,
@@ -545,7 +483,7 @@ const createStyles = (theme: Theme) => ({
     lineHeight: theme.lineHeights.body,
   },
   ctaTextDisabled: {
-    color: theme.colors.textMuted,
+    color: theme.colors.buttonDisabledText,
     fontSize: theme.fontSizes.bodyMd,
   },
 });

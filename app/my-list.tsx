@@ -1,23 +1,23 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   FadeOutLeft,
   LinearTransition,
   useReducedMotion,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
-import { BackButton } from '@/components/atoms/BackButton';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
+import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import { isSerialTitle, MediaTitle } from '@/constants/catalog';
-import { resolveTitleAccentColor, Theme, withAlpha } from '@/constants/theme';
+import { Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useTitlesByIds, useTitlesDurations, useTitleTotalEpisodes } from '@/hooks/useCatalog';
@@ -25,7 +25,12 @@ import { DrawHistoryEntry, useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { triggerSelectionHaptic } from '@/utils/haptics';
-import { SeriesProgressMap, summarizeWatchedProgress } from '@/utils/watchedProgress';
+import {
+  buildWatchedTitleIdsOrdered,
+  countWatchedSeriesEpisodes,
+  SeriesProgressMap,
+  summarizeWatchedProgress,
+} from '@/utils/watchedProgress';
 
 type ListsTab = 'fila' | 'assistidos';
 
@@ -44,7 +49,7 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
   progressMap,
   onOpen,
 }: WatchedTitleCardProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const isSerial = title
@@ -56,7 +61,8 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
   const totalEpisodes = useTitleTotalEpisodes(title, isSerial);
 
   const summary = summarizeWatchedProgress({ isSerial, progressMap, totalEpisodes });
-  const accentColor = title ? resolveTitleAccentColor(title.color, isDark) : colors.accentLink;
+  const watchedEpisodesCount = countWatchedSeriesEpisodes(progressMap);
+  const isFromRoulette = Boolean(drawEntry && drawEntry.acao === 'assistiu');
   const displayTitle = title?.title ?? drawEntry?.title ?? 'Carregando obra…';
   const displayKind = title?.kind ?? drawEntry?.kind;
   const displayMeta = title
@@ -66,12 +72,18 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
   const backdropPath = title?.tmdbBackdropPath;
   const cardColor = title?.color ?? drawEntry?.color ?? colors.navyMuted;
 
+  const completedLabel =
+    isSerial && watchedEpisodesCount > 0
+      ? `${totalEpisodes && totalEpisodes > 0 ? totalEpisodes : watchedEpisodesCount} ep.`
+      : 'Assistido';
+  const showRouletteTag = isFromRoulette && (!isSerial || watchedEpisodesCount === 0);
+
   return (
     <Pressable
       style={({ pressed }) => [styles.watchedCard, pressed && styles.pressed]}
       onPress={() => onOpen(id)}
       accessibilityRole="button"
-      accessibilityLabel={`Abrir detalhes de ${displayTitle}, ${summary.label}${summary.percent !== null ? `, ${summary.percent}%` : ''}`}>
+      accessibilityLabel={`Abrir detalhes de ${displayTitle}, ${summary.completed ? completedLabel : summary.label}${!summary.completed && summary.percent !== null ? `, ${summary.percent}%` : ''}`}>
       <View style={[styles.watchedPoster, { backgroundColor: cardColor }]}>
         <Animated.View sharedTransitionTag={`title-poster-${id}`} style={StyleSheet.absoluteFill}>
           <TitleArtwork
@@ -100,54 +112,67 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
           </AppText>
         )}
 
-        <View style={styles.progressBlock}>
-          <View style={styles.progressHeader}>
-            <View style={styles.progressLabelRow}>
-              <MaterialIcons
-                name={summary.completed ? 'check-circle' : 'play-circle-outline'}
-                size={14}
-                color={summary.completed ? colors.successText : accentColor}
-              />
-              <AppText
-                tipo="legenda"
-                peso="semiforte"
-                tabular
-                numberOfLines={1}
-                style={[
-                  styles.progressLabel,
-                  summary.completed && styles.progressLabelDone,
-                ]}>
-                {summary.label}
+        {summary.completed ? (
+          <View style={styles.completedBadgesRow}>
+            <View style={styles.completedBadge}>
+              <MaterialIcons name="check" size={13} color={colors.badgeSuccessText} />
+              <AppText tipo="legenda" peso="forte" tabular style={styles.completedBadgeText}>
+                {completedLabel}
               </AppText>
             </View>
-            {summary.percent !== null && (
-              <AppText
-                tipo="legenda"
-                peso="forte"
-                tabular
-                style={[
-                  styles.progressPercent,
-                  summary.completed && styles.progressLabelDone,
-                ]}>
-                {summary.percent}%
-              </AppText>
+            {showRouletteTag && (
+              <View style={styles.rouletteBadge}>
+                <MaterialIcons name="casino" size={12} color={colors.badgeAccentText} />
+                <AppText tipo="legenda" peso="forte" style={styles.rouletteBadgeText}>
+                  Roleta
+                </AppText>
+              </View>
             )}
           </View>
-
-          {summary.percent !== null && (
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${summary.percent}%`,
-                    backgroundColor: summary.completed ? colors.successText : accentColor,
-                  },
-                ]}
-              />
+        ) : (
+          <View style={styles.progressBlock}>
+            <View style={styles.progressHeader}>
+              <View style={styles.progressLabelRow}>
+                <MaterialIcons
+                  name="play-circle-outline"
+                  size={14}
+                  color={colors.accentLink}
+                />
+                <AppText
+                  tipo="legenda"
+                  peso="semiforte"
+                  tabular
+                  numberOfLines={1}
+                  style={styles.progressLabel}>
+                  {summary.label}
+                </AppText>
+              </View>
+              {summary.percent !== null && (
+                <AppText
+                  tipo="legenda"
+                  peso="forte"
+                  tabular
+                  style={styles.progressPercent}>
+                  {summary.percent}%
+                </AppText>
+              )}
             </View>
-          )}
-        </View>
+
+            {summary.percent !== null && (
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${summary.percent}%`,
+                      backgroundColor: colors.accentPrimary,
+                    },
+                  ]}
+                />
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       <MaterialIcons name="chevron-right" size={20} color={colors.textMuted} />
@@ -158,15 +183,22 @@ const WatchedTitleCard = memo(function WatchedTitleCard({
 export default function MyListScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
-  const { user, token, authReady } = useAuth();
+  const { user, token, authReady, isPasswordRecovery } = useAuth();
   const { savedTitles, storageReady, findSavedTitle, removeFromMyList, refreshMyList } = useMyList();
   const { history, storageReady: historyReady, refreshDrawHistory } = useDrawHistory();
   const { progressTitleIds, progressByTitleId, progressReady, refreshProgressIds } =
     useWatchedProgressIds(user?.id ?? null, token);
 
   const [activeTab, setActiveTab] = useState<ListsTab>('fila');
+  const [scrolled, setScrolled] = useState(false);
   const { getDuration } = useTitlesDurations(savedTitles);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const isScrolled = event.nativeEvent.contentOffset.y > 6;
+    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -186,23 +218,10 @@ export default function MyListScreen() {
     return map;
   }, [history]);
 
-  const watchedIds = useMemo(() => {
-    const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const id of progressTitleIds) {
-      if (!seen.has(id)) {
-        seen.add(id);
-        ordered.push(id);
-      }
-    }
-    for (const id of drawWatchedById.keys()) {
-      if (!seen.has(id)) {
-        seen.add(id);
-        ordered.push(id);
-      }
-    }
-    return ordered;
-  }, [drawWatchedById, progressTitleIds]);
+  const watchedIds = useMemo(
+    () => buildWatchedTitleIdsOrdered(history, progressTitleIds),
+    [history, progressTitleIds],
+  );
 
   const { resolveTitle: resolveWatchedTitle } = useTitlesByIds(watchedIds, {
     enabled: activeTab === 'assistidos',
@@ -214,6 +233,7 @@ export default function MyListScreen() {
   }, []);
 
   if (!authReady) return null;
+  if (isPasswordRecovery) return <Redirect href="/(auth)/reset-password" />;
   if (!user) return <Redirect href="/(auth)/login" />;
 
   const handleSelectTab = (tab: ListsTab) => {
@@ -222,73 +242,76 @@ export default function MyListScreen() {
     setActiveTab(tab);
   };
 
-  const activeCount = activeTab === 'fila' ? savedTitles.length : watchedIds.length;
+  const tabBarNode = (
+    <View style={styles.tabBar} accessibilityRole="tablist">
+      {(
+        [
+          { id: 'fila', label: 'Fila', icon: 'bookmark', count: savedTitles.length },
+          {
+            id: 'assistidos',
+            label: 'Assistidos',
+            icon: 'check-circle',
+            count: watchedIds.length,
+          },
+        ] as const
+      ).map((tab) => {
+        const selected = activeTab === tab.id;
+        return (
+          <Pressable
+            key={tab.id}
+            style={({ pressed }) => [
+              styles.tabButton,
+              selected && styles.tabButtonActive,
+              pressed && styles.pressed,
+            ]}
+            onPress={() => handleSelectTab(tab.id)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${tab.label}, ${tab.count} ${tab.count === 1 ? 'obra' : 'obras'}`}>
+            <MaterialIcons
+              name={tab.icon}
+              size={16}
+              color={selected ? colors.chipSelectedIcon : colors.chipText}
+            />
+            <AppText
+              tipo="legenda"
+              peso="forte"
+              style={selected ? styles.tabTextActive : styles.tabText}>
+              {tab.label}
+            </AppText>
+            <View style={[styles.tabCountPill, selected && styles.tabCountPillActive]}>
+              <AppText
+                tipo="legenda"
+                peso="forte"
+                tabular
+                style={selected ? styles.tabCountTextActive : styles.tabCountText}>
+                {tab.count}
+              </AppText>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <FadeInBlock delay={0}>
-          <View style={styles.header}>
-            <BackButton fallbackHref="/(tabs)/tab3" />
-            <View style={styles.headerCopy}>
-              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SUA COLEÇÃO</AppText>
-              <AppText tipo="titulo" peso="forte" style={styles.title}>Minhas Listas</AppText>
-            </View>
-            <AppText tipo="legenda" peso="forte" tabular style={styles.countBadge}>
-              {activeCount} {activeCount === 1 ? 'obra' : 'obras'}
-            </AppText>
-          </View>
-
-          <View style={styles.tabBar} accessibilityRole="tablist">
-            {(
-              [
-                { id: 'fila', label: 'Fila', icon: 'bookmark', count: savedTitles.length },
-                {
-                  id: 'assistidos',
-                  label: 'Assistidos',
-                  icon: 'check-circle',
-                  count: watchedIds.length,
-                },
-              ] as const
-            ).map((tab) => {
-              const selected = activeTab === tab.id;
-              return (
-                <Pressable
-                  key={tab.id}
-                  style={({ pressed }) => [
-                    styles.tabButton,
-                    selected && styles.tabButtonActive,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => handleSelectTab(tab.id)}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={`${tab.label}, ${tab.count} ${tab.count === 1 ? 'obra' : 'obras'}`}>
-                  <MaterialIcons
-                    name={tab.icon}
-                    size={16}
-                    color={selected ? colors.chipSelectedIcon : colors.chipText}
-                  />
-                  <AppText
-                    tipo="legenda"
-                    peso="forte"
-                    style={selected ? styles.tabTextActive : styles.tabText}>
-                    {tab.label}
-                  </AppText>
-                  <View style={[styles.tabCountPill, selected && styles.tabCountPillActive]}>
-                    <AppText
-                      tipo="legenda"
-                      peso="forte"
-                      tabular
-                      style={selected ? styles.tabCountTextActive : styles.tabCountText}>
-                      {tab.count}
-                    </AppText>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </FadeInBlock>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScreenHeader
+        eyebrow="SUA COLEÇÃO"
+        title="Minhas Listas"
+        showBack
+        fallbackHref="/(tabs)/tab3"
+        bottomSlot={tabBarNode}
+        scrolled={scrolled}
+      />
+      <ScrollView
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: Math.max(36, insets.bottom + 16) },
+        ]}
+        showsVerticalScrollIndicator={false}>
 
         {activeTab === 'fila' ? (
           <>
@@ -382,24 +405,10 @@ const createStyles = (theme: Theme) => ({
     maxWidth: 640,
     alignSelf: 'center' as const,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 10,
     paddingBottom: 36,
   },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, marginBottom: 16 },
-  headerCopy: { flex: 1 },
-  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
-  countBadge: {
-    color: theme.colors.textSecondary,
-    backgroundColor: theme.colors.bgSurface,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    borderRadius: 11,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-  },
   tabBar: {
     flexDirection: 'row' as const,
     gap: 4,
@@ -408,7 +417,6 @@ const createStyles = (theme: Theme) => ({
     backgroundColor: theme.colors.bgSurfaceAlt,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    marginBottom: 18,
   },
   tabButton: {
     flex: 1,
@@ -476,6 +484,43 @@ const createStyles = (theme: Theme) => ({
     marginBottom: 2,
   },
   watchedMeta: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
+  completedBadgesRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+  },
+  completedBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.badgeSuccessBorder,
+    backgroundColor: theme.colors.badgeSuccessBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  completedBadgeText: {
+    color: theme.colors.badgeSuccessText,
+    fontSize: 11.5,
+  },
+  rouletteBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.badgeAccentBorder,
+    backgroundColor: theme.colors.badgeAccentBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  rouletteBadgeText: {
+    color: theme.colors.badgeAccentText,
+    fontSize: 11.5,
+  },
   progressBlock: { marginTop: 9, gap: 5 },
   progressHeader: {
     flexDirection: 'row' as const,
@@ -485,7 +530,6 @@ const createStyles = (theme: Theme) => ({
   },
   progressLabelRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, flex: 1 },
   progressLabel: { color: theme.colors.textSecondary, fontSize: 12 },
-  progressLabelDone: { color: theme.colors.successText },
   progressPercent: { color: theme.colors.textPrimary, fontSize: 12 },
   progressTrack: {
     height: 6,

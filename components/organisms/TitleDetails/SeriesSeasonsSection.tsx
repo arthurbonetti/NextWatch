@@ -20,7 +20,6 @@ import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
 type SeriesSeasonsSectionProps = {
   seasons: SeasonSummary[];
-  accentColor: string;
   expandedSeason: number | null;
   episodesBySeason: Partial<Record<number, EpisodeSummary[]>>;
   loadingSeasonNumber: number | null;
@@ -38,7 +37,6 @@ type SeriesSeasonsSectionProps = {
 type SeasonAccordionProps = {
   season: SeasonSummary;
   expanded: boolean;
-  accentColor: string;
   watchedCount: number;
   completed: boolean;
   episodes: EpisodeSummary[] | undefined;
@@ -54,7 +52,6 @@ type SeasonAccordionProps = {
 function SeasonAccordion({
   season,
   expanded,
-  accentColor,
   watchedCount,
   completed,
   episodes,
@@ -66,7 +63,7 @@ function SeasonAccordion({
   onToggleEpisode,
   onToggleSeason,
 }: SeasonAccordionProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
 
@@ -159,12 +156,7 @@ function SeasonAccordion({
           onPress={handleToggleSeason}
           style={({ pressed }) => [
             styles.seasonMarkBtn,
-            completed
-              ? styles.seasonMarkBtnDone
-              : {
-                  backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
-                  borderColor: withAlpha(accentColor, 0.35),
-                },
+            completed ? styles.seasonMarkBtnDone : styles.seasonMarkBtnDefault,
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
@@ -317,7 +309,6 @@ function SeasonAccordion({
 
 export function SeriesSeasonsSection({
   seasons,
-  accentColor,
   expandedSeason,
   episodesBySeason,
   loadingSeasonNumber,
@@ -380,7 +371,7 @@ export function SeriesSeasonsSection({
               styles.progressFill,
               {
                 backgroundColor:
-                  progressPercent === 100 ? colors.successText : accentColor,
+                  progressPercent === 100 ? colors.successText : colors.accentPrimary,
               },
               barFillStyle,
             ]}
@@ -403,7 +394,6 @@ export function SeriesSeasonsSection({
               key={season.seasonNumber}
               season={season}
               expanded={isExpanded}
-              accentColor={accentColor}
               watchedCount={getSeasonWatchedCount(season.seasonNumber)}
               completed={isSeasonCompleted(season.seasonNumber, season.episodeCount)}
               episodes={episodesBySeason[season.seasonNumber]}
@@ -530,6 +520,10 @@ const createStyles = (theme: Theme) => ({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  seasonMarkBtnDefault: {
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderColor: theme.colors.borderSubtle,
   },
   seasonMarkBtnDone: {
     backgroundColor: theme.colors.bgSuccess,

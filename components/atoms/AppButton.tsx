@@ -26,6 +26,7 @@ export function AppButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
@@ -35,7 +36,7 @@ export function AppButton({
       ]}
       {...props}
     >
-      <AppText tipo="texto" peso="forte" style={styles.texto}>
+      <AppText tipo="texto" peso="forte" style={[styles.texto, disabled && styles.textoDesabilitado]}>
         {titulo}
       </AppText>
     </Pressable>
@@ -59,12 +60,16 @@ const createStyles = (theme: Theme) => ({
     transform: [{ scale: 0.985 }],
   },
   desabilitado: {
-    opacity: 0.5,
+    backgroundColor: theme.colors.buttonDisabledBg,
+    borderColor: theme.colors.buttonDisabledBorder,
   },
   texto: {
     fontSize: 15,
     lineHeight: 20,
     letterSpacing: -0.1,
     color: theme.colors.primaryButtonText,
+  },
+  textoDesabilitado: {
+    color: theme.colors.buttonDisabledText,
   },
 });

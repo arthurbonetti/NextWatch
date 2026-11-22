@@ -5,23 +5,21 @@ import Animated from 'react-native-reanimated';
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, MediaTitle } from '@/constants/catalog';
-import { resolveTitleAccentColor, Theme, withAlpha } from '@/constants/theme';
+import { Theme, withAlpha } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type SimilarTitlesCarouselProps = {
   titles: MediaTitle[];
-  accentColor: string;
   onSelectTitle: (title: MediaTitle) => void;
   onDrawSimilar: () => void;
 };
 
 export function SimilarTitlesCarousel({
   titles,
-  accentColor,
   onSelectTitle,
   onDrawSimilar,
 }: SimilarTitlesCarouselProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
@@ -35,14 +33,14 @@ export function SimilarTitlesCarousel({
           style={({ pressed }) => [
             styles.drawSimilarButton,
             {
-              backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
-              borderColor: withAlpha(accentColor, 0.4),
+              backgroundColor: colors.badgeAccentBg,
+              borderColor: colors.badgeAccentBorder,
             },
             pressed && styles.pressed,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Sortear outro título parecido">
-          <MaterialIcons name="casino" size={15} color={colors.textPrimary} />
+          <MaterialIcons name="casino" size={15} color={colors.badgeAccentText} />
           <AppText tipo="legenda" peso="forte" style={styles.drawSimilarText}>
             Sortear outro parecido
           </AppText>
@@ -55,7 +53,7 @@ export function SimilarTitlesCarousel({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
           {titles.map((item) => {
-            const cardAccent = resolveTitleAccentColor(item.color, isDark);
+            const posterBgColor = item.color || colors.heroBg;
             return (
               <Pressable
                 key={item.id}
@@ -65,7 +63,7 @@ export function SimilarTitlesCarousel({
                 accessibilityLabel={`Abrir detalhes de ${item.title}`}>
                 <Animated.View
                   sharedTransitionTag={`title-poster-${item.id}`}
-                  style={[styles.posterFrame, { backgroundColor: cardAccent }]}>
+                  style={[styles.posterFrame, { backgroundColor: posterBgColor }]}>
                   <TitleArtwork
                     id={item.id}
                     variant="poster"
@@ -126,7 +124,7 @@ const createStyles = (theme: Theme) => ({
     paddingVertical: 6,
   },
   drawSimilarText: {
-    color: theme.colors.textPrimary,
+    color: theme.colors.badgeAccentText,
     fontSize: 12,
   },
   pressed: {

@@ -2,10 +2,12 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Linking from 'expo-linking';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Share, View } from 'react-native';
+import { Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
+  Extrapolation,
   FadeIn,
+  interpolate,
   interpolateColor,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -16,11 +18,13 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BackButton } from '@/components/atoms/BackButton';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
 import { ExpandableText } from '@/components/atoms/ExpandableText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { RatingInfoSheet } from '@/components/organisms/RatingInfoSheet';
+import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import { CastCarousel } from '@/components/organisms/TitleDetails/CastCarousel';
 import { SeriesSeasonsSection } from '@/components/organisms/TitleDetails/SeriesSeasonsSection';
 import { SimilarTitlesCarousel } from '@/components/organisms/TitleDetails/SimilarTitlesCarousel';
@@ -36,7 +40,7 @@ import {
   MediaTitle,
 } from '@/constants/catalog';
 import { openStreamingService } from '@/constants/subscriptions';
-import { resolveTitleAccentColor, Theme, THEME, withAlpha } from '@/constants/theme';
+import { Theme, THEME, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import {
@@ -50,16 +54,17 @@ import { useSeriesProgress } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCount } from '@/utils/format';
 import { triggerLightImpactHaptic, triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
+import { applyEpisodeToggle, applySeasonToggle, isSeriesCompleted } from '@/utils/watchedProgress';
 
 export default function TitleDetailsScreen() {
   const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { user, token, authReady } = useAuth();
+  const { user, token, authReady, isPasswordRecovery } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const { status, findTitle } = useCatalog();
-  const { isSaved, toggleSavedTitle, findSavedTitle, storageReady } = useMyList();
+  const { isSaved, toggleSavedTitle, removeFromMyList, findSavedTitle, storageReady } = useMyList();
   const { subscriptions } = useSubscriptions();
 
   const normalizedId = Array.isArray(id) ? id[0] ?? '' : id ?? '';
@@ -167,6 +172,35 @@ export default function TitleDetailsScreen() {
     void refetchRichDetails();
   }, [refetchRichDetails]);
 
+  const handleToggleEpisode = useCallback(
+    (seasonNumber: number, episodeNumber: number) => {
+      if (!titleId) return;
+      const nextMap = applyEpisodeToggle(seriesProgress.progressMap, seasonNumber, episodeNumber);
+      seriesProgress.toggleEpisode(seasonNumber, episodeNumber);
+      if (saved && richSeasons && isSeriesCompleted(nextMap, richSeasons)) {
+        removeFromMyList(titleId);
+      }
+    },
+    [removeFromMyList, richSeasons, saved, seriesProgress, titleId],
+  );
+
+  const handleToggleSeason = useCallback(
+    (seasonNumber: number, episodeCount: number, episodeNumbers?: number[]) => {
+      if (!titleId) return;
+      const nextMap = applySeasonToggle(
+        seriesProgress.progressMap,
+        seasonNumber,
+        episodeCount,
+        episodeNumbers,
+      );
+      seriesProgress.toggleSeason(seasonNumber, episodeCount, episodeNumbers);
+      if (saved && richSeasons && isSeriesCompleted(nextMap, richSeasons)) {
+        removeFromMyList(titleId);
+      }
+    },
+    [removeFromMyList, richSeasons, saved, seriesProgress, titleId],
+  );
+
   useEffect(() => {
     saveProgress.set(
       reducedMotion
@@ -213,6 +247,22 @@ export default function TitleDetailsScreen() {
     transform: [{ rotate: `${drawerChevronRotation.get()}deg` }],
   }));
 
+  const stickyHeaderBgStyle = useAnimatedStyle(() => ({
+    opacity: reducedMotion
+      ? scrollY.get() > 160
+        ? 1
+        : 0
+      : interpolate(scrollY.get(), [135, 200], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  const stickyTitleStyle = useAnimatedStyle(() => ({
+    opacity: reducedMotion
+      ? scrollY.get() > 180
+        ? 1
+        : 0
+      : interpolate(scrollY.get(), [165, 215], [0, 1], Extrapolation.CLAMP),
+  }));
+
   const activeProviderNames = useMemo(
     () => new Set(subscriptions.filter((sub) => sub.active).map((sub) => sub.provider)),
     [subscriptions],
@@ -239,11 +289,13 @@ export default function TitleDetailsScreen() {
   const watchOptions = subscribedServices.length > 0 ? subscribedServices : allServices;
 
   if (!authReady) return null;
+  if (isPasswordRecovery) return <Redirect href="/(auth)/reset-password" />;
   if (!user) return <Redirect href="/(auth)/login" />;
 
   if (!title) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScreenHeader title="Detalhes" showBack fallbackHref="/(tabs)/tab2" />
         <View style={styles.notFound}>
           <MaterialIcons name="movie-filter" size={40} color={colors.accentLink} />
           <AppText tipo="subtitulo" peso="forte" style={styles.notFoundTitle}>
@@ -264,7 +316,6 @@ export default function TitleDetailsScreen() {
   }
 
   const isSerialTitle = checkIsSerialTitle(title);
-  const accentColor = resolveTitleAccentColor(title.color, isDark);
   const rawDuration = richDetails?.duration ?? cachedDuration ?? title.duration;
   const safeDuration =
     rawDuration && rawDuration !== 'Duração não informada' && rawDuration !== title.kind
@@ -379,10 +430,8 @@ export default function TitleDetailsScreen() {
           statusLabel={richDetails?.statusLabel}
           certification={richDetails?.certification}
           trailerUrl={richDetails?.trailerUrl}
-          accentColor={accentColor}
           scrollY={scrollY}
           topInset={insets.top}
-          onShare={handleShare}
           onWatchTrailer={handleWatchTrailer}
         />
 
@@ -452,7 +501,7 @@ export default function TitleDetailsScreen() {
                   style={({ pressed }) => [
                     styles.genreChip,
                     {
-                      borderColor: withAlpha(accentColor, 0.34),
+                      borderColor: colors.chipBorder,
                       backgroundColor: colors.bgSurface,
                     },
                     pressed && styles.pressed,
@@ -500,7 +549,6 @@ export default function TitleDetailsScreen() {
           <StreamingAvailabilitySection
             services={allServices}
             subscriptions={subscriptions}
-            accentColor={accentColor}
             onPressService={handleOpenService}
           />
 
@@ -526,7 +574,7 @@ export default function TitleDetailsScreen() {
                       styles.movieProgressFill,
                       {
                         width: movieWatched ? '100%' : '0%',
-                        backgroundColor: movieWatched ? colors.successText : accentColor,
+                        backgroundColor: movieWatched ? colors.successText : colors.accentPrimary,
                       },
                     ]}
                   />
@@ -545,16 +593,17 @@ export default function TitleDetailsScreen() {
                       } else {
                         triggerSuccessHaptic();
                       }
+                      const nextCompleted = !movieWatched;
                       seriesProgress.toggleEpisode(0, 1);
+                      if (nextCompleted && saved) {
+                        removeFromMyList(title.id);
+                      }
                     }}
                     style={({ pressed }) => [
                       styles.movieMarkButton,
                       movieWatched
                         ? styles.movieMarkButtonDone
-                        : {
-                            backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
-                            borderColor: withAlpha(accentColor, 0.35),
-                          },
+                        : styles.movieMarkButtonDefault,
                       pressed && styles.pressed,
                     ]}
                     accessibilityRole="button"
@@ -607,7 +656,6 @@ export default function TitleDetailsScreen() {
               {isSerialTitle && richDetails && richDetails.seasons.length > 0 && (
                 <SeriesSeasonsSection
                   seasons={richDetails.seasons}
-                  accentColor={accentColor}
                   expandedSeason={expandedSeason}
                   episodesBySeason={episodesBySeason}
                   loadingSeasonNumber={loadingSeasonNumber}
@@ -618,8 +666,8 @@ export default function TitleDetailsScreen() {
                   isEpisodeWatched={seriesProgress.isEpisodeWatched}
                   getSeasonWatchedCount={seriesProgress.getSeasonWatchedCount}
                   isSeasonCompleted={seriesProgress.isSeasonCompleted}
-                  onToggleEpisode={seriesProgress.toggleEpisode}
-                  onToggleSeason={seriesProgress.toggleSeason}
+                  onToggleEpisode={handleToggleEpisode}
+                  onToggleSeason={handleToggleSeason}
                 />
               )}
 
@@ -629,7 +677,6 @@ export default function TitleDetailsScreen() {
 
               <SimilarTitlesCarousel
                 titles={richDetails?.similarTitles ?? []}
-                accentColor={accentColor}
                 onSelectTitle={handleSelectSimilar}
                 onDrawSimilar={handleDrawSimilar}
               />
@@ -637,6 +684,33 @@ export default function TitleDetailsScreen() {
           )}
         </View>
       </Animated.ScrollView>
+
+      <View
+        style={[
+          styles.stickyTopOverlay,
+          { paddingTop: insets.top + THEME.spacing.xs, pointerEvents: 'box-none' },
+        ]}>
+        <Animated.View
+          style={[styles.stickyTopBg, stickyHeaderBgStyle, { pointerEvents: 'none' }]}
+        />
+        <View style={[styles.stickyTopRow, { pointerEvents: 'box-none' }]}>
+          <BackButton style={styles.floatingTopIconBtn} />
+          <Animated.View
+            style={[styles.stickyTopTitleWrap, stickyTitleStyle, { pointerEvents: 'none' }]}>
+            <AppText tipo="subtitulo" peso="forte" numberOfLines={1} style={styles.stickyTopTitle}>
+              {title.title}
+            </AppText>
+          </Animated.View>
+          <Pressable
+            onPress={handleShare}
+            style={({ pressed }) => [styles.floatingTopIconBtn, pressed && styles.pressed]}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Compartilhar ${title.title}`}>
+            <MaterialIcons name="share" size={19} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
 
       <View
         style={[
@@ -757,6 +831,48 @@ const createStyles = (theme: Theme) => ({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.bgPrimary,
+  },
+  stickyTopOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingBottom: theme.spacing.sm,
+  },
+  stickyTopBg: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: theme.colors.bgPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+  },
+  stickyTopRow: {
+    width: '100%' as const,
+    maxWidth: 640,
+    alignSelf: 'center' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  floatingTopIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: withAlpha(theme.colors.bgSurface, 0.92),
+    borderWidth: 1,
+    borderColor: withAlpha(theme.colors.borderSubtle, 0.9),
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  stickyTopTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  stickyTopTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
+    lineHeight: 22,
   },
   scrollView: {
     flex: 1,
@@ -922,6 +1038,10 @@ const createStyles = (theme: Theme) => ({
     borderWidth: 1,
     paddingHorizontal: 11,
     paddingVertical: 6,
+  },
+  movieMarkButtonDefault: {
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderColor: theme.colors.borderSubtle,
   },
   movieMarkButtonDone: {
     backgroundColor: theme.colors.bgSuccess,

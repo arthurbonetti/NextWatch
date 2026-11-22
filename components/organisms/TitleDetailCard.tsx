@@ -29,9 +29,8 @@ import {
   MediaTitle,
 } from '@/constants/catalog';
 import { openStreamingService, Subscription } from '@/constants/subscriptions';
-import { resolveTitleAccentColor, Theme, THEME, withAlpha } from '@/constants/theme';
+import { Theme, THEME } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-import { formatCurrency } from '@/utils/format';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 
 type TitleDetailCardProps = {
@@ -115,10 +114,8 @@ function ConfettiParticle({
 }
 
 function GoldConfettiBurst({
-  accentColor,
   progress,
 }: {
-  accentColor: string;
   progress: SharedValue<number>;
 }) {
   const { colors } = useTheme();
@@ -129,7 +126,7 @@ function GoldConfettiBurst({
     { dx: -82, dy: -46, rotate: -190, size: 7, delay: 0.04, color: colors.goldLight },
     { dx: -52, dy: -32, rotate: 160, size: 9, delay: 0.02, color: colors.accent },
     { dx: -24, dy: -52, rotate: -240, size: 7, delay: 0.06, color: colors.accentPrimary },
-    { dx: 18, dy: -48, rotate: 200, size: 8, delay: 0.03, color: accentColor },
+    { dx: 18, dy: -48, rotate: 200, size: 8, delay: 0.03, color: colors.accentPrimary },
     { dx: 48, dy: -34, rotate: -170, size: 9, delay: 0.01, color: colors.goldLight },
     { dx: 78, dy: -44, rotate: 230, size: 7, delay: 0.05, color: colors.accentPrimary },
     { dx: 108, dy: -24, rotate: -210, size: 8, delay: 0.025, color: colors.accent },
@@ -148,18 +145,13 @@ function GoldConfettiBurst({
   );
 }
 
-function formatProviderPossessive(providerName: string): string {
-  return providerName === 'Netflix' ? `na sua ${providerName}` : `no seu ${providerName}`;
-}
-
-function buildDrawReason(title: MediaTitle, primaryProvider: string | null): string {
+function buildDrawReason(title: MediaTitle): string {
   const avg = getTitleAverageRating(title);
   const genre = title.genres.find((item) => item !== 'Outros');
-  const providerSuffix = primaryProvider ? ` ${formatProviderPossessive(primaryProvider)}` : '';
 
   if (genre === 'Documentário' && title.kind === 'Filme') {
     const quality = avg >= 8.2 ? 'aclamado' : 'bem avaliado';
-    return `Documentário ${quality}${providerSuffix}`;
+    return `Documentário ${quality}`;
   }
 
   const isFeminine = title.kind === 'Série';
@@ -172,14 +164,14 @@ function buildDrawReason(title: MediaTitle, primaryProvider: string | null): str
       : 'bem avaliado';
 
   if (genre) {
-    return `${title.kind} de ${genre} ${quality}${providerSuffix}`;
+    return `${title.kind} de ${genre} ${quality}`;
   }
-  return `${title.kind} ${quality}${providerSuffix}`;
+  return `${title.kind} ${quality}`;
 }
 
 /**
  * Card compartilhado para exibição de detalhes em modais ("Sorteado para você" e "Para assistir hoje"),
- * com backdrop em gradiente, pôster sobreposto, trailer, valor da assinatura e ações.
+ * com backdrop em gradiente, pôster sobreposto, trailer e ações principais.
  */
 export function TitleDetailCard({
   title,
@@ -222,7 +214,6 @@ export function TitleDetailCard({
   }
 
   const displayDuration = duration || title.duration;
-  const accentColor = resolveTitleAccentColor(title.color, isDark);
   const uniqueTitleServices = Array.from(new Set(getTitleServices(title)));
   const enabledSet = enabledServices ? new Set(enabledServices) : null;
   const matchedSubscriptions = activeSubscriptions.filter((sub) =>
@@ -247,13 +238,12 @@ export function TitleDetailCard({
         }));
 
   const hasMultipleWatchOptions = watchOptions.length > 1;
-  const matchedSubscription = orderedUserSubscriptions[0] ?? null;
   const primaryProvider = watchOptions[0]?.provider ?? 'Netflix';
 
   const metacritic = getMetacriticScore(title);
   const averageRating = formatAverageRating(title);
   const ratingSourceName = title.ratingSource ?? 'IMDb';
-  const reasonText = buildDrawReason(title, matchedSubscription?.provider ?? uniqueTitleServices[0] ?? null);
+  const reasonText = buildDrawReason(title);
 
   const confettiProgress = useSharedValue(1);
   const posterScale = useSharedValue(reducedMotion ? 1 : 0.94);
@@ -418,7 +408,7 @@ export function TitleDetailCard({
 
   return (
     <View style={styles.card}>
-      {showConfetti && <GoldConfettiBurst accentColor={accentColor} progress={confettiProgress} />}
+      {showConfetti && <GoldConfettiBurst progress={confettiProgress} />}
 
       <Pressable
         style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
@@ -473,7 +463,7 @@ export function TitleDetailCard({
             </Animated.View>
 
             <View style={styles.headerCopy}>
-              <AppText tipo="legenda" peso="forte" style={[styles.eyebrow, { color: accentColor }]}>
+              <AppText tipo="legenda" peso="forte" style={[styles.eyebrow, { color: colors.accentLink }]}>
                 {eyebrow}
               </AppText>
               <AppText tipo="titulo" familia="editorial" peso="forte" style={styles.title} numberOfLines={3}>
@@ -491,11 +481,11 @@ export function TitleDetailCard({
               style={[
                 styles.reasonPill,
                 {
-                  backgroundColor: withAlpha(accentColor, isDark ? 0.16 : 0.1),
-                  borderColor: withAlpha(accentColor, isDark ? 0.36 : 0.28),
+                  backgroundColor: colors.badgeAccentBg,
+                  borderColor: colors.badgeAccentBorder,
                 },
               ]}>
-              <View style={[styles.reasonDot, { backgroundColor: accentColor }]} />
+              <View style={[styles.reasonDot, { backgroundColor: isDark ? colors.accentPrimary : colors.accentLink }]} />
               <AppText tipo="legenda" peso="semiforte" style={styles.reasonText}>
                 {reasonText}
               </AppText>
@@ -631,27 +621,6 @@ export function TitleDetailCard({
             </View>
           </CollapsibleSection>
 
-          {orderedUserSubscriptions.length > 1 ? (
-            <View style={styles.subscriptionBanner}>
-              <ServiceLogoList
-                services={orderedUserSubscriptions.map((sub) => sub.provider)}
-                size={22}
-                maxVisible={3}
-                gap={4}
-              />
-              <AppText tipo="legenda" peso="semiforte" style={styles.subscriptionBannerText}>
-                Incluído em {orderedUserSubscriptions.length} dos seus streamings
-              </AppText>
-            </View>
-          ) : matchedSubscription ? (
-            <View style={styles.subscriptionBanner}>
-              <ServiceLogo name={matchedSubscription.provider} size={24} />
-              <AppText tipo="legenda" peso="semiforte" tabular style={styles.subscriptionBannerText}>
-                Incluído no seu {matchedSubscription.provider} · {formatCurrency(matchedSubscription.monthlyPrice)}/mês
-              </AppText>
-            </View>
-          ) : null}
-
           <AppText peso="medio" style={styles.genres}>
             {title.genres.join(' · ')}
           </AppText>
@@ -767,8 +736,8 @@ export function TitleDetailCard({
                               Abrir no {option.provider}
                             </AppText>
                             {option.monthlyPrice !== null && (
-                              <AppText tipo="legenda" tabular style={styles.streamingOptionMeta}>
-                                Incluído · {formatCurrency(option.monthlyPrice)}/mês
+                              <AppText tipo="legenda" style={styles.streamingOptionMeta}>
+                                Incluído na sua assinatura
                               </AppText>
                             )}
                           </View>
@@ -1072,24 +1041,6 @@ const createStyles = (theme: Theme) => ({
   providerPillText: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSizes.sm,
-  },
-  subscriptionBanner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: theme.spacing.base,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.base,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.bgSurfaceAlt,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    marginBottom: theme.spacing.lg,
-  },
-  subscriptionBannerText: {
-    flex: 1,
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSizes.bodySm,
-    lineHeight: theme.lineHeights.bodySm,
   },
   genres: {
     color: theme.colors.textWarm,

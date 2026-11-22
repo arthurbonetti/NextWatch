@@ -11,6 +11,104 @@ export type WatchedProgressSummary = {
   completed: boolean;
 };
 
+export type SeasonEpisodeSummary = {
+  seasonNumber: number;
+  episodeCount: number;
+};
+
+export function applyEpisodeToggle(
+  prev: SeriesProgressMap,
+  seasonNumber: number,
+  episodeNumber: number,
+): SeriesProgressMap {
+  const key = String(seasonNumber);
+  const current = prev[key] ?? [];
+  const exists = current.includes(episodeNumber);
+  const nextEpisodes = exists
+    ? current.filter((ep) => ep !== episodeNumber)
+    : [...current, episodeNumber].sort((a, b) => a - b);
+
+  if (nextEpisodes.length === 0) {
+    const rest = { ...prev };
+    delete rest[key];
+    return rest;
+  }
+  return { ...prev, [key]: nextEpisodes };
+}
+
+export function applySeasonToggle(
+  prev: SeriesProgressMap,
+  seasonNumber: number,
+  episodeCount: number,
+  episodeNumbers?: readonly number[],
+): SeriesProgressMap {
+  const key = String(seasonNumber);
+  const targetNumbers =
+    episodeNumbers && episodeNumbers.length > 0
+      ? Array.from(new Set(episodeNumbers)).sort((a, b) => a - b)
+      : Array.from({ length: Math.max(0, episodeCount) }, (_, idx) => idx + 1);
+
+  if (targetNumbers.length === 0) return prev;
+
+  const current = prev[key] ?? [];
+  const allWatched = targetNumbers.every((num) => current.includes(num));
+  if (allWatched) {
+    const rest = { ...prev };
+    delete rest[key];
+    return rest;
+  }
+  return { ...prev, [key]: targetNumbers };
+}
+
+export function isMovieCompleted(progressMap: SeriesProgressMap | undefined): boolean {
+  return Boolean(progressMap?.['0']?.includes(1));
+}
+
+export function isSeriesCompleted(
+  progressMap: SeriesProgressMap | undefined,
+  seasons: readonly SeasonEpisodeSummary[],
+): boolean {
+  const regularSeasons = seasons.filter((s) => s.seasonNumber > 0 && s.episodeCount > 0);
+  if (regularSeasons.length === 0 || !progressMap) return false;
+  return regularSeasons.every(
+    (season) => (progressMap[String(season.seasonNumber)]?.length ?? 0) >= season.episodeCount,
+  );
+}
+
+export function buildWatchedTitleIdsOrdered(
+  history: readonly { tmdbId: string; acao: string }[],
+  progressTitleIds: readonly string[],
+): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const id of progressTitleIds) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+    }
+  }
+  for (const entry of history) {
+    if (entry.acao === 'assistiu' && !seen.has(entry.tmdbId)) {
+      seen.add(entry.tmdbId);
+      ordered.push(entry.tmdbId);
+    }
+  }
+  return ordered;
+}
+
+export function computeMyListsCounts(
+  savedTitleIds: readonly string[],
+  watchedTitleIds: readonly string[],
+): { queueCount: number; watchedCount: number; totalCount: number } {
+  const queueCount = new Set(savedTitleIds).size;
+  const watchedCount = new Set(watchedTitleIds).size;
+  return {
+    queueCount,
+    watchedCount,
+    totalCount: queueCount + watchedCount,
+  };
+}
+
 function hasEntries(map: SeriesProgressMap | undefined): map is SeriesProgressMap {
   return Boolean(map && Object.keys(map).length > 0);
 }

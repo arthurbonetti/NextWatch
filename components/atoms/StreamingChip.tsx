@@ -10,14 +10,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
-import { MaterialIconName } from '@/constants/catalog';
+import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { Theme, THEME } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 
-type AnimatedFilterChipProps = {
-  label: string;
-  icon: MaterialIconName;
+type StreamingChipProps = {
+  provider: string;
   selected: boolean;
   onPress: () => void;
   accessibilityRole?: AccessibilityRole;
@@ -25,17 +24,16 @@ type AnimatedFilterChipProps = {
 };
 
 /**
- * Chip de filtro com área mínima de 44px, ícone, resposta sutil ao toque na UI thread,
- * transição suave de cor na seleção e feedback tátil.
+ * Chip padronizado para seleção de serviços de streaming, compartilhado
+ * entre a bottom sheet da Roleta e os Filtros do Catálogo.
  */
-export function AnimatedFilterChip({
-  label,
-  icon,
+export function StreamingChip({
+  provider,
   selected,
   onPress,
-  accessibilityRole = 'button',
+  accessibilityRole = 'checkbox',
   accessibilityLabel,
-}: AnimatedFilterChipProps) {
+}: StreamingChipProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
@@ -92,7 +90,7 @@ export function AnimatedFilterChip({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       accessibilityRole={accessibilityRole}
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={accessibilityLabel ?? provider}
       accessibilityState={
         accessibilityRole === 'checkbox'
           ? { checked: selected, selected }
@@ -100,18 +98,17 @@ export function AnimatedFilterChip({
       }
       style={styles.pressable}>
       <Animated.View style={[styles.chip, containerAnimatedStyle]}>
-        <MaterialIcons
-          name={icon}
-          size={16}
-          color={selected ? colors.chipSelectedIcon : colors.chipIcon}
-        />
+        <ServiceLogo name={provider} size={22} />
         <AppText
           tipo="legenda"
           peso="forte"
           numberOfLines={1}
           style={[styles.label, selected ? styles.labelSelected : styles.labelUnselected]}>
-          {label}
+          {provider}
         </AppText>
+        {selected && (
+          <MaterialIcons name="check-circle" size={16} color={colors.chipSelectedIcon} />
+        )}
       </Animated.View>
     </Pressable>
   );
@@ -126,11 +123,11 @@ const createStyles = (theme: Theme) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.base,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
   },
   label: {
     fontSize: theme.fontSizes.bodySm,

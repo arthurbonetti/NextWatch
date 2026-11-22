@@ -434,12 +434,12 @@ export function AnimatedModalShell({
         variant === 'sheet'
           ? [
               styles.sheetContainer,
-              sheetStyle,
               {
                 maxWidth: resolvedMaxWidth,
                 maxHeight: resolvedMaxHeight,
                 paddingBottom: Math.max(THEME.spacing.s24, insets.bottom + THEME.spacing.base),
               },
+              sheetStyle,
             ]
           : [
               styles.centerContainer,
@@ -489,7 +489,7 @@ export function AnimatedModalShell({
       <View style={[styles.root, { pointerEvents: visible ? 'auto' : 'none' }]}>
         <Animated.View style={[styles.backdropContainer, backdropStyle, { pointerEvents: 'none' }]}>
           {Platform.OS !== 'android' && (
-            <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={32} tint="dark" style={StyleSheet.absoluteFill} />
           )}
           <View
             style={[

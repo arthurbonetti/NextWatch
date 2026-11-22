@@ -1,7 +1,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
@@ -60,6 +61,12 @@ export default function HomeScreen() {
 
   const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const isScrolled = event.nativeEvent.contentOffset.y > 6;
+    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  }, []);
 
   const openDetails = (title: MediaTitle) => {
     setSelectedTitle(title);
@@ -76,39 +83,51 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
-        <FadeInBlock delay={0}>
-          <View style={styles.topbar}>
-            <View style={styles.brandRow}>
-              <NextWatchLogo size={38} />
-              <AppText tipo="subtitulo" peso="forte" style={styles.brandTitle}>NEXTWATCH</AppText>
-            </View>
-            <View style={styles.topbarActions}>
-              <Pressable
-                style={({ pressed }) => [styles.listsButton, pressed && styles.pressed]}
-                onPress={() => router.push('/my-list')}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel="Abrir Minhas Listas">
-                <MaterialIcons name="bookmark-border" size={28} color={colors.accentLink} />
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
-                onPress={() => router.push('/(tabs)/tab3')}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel="Abrir perfil">
-                <UserAvatar
-                  size={44}
-                  name={profile?.name}
-                  avatarType={profile?.avatarType}
-                  avatarPreset={profile?.avatarPreset}
-                  avatarUrl={profile?.avatarUrl}
-                />
-              </Pressable>
-            </View>
+      <View style={[styles.stickyTopbar, scrolled && styles.stickyTopbarScrolled]}>
+        <View style={styles.topbar}>
+          <View style={styles.brandRow}>
+            <NextWatchLogo size={38} />
+            <AppText tipo="subtitulo" peso="forte" style={styles.brandTitle}>NEXTWATCH</AppText>
           </View>
-        </FadeInBlock>
+          <View style={styles.topbarActions}>
+            <Pressable
+              style={({ pressed }) => [styles.listsButton, pressed && styles.pressed]}
+              onPress={() => router.push('/my-list')}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir Minhas Listas">
+              <MaterialIcons name="bookmark-border" size={28} color={colors.accentLink} />
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
+              onPress={() => router.push('/(tabs)/tab3')}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir perfil">
+              <UserAvatar
+                size={44}
+                name={profile?.name}
+                avatarType={profile?.avatarType}
+                avatarPreset={profile?.avatarPreset}
+                avatarUrl={profile?.avatarUrl}
+              />
+            </Pressable>
+          </View>
+        </View>
+        {scrolled && (
+          <LinearGradient
+            colors={[withAlpha(colors.bgPrimary, 0.9), withAlpha(colors.bgPrimary, 0)]}
+            locations={[0, 1]}
+            style={[styles.stickyEdgeScrim, { pointerEvents: 'none' }]}
+          />
+        )}
+      </View>
+
+      <ScrollView
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.container, { paddingBottom: Math.max(124, 108 + insets.bottom) }]}
+        showsVerticalScrollIndicator={false}>
 
         <FadeInBlock delay={35}>
           <View style={[styles.statsRow, isFetchingCatalog && availableTitles.length > 0 && styles.statsRowSyncing]}>
@@ -186,6 +205,11 @@ export default function HomeScreen() {
                     backdropPath={featuredSample.tmdbBackdropPath}
                     priority="high"
                     transition={0}
+                  />
+                  <LinearGradient
+                    colors={['rgba(9, 15, 23, 0)', 'rgba(9, 15, 23, 0.34)', 'rgba(9, 15, 23, 0.78)']}
+                    locations={[0, 0.5, 1]}
+                    style={[styles.posterBottomGradient, { pointerEvents: 'none' }]}
                   />
                   <View style={styles.heroPosterBadge}>
                     <MaterialIcons name="star" size={11} color={colors.accentPrimary} />
@@ -279,6 +303,13 @@ export default function HomeScreen() {
                       transition={index < 2 ? 0 : 200}
                     />
                     {!hasArtwork && <MaterialIcons name={title.icon} size={34} color={colors.textOnNavy} />}
+                    {hasArtwork && (
+                      <LinearGradient
+                        colors={['rgba(9, 15, 23, 0)', 'rgba(9, 15, 23, 0.34)', 'rgba(9, 15, 23, 0.78)']}
+                        locations={[0, 0.5, 1]}
+                        style={[styles.posterBottomGradient, { pointerEvents: 'none' }]}
+                      />
+                    )}
                     {badgeServices.length > 0 && (
                       <View style={styles.posterServicesCorner}>
                         <ServiceLogoList
@@ -377,8 +408,25 @@ export default function HomeScreen() {
 
 const createStyles = (theme: Theme) => ({
   safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
-  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 },
-  topbar: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 18 },
+  stickyTopbar: {
+    position: 'relative' as const,
+    zIndex: 10,
+    backgroundColor: theme.colors.bgPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.transparent,
+  },
+  stickyTopbarScrolled: {
+    borderBottomColor: theme.colors.borderSubtle,
+  },
+  stickyEdgeScrim: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: -11,
+    height: 10,
+  },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 32 },
+  topbar: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
   brandRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 11 },
   brandTitle: { color: theme.colors.textPrimary, fontSize: 17, lineHeight: 22, letterSpacing: 2.1 },
   topbarActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
@@ -407,8 +455,9 @@ const createStyles = (theme: Theme) => ({
   drawButtonText: { color: theme.colors.textOnAccent, fontSize: 14 },
   heroShowcase: { paddingRight: 16, paddingVertical: 18, zIndex: 1 },
   heroPosterFrame: { width: 90, height: 134, borderRadius: 14, borderWidth: 1.5, borderColor: theme.colors.cardBorderOverlay, overflow: 'hidden' as const, justifyContent: 'flex-end' as const, padding: 7 },
-  heroPosterBadge: { alignSelf: 'flex-start' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 3, backgroundColor: withAlpha(theme.colors.heroBg, 0.88), borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
+  heroPosterBadge: { alignSelf: 'flex-start' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 3, backgroundColor: withAlpha(theme.colors.heroBg, 0.86), borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.14)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
   heroPosterBadgeText: { color: theme.colors.textOnNavy, fontSize: 10 },
+  posterBottomGradient: { position: 'absolute' as const, left: 0, right: 0, bottom: 0, height: '44%' as const },
   sectionHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 13 },
   sectionTitle: { color: theme.colors.textPrimary, fontSize: 19, lineHeight: 24 },
   sectionLinkBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2, paddingVertical: 6, paddingLeft: 8 },
@@ -423,7 +472,7 @@ const createStyles = (theme: Theme) => ({
   emptyTitlesCard: { minHeight: 118, width: 260, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 9, padding: 14, borderRadius: 16, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle },
   titleCard: { width: 136 },
   poster: { height: 176, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, justifyContent: 'center' as const, alignItems: 'center' as const, gap: 10, padding: 11, marginBottom: 9, overflow: 'hidden' as const },
-  posterRating: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2, backgroundColor: withAlpha(theme.colors.heroBg, 0.76), borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
+  posterRating: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 2, backgroundColor: withAlpha(theme.colors.heroBg, 0.86), borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.14)', borderRadius: 9, paddingHorizontal: 6, paddingVertical: 3 },
   posterRatingCorner: { position: 'absolute' as const, bottom: 8, left: 8 },
   posterServicesCorner: { position: 'absolute' as const, top: 8, right: 8, backgroundColor: withAlpha(theme.colors.heroBg, 0.78), borderRadius: 9, padding: 3 },
   posterRatingText: { color: theme.colors.textOnNavy, fontSize: 10 },

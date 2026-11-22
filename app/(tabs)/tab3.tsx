@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
@@ -10,6 +10,7 @@ import { SpinningIcon } from '@/components/atoms/SpinningIcon';
 import { UserAvatar } from '@/components/atoms/UserAvatar';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
+import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import { Theme, ThemeMode } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
@@ -21,6 +22,7 @@ import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCount } from '@/utils/format';
 import { triggerSelectionHaptic } from '@/utils/haptics';
+import { buildWatchedTitleIdsOrdered, computeMyListsCounts } from '@/utils/watchedProgress';
 
 const PREVIEW_HISTORY_LIMIT = 3;
 
@@ -42,7 +44,13 @@ export default function ProfileTabScreen() {
   const { savedTitles, findSavedTitle, refreshMyList } = useMyList();
   const { titles, status, isFetchingCatalog, errorMessage, findTitle, refreshCatalog } = useCatalog();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const isScrolled = event.nativeEvent.contentOffset.y > 6;
+    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -92,23 +100,18 @@ export default function ProfileTabScreen() {
     () => activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0),
     [activeSubscriptions],
   );
-  const watchedIds = useMemo(() => {
-    const ids = new Set(
-      history.filter((entry) => entry.acao === 'assistiu').map((entry) => entry.tmdbId),
-    );
-    for (const id of progressTitleIds) {
-      ids.add(id);
-    }
-    return ids;
-  }, [history, progressTitleIds]);
-  const watchedCount = watchedIds.size;
-  const myListsCount = useMemo(() => {
-    const ids = new Set(watchedIds);
-    for (const title of savedTitles) {
-      ids.add(title.id);
-    }
-    return ids.size;
-  }, [savedTitles, watchedIds]);
+  const watchedIds = useMemo(
+    () => buildWatchedTitleIdsOrdered(history, progressTitleIds),
+    [history, progressTitleIds],
+  );
+  const { watchedCount, totalCount: myListsCount } = useMemo(
+    () =>
+      computeMyListsCounts(
+        savedTitles.map((title) => title.id),
+        watchedIds,
+      ),
+    [savedTitles, watchedIds],
+  );
   const previewHistory = useMemo(
     () => history.slice(0, PREVIEW_HISTORY_LIMIT),
     [history],
@@ -127,16 +130,15 @@ export default function ProfileTabScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]} showsVerticalScrollIndicator={false}>
+      <ScreenHeader eyebrow="MEU PERFIL" title="Perfil" scrolled={scrolled} />
+      <ScrollView
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.container, { paddingBottom: Math.max(124, 108 + insets.bottom) }]}
+        showsVerticalScrollIndicator={false}>
         <FadeInBlock delay={0}>
-          <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>MEU PERFIL</AppText>
-
           <View style={styles.profileCard}>
-            <Pressable
-              style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
-              onPress={() => router.push('/edit-profile')}
-              accessibilityRole="button"
-              accessibilityLabel="Alterar ícone do perfil">
+            <View style={styles.avatarWrap}>
               <UserAvatar
                 size={78}
                 name={profile?.name ?? user?.name}
@@ -144,10 +146,7 @@ export default function ProfileTabScreen() {
                 avatarPreset={profile?.avatarPreset}
                 avatarUrl={profile?.avatarUrl}
               />
-              <View style={styles.avatarEditBadge}>
-                <MaterialIcons name="edit" size={14} color={colors.textOnAccent} />
-              </View>
-            </Pressable>
+            </View>
             <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{profile?.name ?? user?.name ?? 'Usuário'}</AppText>
             <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
             <Pressable
@@ -166,7 +165,7 @@ export default function ProfileTabScreen() {
           <View style={styles.stats}>
             <View style={styles.stat}>
               <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{activeSubscriptions.length}</AppText>
-              <AppText tipo="legenda" style={styles.muted}>ativas</AppText>
+              <AppText tipo="legenda" style={styles.muted}>assinaturas</AppText>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.stat}>
@@ -375,24 +374,10 @@ export default function ProfileTabScreen() {
 
 const createStyles = (theme: Theme) => ({
   safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
-  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36 },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 36 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 14 },
   profileCard: { alignItems: 'center' as const, backgroundColor: theme.colors.bgSurface, borderRadius: 22, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingVertical: 22, paddingHorizontal: 20, marginBottom: 22 },
-  avatarButton: { position: 'relative' as const, marginBottom: 12 },
-  avatarEditBadge: {
-    position: 'absolute' as const,
-    right: -2,
-    bottom: -2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.colors.accentPrimary,
-    borderWidth: 2.5,
-    borderColor: theme.colors.bgSurface,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
+  avatarWrap: { marginBottom: 12 },
   editProfileButton: {
     minHeight: 42,
     flexDirection: 'row' as const,

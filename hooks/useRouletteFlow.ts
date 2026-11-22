@@ -46,7 +46,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   const { titles, status: catalogStatus, isFetchingCatalog } = useCatalog();
   const { subscriptions, storageReady } = useSubscriptions();
   const { history, recordDrawAction, updateDrawAction } = useDrawHistory();
-  const { isSaved, toggleSavedTitle } = useMyList();
+  const { isSaved, toggleSavedTitle, removeFromMyList } = useMyList();
   const { progressTitleIds, refreshProgressIds } = useWatchedProgressIds(
     user?.id ?? null,
     token,
@@ -254,14 +254,20 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   const handleWatchWinner = useCallback(() => {
     if (spinSession?.winner) {
       commitDrawAction(spinSession.winner, 'assistiu');
+      if (isSaved(spinSession.winner.id)) {
+        removeFromMyList(spinSession.winner.id);
+      }
     }
     handleClose();
-  }, [commitDrawAction, handleClose, spinSession]);
+  }, [commitDrawAction, handleClose, isSaved, removeFromMyList, spinSession]);
 
   const handleMarkWinnerWatched = useCallback(() => {
     if (!spinSession?.winner) return;
     commitDrawAction(spinSession.winner, 'assistiu');
-  }, [commitDrawAction, spinSession]);
+    if (isSaved(spinSession.winner.id)) {
+      removeFromMyList(spinSession.winner.id);
+    }
+  }, [commitDrawAction, isSaved, removeFromMyList, spinSession]);
 
   const handleToggleWinnerSaved = useCallback(() => {
     if (!spinSession?.winner) return;

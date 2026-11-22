@@ -114,10 +114,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     const root = document.documentElement;
     root.style.backgroundColor = theme.colors.bgPrimary;
     root.style.colorScheme = resolvedMode;
+    root.style.setProperty(
+      '--nw-focus-ring',
+      theme.isDark ? theme.colors.accentPrimary : theme.colors.accentLink,
+    );
     if (document.body) {
       document.body.style.backgroundColor = theme.colors.bgPrimary;
     }
-  }, [resolvedMode, theme.colors.bgPrimary]);
+  }, [resolvedMode, theme.colors.accentLink, theme.colors.accentPrimary, theme.colors.bgPrimary, theme.isDark]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({

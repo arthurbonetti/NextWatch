@@ -1,12 +1,17 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import {
   changeUserPassword,
   clearAuthSession,
+  clearLocalAuthSessionOnly,
+  completePasswordRecovery as completePasswordRecoveryService,
   loginWithCredentials,
   onAuthStateChange,
+  type RecoverySessionHandle,
   registerAccount,
+  requestPasswordReset,
   restoreAuthSession,
 } from '@/services/authService';
 import { queryClient } from '@/services/queryClient';
@@ -18,6 +23,34 @@ import {
   type UpdatePasswordPayload,
 } from '@/types/auth';
 
+const RECOVERY_LOCK_STORAGE_KEY = 'nextwatch_password_recovery_lock';
+
+function readPersistedRecoveryLock(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.sessionStorage) {
+    return false;
+  }
+  try {
+    return window.sessionStorage.getItem(RECOVERY_LOCK_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writePersistedRecoveryLock(locked: boolean): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.sessionStorage) {
+    return;
+  }
+  try {
+    if (locked) {
+      window.sessionStorage.setItem(RECOVERY_LOCK_STORAGE_KEY, '1');
+    } else {
+      window.sessionStorage.removeItem(RECOVERY_LOCK_STORAGE_KEY);
+    }
+  } catch {
+    // Ignora falha de acesso ao sessionStorage
+  }
+}
+
 type AuthContextValue = {
   user: AuthUser | null;
   token: string | null;
@@ -25,10 +58,15 @@ type AuthContextValue = {
   errorMessage: string | null;
   isConnected: boolean | null;
   authReady: boolean;
+  isPasswordRecovery: boolean;
   signIn: (email: string, password: string) => Promise<boolean>;
   signUp: (name: string, email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   updatePassword: (payload: UpdatePasswordPayload) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  beginPasswordRecoveryLock: () => void;
+  cancelPasswordRecovery: () => Promise<void>;
+  completePasswordRecovery: (newPassword: string, handle?: RecoverySessionHandle | null) => Promise<void>;
   clearAuthError: () => void;
 };
 
@@ -54,12 +92,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => readPersistedRecoveryLock());
+
+  const setRecoveryLocked = useCallback((locked: boolean) => {
+    writePersistedRecoveryLock(locked);
+    setIsPasswordRecovery(locked);
+  }, []);
 
   useEffect(() => {
     let active = true;
 
     const unsubscribeAuth = onAuthStateChange((event, session) => {
       if (!active) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryLocked(true);
+      }
       if (session) {
         setUser((prev) => mergeSessionUser(prev, session.user));
         setToken(session.accessToken);
@@ -69,6 +116,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         queryClient.clear();
         setUser(null);
         setToken(null);
+        setRecoveryLocked(false);
         setStatus('idle');
       }
     });
@@ -81,6 +129,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           setToken(session.accessToken);
           setStatus('success');
         } else {
+          setRecoveryLocked(false);
           setStatus('idle');
         }
       })
@@ -95,29 +144,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
       active = false;
       unsubscribeAuth();
     };
-  }, []);
+  }, [setRecoveryLocked]);
 
   const clearAuthError = useCallback(() => {
     setErrorMessage(null);
     setStatus((current) => (current === 'error' ? 'idle' : current));
   }, []);
 
-  const runAuthAction = useCallback(async (action: () => Promise<AuthSession>, fallbackMessage: string) => {
-    setStatus('loading');
-    setErrorMessage(null);
+  const runAuthAction = useCallback(
+    async (action: () => Promise<AuthSession>, fallbackMessage: string) => {
+      setStatus('loading');
+      setErrorMessage(null);
 
-    try {
-      const session = await action();
-      setUser((prev) => mergeSessionUser(prev, session.user));
-      setToken(session.accessToken);
-      setStatus('success');
-      return true;
-    } catch (error) {
-      setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : fallbackMessage);
-      return false;
-    }
-  }, []);
+      try {
+        const session = await action();
+        setRecoveryLocked(false);
+        setUser((prev) => mergeSessionUser(prev, session.user));
+        setToken(session.accessToken);
+        setStatus('success');
+        return true;
+      } catch (error) {
+        setStatus('error');
+        setErrorMessage(error instanceof Error ? error.message : fallbackMessage);
+        return false;
+      }
+    },
+    [setRecoveryLocked],
+  );
 
   const signIn = useCallback(
     (email: string, password: string) =>
@@ -145,9 +198,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     queryClient.clear();
     setUser(null);
     setToken(null);
+    setRecoveryLocked(false);
     setErrorMessage(null);
     setStatus('idle');
-  }, []);
+  }, [setRecoveryLocked]);
 
   const updatePassword = useCallback(
     async (payload: UpdatePasswordPayload) => {
@@ -163,6 +217,42 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [user],
   );
 
+  const sendPasswordReset = useCallback(async (email: string) => {
+    await requestPasswordReset(email);
+  }, []);
+
+  const beginPasswordRecoveryLock = useCallback(() => {
+    setRecoveryLocked(true);
+  }, [setRecoveryLocked]);
+
+  const cancelPasswordRecovery = useCallback(async () => {
+    const hadRecoveryLock = isPasswordRecovery || readPersistedRecoveryLock();
+    setRecoveryLocked(false);
+    if (hadRecoveryLock) {
+      clearSubscriptionsLocalCache();
+      queryClient.clear();
+      await clearLocalAuthSessionOnly();
+      setUser(null);
+      setToken(null);
+      setErrorMessage(null);
+      setStatus('idle');
+    }
+  }, [isPasswordRecovery, setRecoveryLocked]);
+
+  const completePasswordRecovery = useCallback(
+    async (newPassword: string, handle?: RecoverySessionHandle | null) => {
+      await completePasswordRecoveryService(newPassword, handle);
+      clearSubscriptionsLocalCache();
+      queryClient.clear();
+      setRecoveryLocked(false);
+      setUser(null);
+      setToken(null);
+      setErrorMessage(null);
+      setStatus('idle');
+    },
+    [setRecoveryLocked],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -171,17 +261,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
       errorMessage,
       isConnected,
       authReady,
+      isPasswordRecovery,
       signIn,
       signUp,
       signOut,
       updatePassword,
+      sendPasswordReset,
+      beginPasswordRecoveryLock,
+      cancelPasswordRecovery,
+      completePasswordRecovery,
       clearAuthError,
     }),
     [
       authReady,
+      beginPasswordRecoveryLock,
+      cancelPasswordRecovery,
       clearAuthError,
+      completePasswordRecovery,
       errorMessage,
       isConnected,
+      isPasswordRecovery,
+      sendPasswordReset,
       signIn,
       signOut,
       signUp,

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from './AppText';
 import { SUBSCRIPTION_PROVIDERS } from '@/constants/subscriptions';
@@ -24,7 +24,7 @@ type ServiceLogoListProps = {
   onPressOverflow?: () => void;
 };
 
-// Logo do streaming (TMDB); para um serviço sem logo cadastrada, mostra a inicial sobre a cor da marca.
+// Logo do streaming (TMDB) com moldura hairline padrão para separar logos claros/escuros da superfície.
 export function ServiceLogo({ name, size }: ServiceLogoProps) {
   const styles = useThemedStyles(createStyles);
   const [failedLogoPath, setFailedLogoPath] = useState<string | null>(null);
@@ -36,22 +36,24 @@ export function ServiceLogo({ name, size }: ServiceLogoProps) {
     ? tmdbImageUri(logoPath, size > 30 ? 'w154' : 'w92')
     : null;
 
-  if (uri && logoPath) {
-    return (
-      <Image
-        source={{ uri }}
-        style={box}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        accessibilityLabel={name}
-        onError={() => setFailedLogoPath(logoPath)}
-      />
-    );
-  }
-
   return (
-    <View style={[styles.fallback, box, { backgroundColor: provider?.color ?? '#5d6670' }]}>
-      <AppText peso="forte" style={[styles.symbol, { fontSize: Math.round(size * 0.48) }]}>{provider?.symbol ?? name.slice(0, 1).toUpperCase()}</AppText>
+    <View style={[styles.frame, box]} accessibilityLabel={uri ? undefined : name}>
+      {uri && logoPath ? (
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          accessibilityLabel={name}
+          onError={() => setFailedLogoPath(logoPath)}
+        />
+      ) : (
+        <View style={[styles.fallback, { backgroundColor: provider?.color ?? '#5d6670' }]}>
+          <AppText peso="forte" style={[styles.symbol, { fontSize: Math.round(size * 0.48) }]}>
+            {provider?.symbol ?? name.slice(0, 1).toUpperCase()}
+          </AppText>
+        </View>
+      )}
     </View>
   );
 }
@@ -120,7 +122,17 @@ export function ServiceLogoList({
 }
 
 const createStyles = (theme: Theme) => ({
-  fallback: { alignItems: 'center' as const, justifyContent: 'center' as const },
+  frame: {
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: theme.colors.logoBorder,
+    backgroundColor: theme.colors.bgSurface,
+  },
+  fallback: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   symbol: { color: '#FFFFFF' },
   list: { flexDirection: 'row' as const, alignItems: 'center' as const, flexShrink: 1 },
   moreBadge: {

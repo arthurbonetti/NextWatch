@@ -12,6 +12,8 @@ import {
 } from '@/services/repositories/progressRepo';
 import { hasSupabaseConfig } from '@/services/supabase';
 import {
+  applyEpisodeToggle,
+  applySeasonToggle,
   mergeWatchedProgress,
   type SeriesProgressMap,
 } from '@/utils/watchedProgress';
@@ -289,22 +291,8 @@ export function useSeriesProgress(
   const toggleEpisode = useCallback(
     (seasonNumber: number, episodeNumber: number) => {
       if (!titleId) return;
-      const key = String(seasonNumber);
       mutateProgress({
-        updater: (prev) => {
-          const current = prev[key] ?? [];
-          const exists = current.includes(episodeNumber);
-          const nextEpisodes = exists
-            ? current.filter((ep) => ep !== episodeNumber)
-            : [...current, episodeNumber].sort((a, b) => a - b);
-
-          if (nextEpisodes.length === 0) {
-            const rest = { ...prev };
-            delete rest[key];
-            return rest;
-          }
-          return { ...prev, [key]: nextEpisodes };
-        },
+        updater: (prev) => applyEpisodeToggle(prev, seasonNumber, episodeNumber),
       });
     },
     [mutateProgress, titleId],
@@ -313,7 +301,6 @@ export function useSeriesProgress(
   const toggleSeason = useCallback(
     (seasonNumber: number, episodeCount: number, episodeNumbers?: number[]) => {
       if (!titleId) return;
-      const key = String(seasonNumber);
       const targetNumbers =
         episodeNumbers && episodeNumbers.length > 0
           ? Array.from(new Set(episodeNumbers)).sort((a, b) => a - b)
@@ -322,16 +309,7 @@ export function useSeriesProgress(
       if (targetNumbers.length === 0) return;
 
       mutateProgress({
-        updater: (prev) => {
-          const current = prev[key] ?? [];
-          const allWatched = targetNumbers.every((num) => current.includes(num));
-          if (allWatched) {
-            const rest = { ...prev };
-            delete rest[key];
-            return rest;
-          }
-          return { ...prev, [key]: targetNumbers };
-        },
+        updater: (prev) => applySeasonToggle(prev, seasonNumber, episodeCount, targetNumbers),
       });
     },
     [mutateProgress, titleId],
@@ -347,6 +325,7 @@ export function useSeriesProgress(
 
   return {
     ready: Boolean(titleId) && !activeQuery.isLoading,
+    progressMap: activeMap,
     isEpisodeWatched,
     getSeasonWatchedCount,
     isSeasonCompleted,

@@ -1,13 +1,15 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, usePathname } from 'expo-router';
 import { ComponentProps, useEffect, useState } from 'react';
 import { Keyboard, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/atoms/AppText';
+import { BottomFadeScrim } from '@/components/atoms/BottomFadeScrim';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { isPasswordRecoveryUrl } from '@/utils/recoveryUrl';
 
 type FloatingTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -32,7 +34,15 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: FloatingTabB
 
   return (
     <View
-      style={[styles.wrapper, { bottom: Math.max(8, insets.bottom + 2), pointerEvents: 'box-none' }]}>
+      style={[
+        styles.wrapper,
+        { paddingBottom: Math.max(8, insets.bottom + 2), pointerEvents: 'box-none' },
+      ]}>
+      <BottomFadeScrim
+        color={colors.bgPrimary}
+        height={Math.max(108, 92 + insets.bottom)}
+        style={styles.bottomScrim}
+      />
       <View style={styles.dock} accessibilityRole="tablist">
         {state.routes.map((route, index) => {
           const focused = state.index === index;
@@ -88,12 +98,21 @@ function FloatingTabBar({ state, descriptors, navigation, insets }: FloatingTabB
 }
 
 export default function TabLayout() {
-  const { user, authReady } = useAuth();
+  const { user, authReady, isPasswordRecovery } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  const webRecoveryPending =
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    isPasswordRecoveryUrl(window.location.href);
 
-  if (!authReady) return null;
-  if (!user) return <Redirect href="/(auth)/login" />;
+  if (!authReady || webRecoveryPending) return null;
+  if (isPasswordRecovery) return <Redirect href="/(auth)/reset-password" />;
+  if (!user) {
+    if (pathname === '/reset-password') return null;
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <Tabs
@@ -132,8 +151,15 @@ const createStyles = (theme: Theme) => ({
     position: 'absolute' as const,
     left: 0,
     right: 0,
+    bottom: 0,
     alignItems: 'center' as const,
     paddingHorizontal: 14,
+  },
+  bottomScrim: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   dock: {
     width: '100%' as const,

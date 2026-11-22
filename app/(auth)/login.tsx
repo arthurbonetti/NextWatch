@@ -1,31 +1,66 @@
-import { Redirect, router } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
-import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
+import { PasswordInput } from '@/components/atoms/PasswordInput';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
+import { AuthBrandHeader } from '@/components/organisms/AuthBrandHeader';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { isValidEmail, MAX_PASSWORD_LENGTH, MIN_LOGIN_PASSWORD_LENGTH } from '@/types/auth';
+import { isPasswordRecoveryUrl } from '@/utils/recoveryUrl';
 
 const SHOWCASE_SERVICES = ['Netflix', 'Max', 'Disney+', 'Prime Video', 'Crunchyroll'];
 
 export default function LoginScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { user, authReady, signIn, status, errorMessage, isConnected, clearAuthError } = useAuth();
+  const {
+    user,
+    authReady,
+    isPasswordRecovery,
+    signIn,
+    sendPasswordReset,
+    status,
+    errorMessage,
+    isConnected,
+    clearAuthError,
+  } = useAuth();
+  const { passwordReset } = useLocalSearchParams<{ passwordReset?: string }>();
+  const [dismissedResetBanner, setDismissedResetBanner] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const isLoading = status === 'loading';
 
+  const [recoveryVisible, setRecoveryVisible] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryEmailError, setRecoveryEmailError] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoverySuccess, setRecoverySuccess] = useState('');
+  const [isSendingRecovery, setIsSendingRecovery] = useState(false);
+
+  const isLoading = status === 'loading';
+  const showPasswordResetSuccess = passwordReset === '1' && !dismissedResetBanner;
+  const webRecoveryPending =
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    isPasswordRecoveryUrl(window.location.href);
+
+  if (webRecoveryPending) {
+    return null;
+  }
+  if (authReady && isPasswordRecovery) {
+    return <Redirect href="/(auth)/reset-password" />;
+  }
   if (authReady && user) {
     return <Redirect href="/(tabs)" />;
   }
@@ -39,15 +74,52 @@ export default function LoginScreen() {
       password.length >= MIN_LOGIN_PASSWORD_LENGTH && password.length <= MAX_PASSWORD_LENGTH;
     setEmailError(validEmail ? '' : 'Informe um e-mail válido.');
     setPasswordError(
-      validPassword
-        ? ''
-        : `A senha deve ter entre ${MIN_LOGIN_PASSWORD_LENGTH} e ${MAX_PASSWORD_LENGTH} caracteres.`,
+      password.length === 0
+        ? 'Informe sua senha.'
+        : validPassword
+          ? ''
+          : 'E-mail ou senha inválidos.',
     );
     if (!validEmail || !validPassword) return;
 
     const ok = await signIn(normalizedEmail, password);
     if (ok) {
       router.replace('/(tabs)');
+    }
+  };
+
+  const openRecoverySheet = () => {
+    setRecoveryEmail(email.trim());
+    setRecoveryEmailError('');
+    setRecoveryError('');
+    setRecoverySuccess('');
+    setRecoveryVisible(true);
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (isSendingRecovery) return;
+    setRecoveryError('');
+    setRecoverySuccess('');
+    const normalized = recoveryEmail.trim();
+    if (!isValidEmail(normalized)) {
+      setRecoveryEmailError('Informe um e-mail válido.');
+      return;
+    }
+    setRecoveryEmailError('');
+    setIsSendingRecovery(true);
+    try {
+      await sendPasswordReset(normalized);
+      setRecoverySuccess(
+        'Se houver uma conta com este e-mail, enviamos um link para redefinir sua senha.',
+      );
+    } catch (error) {
+      setRecoveryError(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível enviar o link de recuperação. Tente novamente.',
+      );
+    } finally {
+      setIsSendingRecovery(false);
     }
   };
 
@@ -62,13 +134,7 @@ export default function LoginScreen() {
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
-            <View style={styles.brandHeader}>
-              <NextWatchLogo size={46} />
-              <View style={styles.brandCopy}>
-                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
-                <AppText tipo="legenda" style={styles.brandTagline}>Curadoria e controle dos seus streamings</AppText>
-              </View>
-            </View>
+            <AuthBrandHeader />
 
             <View style={styles.card}>
               <AppText tipo="titulo" peso="forte" style={styles.title}>Entre na sua conta</AppText>
@@ -85,6 +151,15 @@ export default function LoginScreen() {
                 </View>
               </View>
 
+              {showPasswordResetSuccess ? (
+                <View style={[styles.feedbackBanner, styles.successBanner]}>
+                  <MaterialIcons name="check-circle-outline" size={18} color={colors.successText} />
+                  <AppText tipo="legenda" peso="semiforte" style={[styles.feedbackText, styles.successText]}>
+                    Senha redefinida com sucesso! Entre com sua nova senha.
+                  </AppText>
+                </View>
+              ) : null}
+
               <AuthStatusBanners
                 isConnected={isConnected}
                 offlineMessage="Sem conexão com a internet. Você ainda pode acessar sua sessão salva neste aparelho."
@@ -98,7 +173,7 @@ export default function LoginScreen() {
                 rotulo="E-mail"
                 placeholder="seu@email.com"
                 value={email}
-                onChangeText={(value) => { setEmail(value); setEmailError(''); clearAuthError(); }}
+                onChangeText={(value) => { setEmail(value); setEmailError(''); setDismissedResetBanner(true); clearAuthError(); }}
                 autoCapitalize="none"
                 autoComplete="email"
                 keyboardType="email-address"
@@ -107,12 +182,24 @@ export default function LoginScreen() {
                 editable={!isLoading}
                 erro={emailError}
               />
-              <AppInput
+              <PasswordInput
                 rotulo="Senha"
-                placeholder="Mínimo de 6 caracteres"
+                placeholder="Digite sua senha"
+                labelAccessory={
+                  <Pressable
+                    onPress={openRecoverySheet}
+                    disabled={isLoading}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.forgotButton, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Esqueci minha senha">
+                    <AppText tipo="legenda" peso="forte" style={styles.forgotLink}>
+                      Esqueci minha senha
+                    </AppText>
+                  </Pressable>
+                }
                 value={password}
                 onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
-                secureTextEntry
                 autoComplete="current-password"
                 textContentType="password"
                 returnKeyType="done"
@@ -149,6 +236,74 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <AnimatedModalShell
+        visible={recoveryVisible}
+        onClose={() => setRecoveryVisible(false)}
+        variant="sheet"
+        keyboardAvoiding
+        dragEntireSheet
+        backdropAccessibilityLabel="Fechar recuperação de senha">
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}>
+          <AppText tipo="legenda" peso="forte" style={styles.sheetEyebrow}>
+            RECUPERAÇÃO DE ACESSO
+          </AppText>
+          <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.sheetTitle}>
+            Redefinir senha
+          </AppText>
+          <AppText tipo="legenda" style={styles.sheetSubtitle}>
+            Informe o e-mail da sua conta para enviarmos um link de redefinição de senha.
+          </AppText>
+
+          <AppInput
+            rotulo="E-mail da conta"
+            placeholder="seu@email.com"
+            value={recoveryEmail}
+            onChangeText={(value) => {
+              setRecoveryEmail(value);
+              setRecoveryEmailError('');
+              setRecoveryError('');
+              setRecoverySuccess('');
+            }}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            returnKeyType="done"
+            editable={!isSendingRecovery}
+            onSubmitEditing={() => { void handleSendPasswordReset(); }}
+            erro={recoveryEmailError}
+          />
+
+          {recoveryError ? (
+            <View style={[styles.feedbackBanner, styles.errorBanner]}>
+              <MaterialIcons name="error-outline" size={18} color={colors.dangerText} />
+              <AppText tipo="legenda" peso="semiforte" style={[styles.feedbackText, styles.errorText]}>
+                {recoveryError}
+              </AppText>
+            </View>
+          ) : null}
+
+          {recoverySuccess ? (
+            <View style={[styles.feedbackBanner, styles.successBanner]}>
+              <MaterialIcons name="mark-email-read" size={18} color={colors.successText} />
+              <AppText tipo="legenda" peso="semiforte" style={[styles.feedbackText, styles.successText]}>
+                {recoverySuccess}
+              </AppText>
+            </View>
+          ) : null}
+
+          <AppButton
+            titulo={isSendingRecovery ? 'Enviando link…' : 'Enviar link de recuperação'}
+            onPress={() => { void handleSendPasswordReset(); }}
+            disabled={isSendingRecovery || isConnected === false}
+            estilo={styles.submitButton}
+          />
+        </ScrollView>
+      </AnimatedModalShell>
     </SafeAreaView>
   );
 }
@@ -165,36 +320,27 @@ const createStyles = (theme: Theme) => ({
     maxWidth: 460,
     alignSelf: 'center' as const,
     paddingHorizontal: 20,
-    paddingVertical: 28,
+    paddingVertical: 18,
   },
   pressed: { opacity: 0.84 },
-  brandHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 12,
-    marginBottom: 18,
-  },
-  brandCopy: { flex: 1 },
-  eyebrow: { color: theme.colors.accentLink, letterSpacing: 2.0, marginBottom: 2 },
-  brandTagline: { color: theme.colors.textSecondary },
   card: {
     backgroundColor: theme.colors.bgSurface,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    padding: 22,
+    padding: 20,
   },
-  title: { color: theme.colors.textPrimary, fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
-  subtitle: { color: theme.colors.textSecondary, fontSize: 15, lineHeight: 23, marginBottom: 16 },
+  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.45, marginBottom: 5 },
+  subtitle: { color: theme.colors.textSecondary, fontSize: 14.5, lineHeight: 21, marginBottom: 14 },
   servicesStrip: {
     alignItems: 'center' as const,
     backgroundColor: theme.colors.bgSurfaceAlt,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 18,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginBottom: 16,
     gap: 8,
   },
   servicesStripEyebrow: {
@@ -208,11 +354,61 @@ const createStyles = (theme: Theme) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  submitButton: { borderRadius: 14, marginTop: 6 },
+  forgotButton: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  forgotLink: {
+    color: theme.colors.accentLink,
+    fontSize: 12.5,
+  },
+  submitButton: { borderRadius: 14, marginTop: 4 },
   loadingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 8, marginTop: 12 },
   loadingText: { color: theme.colors.textSecondary, fontSize: 13 },
-  accountPrompt: { flexDirection: 'row' as const, justifyContent: 'center' as const, alignItems: 'center' as const, gap: 6, marginTop: 20 },
+  accountPrompt: { flexDirection: 'row' as const, justifyContent: 'center' as const, alignItems: 'center' as const, gap: 6, marginTop: 16 },
   accountText: { color: theme.colors.textSecondary, fontSize: 13 },
   linkButton: { paddingVertical: 4, paddingHorizontal: 2 },
   link: { color: theme.colors.accentLink, fontSize: 14 },
+  sheetEyebrow: {
+    color: theme.colors.accentLink,
+    letterSpacing: 1.3,
+    marginBottom: 4,
+  },
+  sheetTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 22,
+    lineHeight: 27,
+    letterSpacing: -0.35,
+    marginBottom: 6,
+  },
+  sheetSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13.5,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  feedbackBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+  },
+  errorBanner: {
+    backgroundColor: theme.colors.dangerIconBg,
+    borderColor: theme.colors.dangerBorder,
+  },
+  successBanner: {
+    backgroundColor: theme.colors.bgSuccess,
+    borderColor: theme.colors.borderSuccess,
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  errorText: { color: theme.colors.dangerText },
+  successText: { color: theme.colors.successText },
 });

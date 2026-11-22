@@ -14,10 +14,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
-import { BackButton } from '@/components/atoms/BackButton';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
-import { Theme, THEME, withAlpha } from '@/constants/theme';
+import { Theme, withAlpha } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
 type TitleHeroProps = {
@@ -27,12 +26,14 @@ type TitleHeroProps = {
   statusLabel?: string | null;
   certification?: string | null;
   trailerUrl?: string | null;
-  accentColor: string;
   scrollY: SharedValue<number>;
   topInset: number;
-  onShare: () => void;
   onWatchTrailer: () => void;
 };
+
+function isActiveSeriesStatus(label: string): boolean {
+  return label === 'Em exibição';
+}
 
 const CERTIFICATION_COLORS: Record<string, string> = {
   L: '#2e8b57',
@@ -50,13 +51,11 @@ export function TitleHero({
   statusLabel,
   certification,
   trailerUrl,
-  accentColor,
   scrollY,
   topInset,
-  onShare,
   onWatchTrailer,
 }: TitleHeroProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const reducedMotion = useReducedMotion();
   const posterReveal = useSharedValue(reducedMotion ? 1 : 0);
@@ -103,6 +102,8 @@ export function TitleHero({
   });
 
   const heroBackdropHeight = 256 + topInset;
+  const posterBgColor = title.color || colors.heroBg;
+  const statusIsActive = statusLabel ? isActiveSeriesStatus(statusLabel) : false;
   const metaParts = [String(title.year), title.kind, durationLabel];
   if (episodeDuration && episodeDuration !== durationLabel) {
     metaParts.push(episodeDuration);
@@ -110,7 +111,7 @@ export function TitleHero({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.backdropFrame, { height: heroBackdropHeight, backgroundColor: accentColor }]}>
+      <View style={[styles.backdropFrame, { height: heroBackdropHeight, backgroundColor: posterBgColor }]}>
         <Animated.View style={[styles.backdropArtwork, backdropParallaxStyle]}>
           <TitleArtwork
             id={title.id}
@@ -138,34 +139,22 @@ export function TitleHero({
           style={[styles.bottomGradient, { pointerEvents: 'none' }]}
         />
 
-        <View style={[styles.topBar, { top: topInset + THEME.spacing.xs }]}>
-          <BackButton style={styles.topIconButton} />
-          <Pressable
-            onPress={onShare}
-            style={({ pressed }) => [styles.topIconButton, pressed && styles.pressed]}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={`Compartilhar ${title.title}`}>
-            <MaterialIcons name="share" size={19} color={colors.textPrimary} />
-          </Pressable>
-        </View>
-
         {trailerUrl && (
           <View style={[styles.trailerCenterOverlay, { top: topInset + 22, pointerEvents: 'box-none' }]}>
             <Pressable
               onPress={onWatchTrailer}
               style={({ pressed }) => [
                 styles.trailerButton,
-                { borderColor: withAlpha(accentColor, 0.72) },
+                { borderColor: withAlpha(colors.accentPrimary, 0.82) },
                 pressed && styles.trailerPressed,
               ]}
               accessibilityRole="button"
               accessibilityLabel={`Assistir trailer de ${title.title}`}>
-              <View style={[styles.trailerPlayCircle, { backgroundColor: accentColor }]}>
+              <View style={[styles.trailerPlayCircle, { backgroundColor: colors.accentPrimary }]}>
                 <MaterialIcons
                   name="play-arrow"
                   size={26}
-                  color={accentColor === colors.accentPrimary || accentColor === colors.gold ? colors.textOnAccent : colors.textOnNavy}
+                  color={colors.textOnAccent}
                 />
               </View>
               <AppText tipo="legenda" peso="forte" style={styles.trailerLabel}>
@@ -181,7 +170,7 @@ export function TitleHero({
           sharedTransitionTag={`title-poster-${title.id}`}
           style={[
             styles.posterFrame,
-            { backgroundColor: accentColor, borderColor: colors.bgSurface },
+            { backgroundColor: posterBgColor, borderColor: colors.bgSurface },
             posterEntranceStyle,
           ]}>
           <TitleArtwork
@@ -220,12 +209,31 @@ export function TitleHero({
                   style={[
                     styles.statusBadge,
                     {
-                      backgroundColor: withAlpha(accentColor, isDark ? 0.18 : 0.14),
-                      borderColor: withAlpha(accentColor, 0.36),
+                      backgroundColor: statusIsActive ? colors.badgeSuccessBg : colors.badgeNeutralBg,
+                      borderColor: statusIsActive ? colors.badgeSuccessBorder : colors.badgeNeutralBorder,
                     },
                   ]}>
-                  <View style={[styles.statusDot, { backgroundColor: accentColor }]} />
-                  <AppText tipo="legenda" peso="forte" style={styles.statusText}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      {
+                        backgroundColor: statusIsActive
+                          ? colors.badgeSuccessText
+                          : colors.badgeNeutralDot,
+                      },
+                    ]}
+                  />
+                  <AppText
+                    tipo="legenda"
+                    peso="forte"
+                    style={[
+                      styles.statusText,
+                      {
+                        color: statusIsActive
+                          ? colors.badgeSuccessText
+                          : colors.badgeNeutralText,
+                      },
+                    ]}>
                     {statusLabel}
                   </AppText>
                 </View>
@@ -270,28 +278,6 @@ const createStyles = (theme: Theme) => ({
     right: 0,
     bottom: 0,
     height: '62%' as const,
-  },
-  topBar: {
-    position: 'absolute' as const,
-    left: theme.spacing.md,
-    right: theme.spacing.md,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    zIndex: 10,
-  },
-  topIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: withAlpha(theme.colors.bgSurface, 0.92),
-    borderWidth: 1,
-    borderColor: withAlpha(theme.colors.borderSubtle, 0.9),
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  pressed: {
-    opacity: 0.78,
   },
   trailerCenterOverlay: {
     position: 'absolute' as const,

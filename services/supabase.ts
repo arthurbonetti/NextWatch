@@ -65,6 +65,22 @@ export function getSupabaseClient(): SupabaseClient | null {
   return supabase;
 }
 
+/**
+ * Cria um cliente Supabase efêmero e isolado para o fluxo de redefinição de senha,
+ * sem persistir sessão no armazenamento local nem disparar login no cliente principal.
+ */
+export function createEphemeralRecoveryClient(): SupabaseClient | null {
+  if (!resolvedUrl || !SUPABASE_ANON_KEY) return null;
+  return createClient(resolvedUrl, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: 'nextwatch-recovery-ephemeral',
+    },
+  });
+}
+
 if (Platform.OS !== 'web' && supabase) {
   const client = supabase;
   AppState.addEventListener('change', (nextState) => {

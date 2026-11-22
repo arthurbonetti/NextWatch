@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
+import { PasswordInput } from '@/components/atoms/PasswordInput';
+import { AuthBrandHeader } from '@/components/organisms/AuthBrandHeader';
 import { AuthStatusBanners } from '@/components/organisms/AuthStatusBanners';
 import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,7 +18,7 @@ import { isStrongPassword, isValidEmail, MAX_NAME_LENGTH, MIN_PASSWORD_LENGTH } 
 export default function RegisterScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { user, authReady, signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();
+  const { user, authReady, isPasswordRecovery, signUp, status, errorMessage, isConnected, clearAuthError } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,6 +39,9 @@ export default function RegisterScreen() {
     }).start();
   };
 
+  if (authReady && isPasswordRecovery) {
+    return <Redirect href="/(auth)/reset-password" />;
+  }
   if (authReady && user) {
     return <Redirect href="/(tabs)" />;
   }
@@ -102,8 +107,9 @@ export default function RegisterScreen() {
               <AppText tipo="legenda" peso="forte" style={styles.link}>Voltar para o login</AppText>
             </Pressable>
 
+            <AuthBrandHeader />
+
             <View style={styles.card}>
-              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>NEXTWATCH</AppText>
               <AppText tipo="titulo" peso="forte" style={styles.title}>Crie sua conta</AppText>
               <AppText tipo="texto" style={styles.subtitle}>
                 Monte seu painel de assinaturas e descubra o que assistir hoje.
@@ -143,24 +149,23 @@ export default function RegisterScreen() {
                 editable={!isLoading}
                 erro={emailError}
               />
-              <AppInput
+              <PasswordInput
                 rotulo="Senha"
-                placeholder={`Mínimo ${MIN_PASSWORD_LENGTH} caracteres (letras e números)`}
+                placeholder="Crie uma senha"
+                helperText={`Mínimo de ${MIN_PASSWORD_LENGTH} caracteres com letras e números`}
                 value={password}
                 onChangeText={(value) => { setPassword(value); setPasswordError(''); clearAuthError(); }}
-                secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="next"
                 editable={!isLoading}
                 erro={passwordError}
               />
-              <AppInput
+              <PasswordInput
                 rotulo="Confirmar senha"
-                placeholder="Digite a senha novamente"
+                placeholder="Repita sua senha"
                 value={confirmPassword}
                 onChangeText={(value) => { setConfirmPassword(value); setConfirmPasswordError(''); clearAuthError(); }}
-                secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
@@ -193,19 +198,18 @@ const createStyles = (theme: Theme) => ({
   safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: 'center' as const },
-  container: { width: '100%' as const, maxWidth: 460, alignSelf: 'center' as const, paddingHorizontal: 20, paddingVertical: 24 },
+  container: { width: '100%' as const, maxWidth: 460, alignSelf: 'center' as const, paddingHorizontal: 20, paddingVertical: 16 },
   pressed: { opacity: 0.84 },
-  backLink: { alignSelf: 'flex-start' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingVertical: 8, marginBottom: 10 },
+  backLink: { alignSelf: 'flex-start' as const, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingVertical: 6, marginBottom: 8 },
   card: {
     backgroundColor: theme.colors.bgSurface,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    padding: 22,
+    padding: 20,
   },
-  eyebrow: { color: theme.colors.accentLink, letterSpacing: 2.0, marginBottom: 6 },
-  title: { color: theme.colors.textPrimary, fontSize: 26, lineHeight: 31, letterSpacing: -0.45, marginBottom: 6 },
-  subtitle: { color: theme.colors.textSecondary, fontSize: 15, lineHeight: 23, marginBottom: 18 },
+  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.45, marginBottom: 5 },
+  subtitle: { color: theme.colors.textSecondary, fontSize: 14.5, lineHeight: 21, marginBottom: 14 },
   submitButton: { borderRadius: 14, marginTop: 4 },
   loadingRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 8, marginTop: 12 },
   loadingText: { color: theme.colors.textSecondary, fontSize: 13 },

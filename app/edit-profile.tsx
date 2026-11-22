@@ -1,11 +1,13 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Redirect, router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { Redirect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -16,9 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/atoms/AppButton';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
-import { BackButton } from '@/components/atoms/BackButton';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
+import { PasswordInput } from '@/components/atoms/PasswordInput';
 import { UserAvatar } from '@/components/atoms/UserAvatar';
+import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import {
   AVATAR_PRESETS,
   type AvatarPresetId,
@@ -76,7 +79,7 @@ type ProfileSnapshot = {
 };
 
 export default function EditProfileScreen() {
-  const { user, authReady, isConnected, updatePassword } = useAuth();
+  const { user, authReady, isPasswordRecovery, isConnected, updatePassword } = useAuth();
   const { profile, updateProfile } = useProfile();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -90,6 +93,7 @@ export default function EditProfileScreen() {
   const [nameError, setNameError] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -100,6 +104,12 @@ export default function EditProfileScreen() {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [scrolled, setScrolled] = useState(false);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const isScrolled = event.nativeEvent.contentOffset.y > 6;
+    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  }, []);
 
   const syncedSnapshotRef = useRef<ProfileSnapshot | null>(
     profile
@@ -144,6 +154,7 @@ export default function EditProfileScreen() {
   }, [avatarPreset, avatarType, name, pendingUpload, profile]);
 
   if (!authReady) return null;
+  if (isPasswordRecovery) return <Redirect href="/(auth)/reset-password" />;
   if (!user) return <Redirect href="/(auth)/login" />;
 
   const currentProfileName = profile?.name ?? user.name;
@@ -168,6 +179,7 @@ export default function EditProfileScreen() {
     setPendingUpload(null);
     setPickerError('');
     setProfileError('');
+    setProfileSuccess('');
   };
 
   const handleUseInitials = () => {
@@ -177,12 +189,14 @@ export default function EditProfileScreen() {
     setPendingUpload(null);
     setPickerError('');
     setProfileError('');
+    setProfileSuccess('');
   };
 
   const handlePickImage = async () => {
     if (isPickingImage || isSavingProfile) return;
     setPickerError('');
     setProfileError('');
+    setProfileSuccess('');
     setIsPickingImage(true);
 
     try {
@@ -250,6 +264,7 @@ export default function EditProfileScreen() {
   const handleSaveProfile = async () => {
     if (isSavingProfile || !hasProfileChanges) return;
     setProfileError('');
+    setProfileSuccess('');
 
     if (trimmedName.length < MIN_NAME_LENGTH) {
       setNameError(`Informe seu nome (pelo menos ${MIN_NAME_LENGTH} caracteres).`);
@@ -266,11 +281,8 @@ export default function EditProfileScreen() {
         avatarPreset: avatarType === 'preset' ? avatarPreset : null,
         pendingUpload: avatarType === 'custom' ? pendingUpload : null,
       });
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/tab3');
-      }
+      setPendingUpload(null);
+      setProfileSuccess('Alterações do perfil salvas!');
     } catch (error) {
       setProfileError(
         error instanceof Error
@@ -329,27 +341,23 @@ export default function EditProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ScreenHeader
+        eyebrow="CONTA"
+        title="Editar perfil"
+        showBack
+        fallbackHref="/(tabs)/tab3"
+        scrolled={scrolled}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}>
-          <FadeInBlock delay={0}>
-            <View style={styles.header}>
-              <BackButton fallbackHref="/(tabs)/tab3" />
-              <View style={styles.headerCopy}>
-                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>
-                  CONTA
-                </AppText>
-                <AppText tipo="titulo" peso="forte" style={styles.title}>
-                  Editar perfil
-                </AppText>
-              </View>
-            </View>
-          </FadeInBlock>
 
           {isConnected === false && (
             <FadeInBlock delay={15}>
@@ -464,27 +472,28 @@ export default function EditProfileScreen() {
                       disabled={isSavingProfile}
                       style={({ pressed }) => [
                         styles.presetTile,
-                        selected && styles.presetTileSelected,
                         pressed && styles.pressed,
                       ]}
                       accessibilityRole="button"
                       accessibilityState={{ selected }}
                       accessibilityLabel={`Selecionar ícone ${preset.label}`}>
-                      <View
-                        style={[
-                          styles.presetCircle,
-                          {
-                            borderColor: selected ? colors.accentPrimary : colors.borderSubtle,
-                            borderWidth: selected ? 3 : 1.5,
-                          },
-                        ]}>
-                        <Image
-                          source={preset.source}
-                          style={styles.presetImage}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                          accessible={false}
-                        />
+                      <View style={styles.presetAvatarWrap}>
+                        <View
+                          style={[
+                            styles.presetCircle,
+                            {
+                              borderColor: selected ? colors.accentPrimary : colors.borderSubtle,
+                              borderWidth: selected ? 3 : 1.5,
+                            },
+                          ]}>
+                          <Image
+                            source={preset.source}
+                            style={styles.presetImage}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            accessible={false}
+                          />
+                        </View>
                         {selected && (
                           <View style={styles.presetCheckBadge}>
                             <MaterialIcons name="check" size={12} color={colors.textOnAccent} />
@@ -515,6 +524,7 @@ export default function EditProfileScreen() {
                   setName(value);
                   setNameError('');
                   setProfileError('');
+                  setProfileSuccess('');
                 }}
                 maxLength={MAX_NAME_LENGTH}
                 autoCapitalize="words"
@@ -530,7 +540,7 @@ export default function EditProfileScreen() {
                   E-mail
                 </AppText>
                 <View style={styles.readOnlyBox}>
-                  <MaterialIcons name="lock-outline" size={18} color={colors.textMuted} />
+                  <MaterialIcons name="lock-outline" size={18} color={colors.textSecondary} />
                   <AppText
                     tipo="texto"
                     selectable
@@ -543,6 +553,27 @@ export default function EditProfileScreen() {
                   O e-mail da conta não pode ser alterado.
                 </AppText>
               </View>
+
+              {profileError ? <FeedbackBanner tone="error" message={profileError} /> : null}
+              {profileSuccess ? <FeedbackBanner tone="success" message={profileSuccess} /> : null}
+
+              <AppButton
+                titulo={isSavingProfile ? 'Salvando perfil…' : 'Salvar alterações do perfil'}
+                onPress={() => {
+                  void handleSaveProfile();
+                }}
+                disabled={!hasProfileChanges || isSavingProfile || isConnected === false}
+                estilo={styles.primaryBtn}
+              />
+
+              {isSavingProfile && (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color={colors.accentLink} />
+                  <AppText tipo="legenda" style={styles.loadingText}>
+                    Salvando foto e dados do perfil…
+                  </AppText>
+                </View>
+              )}
             </View>
           </FadeInBlock>
 
@@ -558,7 +589,7 @@ export default function EditProfileScreen() {
                 Confirme sua senha atual para definir uma nova senha com letras e números.
               </AppText>
 
-              <AppInput
+              <PasswordInput
                 rotulo="Senha atual"
                 placeholder="Digite sua senha atual"
                 value={currentPassword}
@@ -568,7 +599,6 @@ export default function EditProfileScreen() {
                   setPasswordError('');
                   setPasswordSuccess('');
                 }}
-                secureTextEntry
                 autoComplete="current-password"
                 textContentType="password"
                 returnKeyType="next"
@@ -576,9 +606,10 @@ export default function EditProfileScreen() {
                 erro={currentPasswordError}
               />
 
-              <AppInput
+              <PasswordInput
                 rotulo="Nova senha"
-                placeholder={`Mínimo ${MIN_PASSWORD_LENGTH} caracteres (letras e números)`}
+                placeholder="Digite a nova senha"
+                helperText={`Mínimo de ${MIN_PASSWORD_LENGTH} caracteres com letras e números`}
                 value={newPassword}
                 onChangeText={(value) => {
                   setNewPassword(value);
@@ -586,7 +617,6 @@ export default function EditProfileScreen() {
                   setPasswordError('');
                   setPasswordSuccess('');
                 }}
-                secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="next"
@@ -594,9 +624,9 @@ export default function EditProfileScreen() {
                 erro={newPasswordError}
               />
 
-              <AppInput
+              <PasswordInput
                 rotulo="Confirmar nova senha"
-                placeholder="Digite a nova senha novamente"
+                placeholder="Repita a nova senha"
                 value={confirmPassword}
                 onChangeText={(value) => {
                   setConfirmPassword(value);
@@ -604,7 +634,6 @@ export default function EditProfileScreen() {
                   setPasswordError('');
                   setPasswordSuccess('');
                 }}
-                secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
@@ -642,22 +671,6 @@ export default function EditProfileScreen() {
             </View>
           </FadeInBlock>
         </ScrollView>
-
-        {(hasProfileChanges || isSavingProfile || Boolean(profileError)) && (
-          <View style={styles.saveFooter}>
-            <View style={styles.saveFooterInner}>
-              {profileError ? <FeedbackBanner tone="error" message={profileError} /> : null}
-              <AppButton
-                titulo={isSavingProfile ? 'Salvando…' : 'Salvar alterações'}
-                onPress={() => {
-                  void handleSaveProfile();
-                }}
-                disabled={!hasProfileChanges || isSavingProfile || isConnected === false}
-                estilo={styles.primaryBtn}
-              />
-            </View>
-          </View>
-        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -676,7 +689,7 @@ const createStyles = (theme: Theme) => ({
     maxWidth: 640,
     alignSelf: 'center' as const,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 10,
     paddingBottom: 42,
     gap: 16,
   },
@@ -686,26 +699,6 @@ const createStyles = (theme: Theme) => ({
   },
   disabledControl: {
     opacity: 0.55,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 12,
-    marginBottom: 4,
-  },
-  headerCopy: {
-    flex: 1,
-  },
-  eyebrow: {
-    color: theme.colors.accentLink,
-    letterSpacing: 1.5,
-    marginBottom: 3,
-  },
-  title: {
-    color: theme.colors.textPrimary,
-    fontSize: 25,
-    lineHeight: 30,
-    letterSpacing: -0.4,
   },
   offlineBanner: {
     flexDirection: 'row' as const,
@@ -819,17 +812,15 @@ const createStyles = (theme: Theme) => ({
     gap: 10,
   },
   presetTile: {
-    width: 76,
+    width: 72,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    padding: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.transparent,
+    padding: 4,
   },
-  presetTileSelected: {
-    backgroundColor: theme.colors.bgSurfaceAlt,
-    borderColor: theme.colors.borderSubtle,
+  presetAvatarWrap: {
+    width: 64,
+    height: 64,
+    position: 'relative' as const,
   },
   presetCircle: {
     width: 64,
@@ -837,7 +828,6 @@ const createStyles = (theme: Theme) => ({
     borderRadius: 32,
     overflow: 'hidden' as const,
     backgroundColor: theme.colors.avatarBg,
-    position: 'relative' as const,
   },
   presetImage: {
     width: '100%' as const,
@@ -845,11 +835,11 @@ const createStyles = (theme: Theme) => ({
   },
   presetCheckBadge: {
     position: 'absolute' as const,
-    right: 2,
-    bottom: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: theme.colors.accentPrimary,
     borderWidth: 2,
     borderColor: theme.colors.bgSurface,
@@ -875,15 +865,14 @@ const createStyles = (theme: Theme) => ({
     backgroundColor: theme.colors.bgSurfaceAlt,
     borderRadius: 14,
     paddingHorizontal: 15,
-    opacity: 0.78,
   },
   readOnlyValue: {
     flex: 1,
-    color: theme.colors.textSecondary,
+    color: theme.colors.textStrongBody,
     fontSize: 15,
   },
   readOnlyHint: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textHint,
     fontSize: 12,
     marginTop: 6,
   },
@@ -929,18 +918,5 @@ const createStyles = (theme: Theme) => ({
   loadingText: {
     color: theme.colors.textSecondary,
     fontSize: 13,
-  },
-  saveFooter: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.bgSurface,
-  },
-  saveFooterInner: {
-    width: '100%' as const,
-    maxWidth: 640,
-    alignSelf: 'center' as const,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 12,
   },
 });

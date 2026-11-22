@@ -1,19 +1,25 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, ScrollView, TextInput, View, type ViewToken } from 'react-native';
+import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, RefreshControl, ScrollView, TextInput, View, type ViewToken } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
+import { BottomFadeScrim } from '@/components/atoms/BottomFadeScrim';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
+import { FilterChip } from '@/components/atoms/FilterChip';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
+import { StreamingChip } from '@/components/atoms/StreamingChip';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { MediaTitleCard } from '@/components/organisms/MediaTitleCard';
+import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import {
   getAllGenres,
+  getGenreIcon,
   getTitleAverageRating,
   getTitleServices,
+  MaterialIconName,
   matchesSearchQuery,
   MediaKind,
   MediaTitle,
@@ -27,14 +33,14 @@ import { useMyList } from '@/hooks/useMyList';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCount } from '@/utils/format';
 
-type RatingFilter = 'Qualquer nota' | '7+' | '8+';
+type RatingFilter = 'Qualquer nota' | '6+' | '7+' | '8+';
 type SortOption = 'default' | 'rating' | 'year' | 'title';
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'default', label: 'Mais populares' },
-  { value: 'rating', label: 'Maior nota' },
-  { value: 'year', label: 'Mais recentes' },
-  { value: 'title', label: 'A–Z' },
+const SORT_OPTIONS: { value: SortOption; label: string; icon: MaterialIconName }[] = [
+  { value: 'default', label: 'Mais populares', icon: 'trending-up' },
+  { value: 'rating', label: 'Maior nota', icon: 'star' },
+  { value: 'year', label: 'Mais recentes', icon: 'schedule' },
+  { value: 'title', label: 'A–Z', icon: 'sort-by-alpha' },
 ];
 
 const COLLAPSED_GENRE_COUNT = 7;
@@ -62,7 +68,13 @@ export default function ExploreScreen() {
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const { prefetchDurations, getDuration } = useTitleDurationPrefetch();
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const isScrolled = event.nativeEvent.contentOffset.y > 6;
+    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  }, []);
 
   const {
     results: remoteResults,
@@ -280,13 +292,87 @@ export default function ExploreScreen() {
     [colors.savedActiveIcon, colors.textSecondary, getDuration, isSaved, openTitle, styles.savedButtonActive, toggleSavedTitle],
   );
 
+  const stickyControls = (
+    <View>
+      <View style={styles.searchRow}>
+        <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
+          <MaterialIcons name="search" size={21} color={searchFocused ? colors.accentLink : colors.textMuted} />
+          <TextInput
+            value={search}
+            onChangeText={handleSearchChange}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder="Buscar filme, série ou gênero"
+            placeholderTextColor={colors.textMuted}
+            selectionColor={colors.accentLink}
+            style={styles.searchInput}
+            returnKeyType="search"
+            accessibilityLabel="Pesquisar títulos"
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
+              <MaterialIcons name="close" size={18} color={colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.filterButton,
+            activeSheetFilterCount > 0 && styles.filterButtonActive,
+            pressed && styles.pressed,
+          ]}
+          onPress={() => setFiltersVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            activeSheetFilterCount > 0
+              ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
+              : 'Abrir filtros e ordenação'
+          }>
+          <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? colors.savedActiveText : colors.textPrimary} />
+          {activeSheetFilterCount > 0 && (
+            <View style={styles.filterCount}>
+              <AppText peso="forte" tabular style={styles.filterCountText}>
+                {activeSheetFilterCount}
+              </AppText>
+            </View>
+          )}
+        </Pressable>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
+        {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
+          <Pressable
+            key={filter}
+            onPress={() => setKindFilter(filter)}
+            style={({ pressed }) => [
+              styles.quickChip,
+              kindFilter === filter && styles.quickChipActive,
+              pressed && styles.pressed,
+            ]}>
+            <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>
+              {filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}
+            </AppText>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScreenHeader
+        eyebrow="CATÁLOGO"
+        title="Explore títulos"
+        bottomSlot={stickyControls}
+        scrolled={scrolled}
+      />
       <FlatList
         data={results}
         keyExtractor={(item) => item.id}
         renderItem={renderTitleItem}
-        contentContainerStyle={[styles.container, { paddingBottom: Math.max(108, 92 + insets.bottom) }]}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.container, { paddingBottom: Math.max(124, 108 + insets.bottom) }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         initialNumToRender={12}
@@ -305,75 +391,6 @@ export default function ExploreScreen() {
         ListHeaderComponent={
           <View>
             <FadeInBlock delay={0}>
-              <View style={styles.header}>
-                <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>CATÁLOGO</AppText>
-                <AppText tipo="titulo" peso="forte" style={styles.title}>Explore títulos</AppText>
-              </View>
-
-              <View style={styles.searchRow}>
-                <View style={[styles.searchBox, searchFocused && styles.searchBoxFocused]}>
-                  <MaterialIcons name="search" size={21} color={searchFocused ? colors.accentLink : colors.textMuted} />
-                  <TextInput
-                    value={search}
-                    onChangeText={handleSearchChange}
-                    onFocus={() => setSearchFocused(true)}
-                    onBlur={() => setSearchFocused(false)}
-                    placeholder="Buscar filme, série ou gênero"
-                    placeholderTextColor={colors.textMuted}
-                    selectionColor={colors.accentLink}
-                    style={styles.searchInput}
-                    returnKeyType="search"
-                    accessibilityLabel="Pesquisar títulos"
-                  />
-                  {search.length > 0 && (
-                    <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
-                      <MaterialIcons name="close" size={18} color={colors.textMuted} />
-                    </Pressable>
-                  )}
-                </View>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.filterButton,
-                    activeSheetFilterCount > 0 && styles.filterButtonActive,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => setFiltersVisible(true)}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    activeSheetFilterCount > 0
-                      ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
-                      : 'Abrir filtros e ordenação'
-                  }>
-                  <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? colors.savedActiveText : colors.textPrimary} />
-                  {activeSheetFilterCount > 0 && (
-                    <View style={styles.filterCount}>
-                      <AppText peso="forte" tabular style={styles.filterCountText}>
-                        {activeSheetFilterCount}
-                      </AppText>
-                    </View>
-                  )}
-                </Pressable>
-              </View>
-            </FadeInBlock>
-
-            <FadeInBlock delay={35}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
-                {(['Todos', 'Filme', 'Série', 'Anime'] as const).map((filter) => (
-                  <Pressable
-                    key={filter}
-                    onPress={() => setKindFilter(filter)}
-                    style={({ pressed }) => [
-                      styles.quickChip,
-                      kindFilter === filter && styles.quickChipActive,
-                      pressed && styles.pressed,
-                    ]}>
-                    <AppText tipo="legenda" peso="forte" style={kindFilter === filter ? styles.quickTextActive : styles.quickText}>
-                      {filter === 'Todos' ? 'Todos' : filter === 'Filme' ? 'Filmes' : filter === 'Série' ? 'Séries' : 'Animes'}
-                    </AppText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
               {activeFilterChips.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsRow}>
                   {activeFilterChips.map((chip) => (
@@ -465,150 +482,131 @@ export default function ExploreScreen() {
                 </AppText>
               </View>
               <View style={styles.sheetHeaderActions}>
-                {hasResettableFilters && (
-                  <Pressable
-                    hitSlop={6}
-                    onPress={clearAllFilters}
-                    style={({ pressed }) => [styles.clearHeaderBtn, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Limpar filtros">
-                    <AppText tipo="legenda" peso="forte" style={styles.clearFilters}>Limpar</AppText>
-                  </Pressable>
-                )}
+                <Pressable
+                  hitSlop={6}
+                  disabled={!hasResettableFilters}
+                  onPress={clearAllFilters}
+                  style={({ pressed }) => [
+                    styles.clearHeaderBtn,
+                    !hasResettableFilters && styles.clearHeaderBtnDisabled,
+                    pressed && hasResettableFilters && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !hasResettableFilters }}
+                  accessibilityLabel="Limpar filtros">
+                  <AppText
+                    tipo="legenda"
+                    peso="forte"
+                    style={[
+                      styles.clearFilters,
+                      !hasResettableFilters && styles.clearFiltersDisabled,
+                    ]}>
+                    Limpar
+                  </AppText>
+                </Pressable>
               </View>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              style={styles.sheetScroll}
-              contentContainerStyle={styles.sheetScrollContent}>
-              <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>ORDENAÇÃO</AppText>
-              <View style={styles.filterChips}>
-                {SORT_OPTIONS.map((option) => {
-                  const selected = sortBy === option.value;
-                  const optionLabel = option.value === 'default' && search.trim().length > 0 ? 'Relevância' : option.label;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => setSortBy(option.value)}
-                      style={({ pressed }) => [
-                        styles.filterChip,
-                        selected && styles.filterChipActive,
-                        pressed && styles.pressed,
-                      ]}>
-                      <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
-                        {optionLabel}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+            <View style={styles.sheetScrollWrap}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.sheetScrollContent}>
+                <AppText tipo="legenda" peso="forte" style={styles.filterLabel}>ORDENAÇÃO</AppText>
+                <View style={styles.filterChips}>
+                  {SORT_OPTIONS.map((option) => {
+                    const selected = sortBy === option.value;
+                    const optionLabel = option.value === 'default' && search.trim().length > 0 ? 'Relevância' : option.label;
+                    return (
+                      <FilterChip
+                        key={option.value}
+                        label={optionLabel}
+                        icon={option.icon}
+                        selected={selected}
+                        onPress={() => setSortBy(option.value)}
+                        accessibilityRole="radio"
+                      />
+                    );
+                  })}
+                </View>
 
-              {serviceNames.length > 1 && (
-                <>
-                  <View style={styles.sectionLabelRow}>
-                    <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
-                    <AppText tipo="legenda" style={styles.sectionHint}>Múltipla escolha</AppText>
-                  </View>
-                  <View style={styles.filterChips}>
-                    <Pressable
-                      onPress={() => setSelectedServices([])}
-                      style={({ pressed }) => [
-                        styles.filterChip,
-                        effectiveSelectedServices.length === 0 && styles.filterChipActive,
-                        pressed && styles.pressed,
-                      ]}>
-                      <AppText tipo="legenda" peso="forte" style={effectiveSelectedServices.length === 0 ? styles.filterChipTextActive : styles.filterChipText}>
-                        Meus streamings
-                      </AppText>
-                    </Pressable>
-                    {serviceNames.map((service) => {
-                      const selected = effectiveSelectedServices.includes(service);
-                      return (
-                        <Pressable
+                {serviceNames.length > 1 && (
+                  <>
+                    <View style={styles.sectionLabelRow}>
+                      <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>STREAMING</AppText>
+                      <AppText tipo="legenda" style={styles.sectionHint}>Múltipla escolha</AppText>
+                    </View>
+                    <View style={styles.filterChips}>
+                      <FilterChip
+                        label="Meus streamings"
+                        icon="subscriptions"
+                        selected={effectiveSelectedServices.length === 0}
+                        onPress={() => setSelectedServices([])}
+                        accessibilityRole="checkbox"
+                      />
+                      {serviceNames.map((service) => (
+                        <StreamingChip
                           key={service}
+                          provider={service}
+                          selected={effectiveSelectedServices.includes(service)}
                           onPress={() => toggleService(service)}
-                          style={({ pressed }) => [
-                            styles.filterChip,
-                            selected && styles.filterChipActive,
-                            pressed && styles.pressed,
-                          ]}>
-                          <View style={styles.chipInner}>
-                            <ServiceLogo name={service} size={15} />
-                            <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
-                              {service}
-                            </AppText>
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
+                          accessibilityRole="checkbox"
+                        />
+                      ))}
+                    </View>
+                  </>
+                )}
 
-              <View style={styles.sectionLabelRow}>
-                <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>GÊNERO</AppText>
-                <AppText tipo="legenda" style={styles.sectionHint}>Combina selecionados</AppText>
-              </View>
-              <View style={styles.filterChips}>
-                <Pressable
-                  onPress={() => setSelectedGenres([])}
-                  style={({ pressed }) => [
-                    styles.filterChip,
-                    effectiveSelectedGenres.length === 0 && styles.filterChipActive,
-                    pressed && styles.pressed,
-                  ]}>
-                  <AppText tipo="legenda" peso="forte" style={effectiveSelectedGenres.length === 0 ? styles.filterChipTextActive : styles.filterChipText}>
-                    Todos
-                  </AppText>
-                </Pressable>
-                {visibleGenres.map((genre) => {
-                  const selected = effectiveSelectedGenres.includes(genre);
-                  return (
-                    <Pressable
+                <View style={styles.sectionLabelRow}>
+                  <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>GÊNERO</AppText>
+                  <AppText tipo="legenda" style={styles.sectionHint}>Combina selecionados</AppText>
+                </View>
+                <View style={styles.filterChips}>
+                  <FilterChip
+                    label="Todos"
+                    icon="apps"
+                    selected={effectiveSelectedGenres.length === 0}
+                    onPress={() => setSelectedGenres([])}
+                    accessibilityRole="checkbox"
+                  />
+                  {visibleGenres.map((genre) => (
+                    <FilterChip
                       key={genre}
+                      label={genre}
+                      icon={getGenreIcon(genre)}
+                      selected={effectiveSelectedGenres.includes(genre)}
                       onPress={() => toggleGenre(genre)}
-                      style={({ pressed }) => [
-                        styles.filterChip,
-                        selected && styles.filterChipActive,
-                        pressed && styles.pressed,
-                      ]}>
-                      <AppText tipo="legenda" peso="forte" style={selected ? styles.filterChipTextActive : styles.filterChipText}>
-                        {genre}
+                      accessibilityRole="checkbox"
+                    />
+                  ))}
+                  {genres.length > COLLAPSED_GENRE_COUNT && (
+                    <Pressable
+                      onPress={() => setShowAllGenres((prev) => !prev)}
+                      style={({ pressed }) => [styles.expandGenresChip, pressed && styles.pressed]}>
+                      <AppText tipo="legenda" peso="forte" style={styles.expandGenresText}>
+                        {showAllGenres ? 'Menos' : `Mais (+${genres.length - COLLAPSED_GENRE_COUNT})`}
                       </AppText>
                     </Pressable>
-                  );
-                })}
-                {genres.length > COLLAPSED_GENRE_COUNT && (
-                  <Pressable
-                    onPress={() => setShowAllGenres((prev) => !prev)}
-                    style={({ pressed }) => [styles.expandGenresChip, pressed && styles.pressed]}>
-                    <AppText tipo="legenda" peso="forte" style={styles.expandGenresText}>
-                      {showAllGenres ? 'Menos' : `Mais (+${genres.length - COLLAPSED_GENRE_COUNT})`}
-                    </AppText>
-                  </Pressable>
-                )}
-              </View>
+                  )}
+                </View>
 
-              <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA MÍNIMA</AppText>
-              <View style={styles.filterChips}>
-                {(['Qualquer nota', '7+', '8+'] as RatingFilter[]).map((rating) => (
-                  <Pressable
-                    key={rating}
-                    onPress={() => setRatingFilter(rating)}
-                    style={({ pressed }) => [
-                      styles.filterChip,
-                      ratingFilter === rating && styles.filterChipActive,
-                      pressed && styles.pressed,
-                    ]}>
-                    <AppText tipo="legenda" peso="forte" style={ratingFilter === rating ? styles.filterChipTextActive : styles.filterChipText}>
-                      {rating}
-                    </AppText>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
+                <AppText tipo="legenda" peso="forte" style={[styles.filterLabel, styles.secondFilterLabel]}>NOTA MÍNIMA</AppText>
+                <View style={styles.filterChips}>
+                  {(['Qualquer nota', '6+', '7+', '8+'] as RatingFilter[]).map((rating) => (
+                    <FilterChip
+                      key={rating}
+                      label={rating}
+                      icon={rating === 'Qualquer nota' ? 'auto-awesome' : 'star'}
+                      selected={ratingFilter === rating}
+                      onPress={() => setRatingFilter(rating)}
+                      accessibilityRole="radio"
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+              <BottomFadeScrim color={colors.bgSurface} height={30} style={styles.sheetScrollScrim} />
+            </View>
 
             <Pressable
               disabled={results.length === 0}
@@ -643,12 +641,9 @@ export default function ExploreScreen() {
 
 const createStyles = (theme: Theme) => ({
   safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
-  container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34 },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 34 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { marginBottom: 16 },
-  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 5 },
-  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30 },
-  searchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, marginBottom: 14, overflow: 'visible' as const },
+  searchRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, marginBottom: 10, overflow: 'visible' as const },
   searchBox: { flex: 1, minHeight: 50, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 9, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface },
   searchBoxFocused: { borderColor: theme.colors.borderFocused },
   searchInput: { flex: 1, color: theme.colors.textPrimary, fontFamily: FONT_FAMILIES.sans.regular, fontSize: 16, lineHeight: 22, paddingVertical: 10 },
@@ -656,10 +651,9 @@ const createStyles = (theme: Theme) => ({
   filterButtonActive: { borderColor: theme.colors.savedActiveBorder, backgroundColor: theme.colors.savedActiveBg },
   filterCount: { position: 'absolute' as const, top: -6, right: -6, zIndex: 2, minWidth: 21, height: 21, paddingHorizontal: 5, borderRadius: 10.5, borderWidth: 2, borderColor: theme.colors.bgPrimary, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: theme.colors.accentPrimary },
   filterCountText: { color: theme.colors.textOnAccent, fontSize: 10.5, lineHeight: 13 },
-  quickFilters: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingBottom: 12 },
+  quickFilters: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, paddingBottom: 2 },
   quickChip: { borderWidth: 1, borderColor: theme.colors.chipBorder, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: theme.colors.chipBg },
   quickChipActive: { borderColor: theme.colors.chipSelectedBorder, backgroundColor: theme.colors.chipSelectedBg },
-  chipInner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   quickText: { color: theme.colors.chipText, fontSize: 13 },
   quickTextActive: { color: theme.colors.chipSelectedText, fontSize: 13 },
   activeChipsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 7, paddingBottom: 14 },
@@ -689,12 +683,9 @@ const createStyles = (theme: Theme) => ({
   secondFilterLabel: { marginTop: 15 },
   sectionHint: { color: theme.colors.textSecondary, fontSize: 12 },
   clearFilters: { color: theme.colors.accentLink, fontSize: 13 },
-  filterChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 7 },
-  filterChip: { borderWidth: 1, borderColor: theme.colors.chipBorder, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: theme.colors.chipBg },
-  filterChipActive: { borderColor: theme.colors.chipSelectedBorder, backgroundColor: theme.colors.chipSelectedBg },
-  filterChipText: { color: theme.colors.chipText, fontSize: 13 },
-  filterChipTextActive: { color: theme.colors.chipSelectedText, fontSize: 13 },
-  expandGenresChip: { borderWidth: 1, borderColor: theme.colors.savedActiveBorder, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7.5, backgroundColor: theme.colors.savedActiveBg },
+  clearFiltersDisabled: { color: theme.colors.buttonDisabledText },
+  filterChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: theme.spacing.md },
+  expandGenresChip: { minHeight: theme.touchTarget.min, justifyContent: 'center' as const, borderWidth: 1, borderColor: theme.colors.savedActiveBorder, borderRadius: theme.radius.pill, paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.base, backgroundColor: theme.colors.savedActiveBg },
   expandGenresText: { color: theme.colors.accentLink, fontSize: 13 },
   resultsHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, gap: 10, marginTop: 4, marginBottom: 12 },
   resultsHeaderCopy: { flex: 1 },
@@ -705,12 +696,15 @@ const createStyles = (theme: Theme) => ({
   sheetTitle: { color: theme.colors.textPrimary, fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
   sheetHeaderActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
   clearHeaderBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 12, backgroundColor: theme.colors.bgSurfaceAlt },
-  sheetScroll: { flexShrink: 1, marginBottom: 14 },
-  sheetScrollContent: { paddingBottom: 6 },
-  applyButton: { minHeight: 48, borderRadius: 14, backgroundColor: theme.colors.accentPrimary, alignItems: 'center' as const, justifyContent: 'center' as const },
-  applyButtonDisabled: { backgroundColor: theme.colors.bgSurfaceAlt },
-  applyButtonText: { color: theme.colors.textOnAccent, fontSize: 14.5 },
-  applyButtonTextDisabled: { color: theme.colors.textMuted },
+  clearHeaderBtnDisabled: { backgroundColor: theme.colors.buttonDisabledBg },
+  sheetScrollWrap: { position: 'relative' as const, flexShrink: 1, marginBottom: 14 },
+  sheetScroll: { flexShrink: 1 },
+  sheetScrollContent: { paddingBottom: 32 },
+  sheetScrollScrim: { position: 'absolute' as const, left: 0, right: 0, bottom: 0 },
+  applyButton: { minHeight: 50, borderRadius: 14, backgroundColor: theme.colors.primaryButtonBg, borderWidth: 1, borderColor: theme.colors.primaryButtonBg, alignItems: 'center' as const, justifyContent: 'center' as const },
+  applyButtonDisabled: { backgroundColor: theme.colors.buttonDisabledBg, borderColor: theme.colors.buttonDisabledBorder },
+  applyButtonText: { color: theme.colors.primaryButtonText, fontSize: 14.5 },
+  applyButtonTextDisabled: { color: theme.colors.buttonDisabledText },
   secondaryResetButton: { minHeight: 40, marginTop: 8, alignItems: 'center' as const, justifyContent: 'center' as const },
   secondaryResetText: { color: theme.colors.accentLink, fontSize: 13.5 },
   searchError: { color: theme.colors.dangerText, marginBottom: 8 },

@@ -55,10 +55,27 @@ export type ThemeColors = {
   // Formulários, botões e avatares
   primaryButtonBg: string;
   primaryButtonText: string;
+  buttonDisabledBg: string;
+  buttonDisabledBorder: string;
+  buttonDisabledText: string;
   borderFocused: string;
   avatarBg: string;
   avatarBorder: string;
   avatarText: string;
+  logoBorder: string;
+
+  // Badges semânticos e textos auxiliares
+  badgeNeutralBg: string;
+  badgeNeutralBorder: string;
+  badgeNeutralText: string;
+  badgeNeutralDot: string;
+  badgeAccentBg: string;
+  badgeAccentBorder: string;
+  badgeAccentText: string;
+  badgeSuccessBg: string;
+  badgeSuccessBorder: string;
+  badgeSuccessText: string;
+  textHint: string;
 
   // Tokens de compatibilidade e auxiliares
   bgCanvas: string;
@@ -230,10 +247,26 @@ export const lightColors: ThemeColors = {
 
   primaryButtonBg: '#182230',
   primaryButtonText: '#FFFDF8',
+  buttonDisabledBg: '#E6DFD3',
+  buttonDisabledBorder: '#D6CEC0',
+  buttonDisabledText: '#655E54',
   borderFocused: '#182230',
   avatarBg: '#182230',
   avatarBorder: '#E8E2D5',
   avatarText: '#F3B43F',
+  logoBorder: 'rgba(24, 34, 48, 0.08)',
+
+  badgeNeutralBg: '#EAE5DB',
+  badgeNeutralBorder: '#D4CDC0',
+  badgeNeutralText: '#3A424C',
+  badgeNeutralDot: '#5B6470',
+  badgeAccentBg: '#FFF2D8',
+  badgeAccentBorder: '#E2B76B',
+  badgeAccentText: '#9C5A14',
+  badgeSuccessBg: '#E5EFE7',
+  badgeSuccessBorder: '#B8DAC0',
+  badgeSuccessText: '#1D633C',
+  textHint: '#5B6168',
 
   bgCanvas: '#FAF7F2',
   bgCard: '#FFFFFF',
@@ -272,7 +305,7 @@ export const lightColors: ThemeColors = {
   successText: '#216941',
   skeletonBase: '#E8E2D5',
   skeletonHighlight: '#F3EFE6',
-  backdropOverlay: 'rgba(24, 34, 48, 0.58)',
+  backdropOverlay: 'rgba(18, 26, 38, 0.72)',
   backdropDark: 'rgba(9, 15, 23, 0.84)',
   closeOverlay: 'rgba(15, 20, 28, 0.56)',
   posterScrim: 'rgba(9, 15, 23, 0.48)',
@@ -292,7 +325,7 @@ export const darkColors: ThemeColors = {
   borderSubtle: '#263040',
   textPrimary: '#F4F1EA',
   textSecondary: '#9AA4B2',
-  textMuted: '#647082',
+  textMuted: '#7E8B9E',
 
   accentPrimary: '#F2AE30',
   textOnAccent: '#12171F',
@@ -330,10 +363,26 @@ export const darkColors: ThemeColors = {
 
   primaryButtonBg: '#F2AE30',
   primaryButtonText: '#12171F',
+  buttonDisabledBg: '#252F3E',
+  buttonDisabledBorder: '#313E52',
+  buttonDisabledText: '#8996A8',
   borderFocused: '#F2AE30',
   avatarBg: '#212A38',
   avatarBorder: '#2E3B4E',
   avatarText: '#F2AE30',
+  logoBorder: 'rgba(255, 255, 255, 0.10)',
+
+  badgeNeutralBg: '#253041',
+  badgeNeutralBorder: '#344257',
+  badgeNeutralText: '#CBD5E1',
+  badgeNeutralDot: '#94A3B8',
+  badgeAccentBg: '#2E2416',
+  badgeAccentBorder: '#5C431C',
+  badgeAccentText: '#F2AE30',
+  badgeSuccessBg: '#172C22',
+  badgeSuccessBorder: '#27533B',
+  badgeSuccessText: '#4ADE80',
+  textHint: '#94A0B2',
 
   bgCanvas: '#0F141B',
   bgCard: '#171E28',
@@ -372,7 +421,7 @@ export const darkColors: ThemeColors = {
   successText: '#4ADE80',
   skeletonBase: '#1E2734',
   skeletonHighlight: '#2A3648',
-  backdropOverlay: 'rgba(5, 8, 13, 0.72)',
+  backdropOverlay: 'rgba(4, 7, 11, 0.82)',
   backdropDark: 'rgba(4, 7, 11, 0.88)',
   closeOverlay: 'rgba(10, 14, 20, 0.72)',
   posterScrim: 'rgba(6, 10, 16, 0.56)',
@@ -431,30 +480,9 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 /**
- * Resolve a cor de destaque derivada da cor dominante do pôster,
- * garantindo contraste mínimo sobre a superfície do tema ativo ou fallback para o dourado.
+ * Resolve a cor de destaque semântica da interface de detalhes,
+ * mantendo disciplina cromática âmbar/bronze do Design System em vez de tons azuis/aleatórios de pôster.
  */
-export function resolveTitleAccentColor(color?: string | null, isDark = false): string {
-  const fallback = isDark ? darkColors.accentPrimary : lightColors.accent;
-  if (!color) return fallback;
-  const rgb = parseHexRgb(color);
-  if (!rgb) return fallback;
-
-  const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-  const maxChannel = Math.max(rgb.r, rgb.g, rgb.b);
-  const minChannel = Math.min(rgb.r, rgb.g, rgb.b);
-  const saturation = maxChannel === 0 ? 0 : (maxChannel - minChannel) / maxChannel;
-
-  if (isDark) {
-    if (luminance < 0.38 || luminance > 0.90 || saturation < 0.14) {
-      return darkColors.accentPrimary;
-    }
-    return color;
-  }
-
-  if (luminance > 0.78 || luminance < 0.12 || saturation < 0.12) {
-    return lightColors.gold;
-  }
-
-  return color;
+export function resolveTitleAccentColor(_color?: string | null, isDark = false): string {
+  return isDark ? darkColors.accentPrimary : lightColors.accentLink;
 }

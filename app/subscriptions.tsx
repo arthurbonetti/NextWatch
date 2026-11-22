@@ -1,16 +1,17 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Redirect } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useMemo, useState } from 'react';
+import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
-import { BackButton } from '@/components/atoms/BackButton';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SwitchToggle } from '@/components/atoms/SwitchToggle';
 import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
+import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
 import { Subscription } from '@/constants/subscriptions';
 import { darkColors, Theme, withAlpha } from '@/constants/theme';
@@ -20,20 +21,29 @@ import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { formatCurrency } from '@/utils/format';
 
 export default function SubscriptionsScreen() {
-  const { user, authReady } = useAuth();
+  const { user, authReady, isPasswordRecovery } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const { subscriptions, saveSubscription, toggleSubscription, removeSubscription } = useSubscriptions();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | undefined>();
+  const [actionSubscription, setActionSubscription] = useState<Subscription | null>(null);
   const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null);
   const [showAnnualCost, setShowAnnualCost] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const isScrolled = event.nativeEvent.contentOffset.y > 6;
+    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  }, []);
 
   const activeSubscriptions = useMemo(() => subscriptions.filter((subscription) => subscription.active), [subscriptions]);
   const monthlyTotal = useMemo(() => activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0), [activeSubscriptions]);
   const averagePerService = activeSubscriptions.length > 0 ? monthlyTotal / activeSubscriptions.length : 0;
 
   if (!authReady) return null;
+  if (isPasswordRecovery) return <Redirect href="/(auth)/reset-password" />;
   if (!user) return <Redirect href="/(auth)/login" />;
 
   const addSubscription = () => {
@@ -52,25 +62,32 @@ export default function SubscriptionsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <FadeInBlock delay={0}>
-          <View style={styles.header}>
-            <BackButton fallbackHref="/(tabs)/tab3" />
-            <View style={styles.headerCopy}>
-              <AppText tipo="legenda" peso="forte" style={styles.eyebrow}>SEU PAINEL</AppText>
-              <AppText tipo="titulo" peso="forte" style={styles.title}>Assinaturas</AppText>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.headerActionBtn, pressed && styles.pressed]}
-              onPress={addSubscription}
-              accessibilityRole="button"
-              accessibilityLabel="Adicionar assinatura">
-              <MaterialIcons name="add" size={18} color={colors.textOnAccent} />
-              <AppText tipo="legenda" peso="forte" style={styles.headerActionText}>Novo</AppText>
-            </Pressable>
-          </View>
-        </FadeInBlock>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScreenHeader
+        eyebrow="SEU PAINEL"
+        title="Assinaturas"
+        showBack
+        fallbackHref="/(tabs)/tab3"
+        scrolled={scrolled}
+        rightSlot={
+          <Pressable
+            style={({ pressed }) => [styles.headerActionBtn, pressed && styles.pressed]}
+            onPress={addSubscription}
+            accessibilityRole="button"
+            accessibilityLabel="Adicionar assinatura">
+            <MaterialIcons name="add" size={18} color={colors.textOnAccent} />
+            <AppText tipo="legenda" peso="forte" style={styles.headerActionText}>Novo</AppText>
+          </Pressable>
+        }
+      />
+      <ScrollView
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: Math.max(42, insets.bottom + 20) },
+        ]}
+        showsVerticalScrollIndicator={false}>
 
         <FadeInBlock delay={35}>
           <View style={styles.totalCard}>
@@ -141,10 +158,14 @@ export default function SubscriptionsScreen() {
             <FadeInBlock key={subscription.id} delay={Math.min(index + 3, 8) * 30}>
               <View style={[styles.subscriptionCard, !subscription.active && styles.subscriptionInactive]}>
                 <Pressable
-                  style={({ pressed }) => [styles.cardTopRow, pressed && styles.pressed]}
-                  onPress={() => editSubscription(subscription)}
+                  style={({ pressed }) => [
+                    styles.cardTopRow,
+                    !subscription.active && styles.cardTopRowInactive,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => setActionSubscription(subscription)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Editar ${subscription.provider}`}>
+                  accessibilityLabel={`Opções da assinatura ${subscription.provider}`}>
                   <ServiceLogo name={subscription.provider} size={44} />
                   <View style={styles.serviceInfo}>
                     <AppText peso="forte" style={styles.serviceName} numberOfLines={1}>
@@ -158,6 +179,7 @@ export default function SubscriptionsScreen() {
                     <AppText peso="forte" tabular style={styles.price}>{formatCurrency(subscription.monthlyPrice)}</AppText>
                     <AppText tipo="legenda" style={styles.priceCaption}>por mês</AppText>
                   </View>
+                  <MaterialIcons name="more-horiz" size={20} color={colors.textMuted} />
                 </Pressable>
 
                 <View style={styles.cardDivider} />
@@ -181,28 +203,12 @@ export default function SubscriptionsScreen() {
                     )}
                   </View>
 
-                  <View style={styles.subscriptionActions}>
-                    <Pressable
-                      style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
-                      onPress={() => editSubscription(subscription)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Editar ${subscription.provider}`}>
-                      <MaterialIcons name="edit" size={18} color={colors.textSecondary} />
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [styles.iconActionBtn, pressed && styles.pressed]}
-                      onPress={() => setDeletingSubscription(subscription)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remover ${subscription.provider}`}>
-                      <MaterialIcons name="delete-outline" size={19} color={colors.dangerText} />
-                    </Pressable>
-                    <SwitchToggle
-                      value={subscription.active}
-                      onToggle={() => toggleSubscription(subscription.id)}
-                      accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
-                      style={styles.switchHitArea}
-                    />
-                  </View>
+                  <SwitchToggle
+                    value={subscription.active}
+                    onToggle={() => toggleSubscription(subscription.id)}
+                    accessibilityLabel={subscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
+                    style={styles.switchHitArea}
+                  />
                 </View>
               </View>
             </FadeInBlock>
@@ -225,6 +231,86 @@ export default function SubscriptionsScreen() {
           </FadeInBlock>
         )}
       </ScrollView>
+
+      <AnimatedModalShell
+        visible={actionSubscription !== null}
+        onClose={() => setActionSubscription(null)}
+        variant="sheet"
+        dragEntireSheet
+        backdropAccessibilityLabel="Fechar opções da assinatura">
+        {actionSubscription && (
+          <View style={styles.actionSheetBody}>
+            <View style={styles.actionSheetHeader}>
+              <ServiceLogo name={actionSubscription.provider} size={42} />
+              <View style={styles.actionSheetCopy}>
+                <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.actionSheetTitle}>
+                  {actionSubscription.provider}
+                </AppText>
+                <AppText tipo="legenda" tabular style={styles.actionSheetSubtitle}>
+                  {formatCurrency(actionSubscription.monthlyPrice)}/mês · Vence todo dia {actionSubscription.billingDay}
+                </AppText>
+              </View>
+            </View>
+
+            <View style={styles.actionSheetList}>
+              <Pressable
+                style={({ pressed }) => [styles.actionSheetItem, pressed && styles.pressed]}
+                onPress={() => {
+                  const target = actionSubscription;
+                  setActionSubscription(null);
+                  editSubscription(target);
+                }}
+                accessibilityRole="button">
+                <View style={styles.actionSheetIconBox}>
+                  <MaterialIcons name="edit" size={19} color={colors.textPrimary} />
+                </View>
+                <AppText peso="forte" style={styles.actionSheetItemText}>
+                  Editar assinatura
+                </AppText>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textMuted} />
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.actionSheetItem, pressed && styles.pressed]}
+                onPress={() => {
+                  const target = actionSubscription;
+                  setActionSubscription(null);
+                  toggleSubscription(target.id);
+                }}
+                accessibilityRole="button">
+                <View style={styles.actionSheetIconBox}>
+                  <MaterialIcons
+                    name={actionSubscription.active ? 'pause-circle-outline' : 'play-circle-outline'}
+                    size={19}
+                    color={colors.textPrimary}
+                  />
+                </View>
+                <AppText peso="forte" style={styles.actionSheetItemText}>
+                  {actionSubscription.active ? 'Pausar assinatura' : 'Ativar assinatura'}
+                </AppText>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textMuted} />
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.actionSheetItem, styles.actionSheetItemDanger, pressed && styles.pressed]}
+                onPress={() => {
+                  const target = actionSubscription;
+                  setActionSubscription(null);
+                  setDeletingSubscription(target);
+                }}
+                accessibilityRole="button">
+                <View style={[styles.actionSheetIconBox, styles.actionSheetIconBoxDanger]}>
+                  <MaterialIcons name="delete-outline" size={19} color={colors.dangerText} />
+                </View>
+                <AppText peso="forte" style={styles.actionSheetItemDangerText}>
+                  Excluir assinatura
+                </AppText>
+                <MaterialIcons name="chevron-right" size={20} color={colors.dangerText} />
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </AnimatedModalShell>
 
       <SubscriptionEditorModal
         visible={editorOpen}
@@ -255,12 +341,8 @@ export default function SubscriptionsScreen() {
 
 const createStyles = (theme: Theme) => ({
   safeArea: { flex: 1, backgroundColor: theme.colors.bgPrimary },
-  container: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 42 },
+  container: { width: '100%' as const, maxWidth: 640, alignSelf: 'center' as const, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 42 },
   pressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  header: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, marginBottom: 20 },
-  headerCopy: { flex: 1 },
-  eyebrow: { color: theme.colors.accentLink, letterSpacing: 1.5, marginBottom: 3 },
-  title: { color: theme.colors.textPrimary, fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
   headerActionBtn: { minHeight: 40, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 13, backgroundColor: theme.colors.accentPrimary },
   headerActionText: { color: theme.colors.textOnAccent, fontSize: 13 },
   totalCard: { overflow: 'hidden' as const, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.heroBorder, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 16, backgroundColor: theme.colors.heroBg, marginBottom: 26 },
@@ -287,8 +369,9 @@ const createStyles = (theme: Theme) => ({
   sectionSubtitle: { color: theme.colors.textSecondary, marginTop: 2, fontSize: 13, lineHeight: 18 },
   countBadge: { flexShrink: 0, textAlign: 'center' as const, color: theme.colors.textSecondary, backgroundColor: theme.colors.bgSurface, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderRadius: 11, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 },
   subscriptionCard: { borderRadius: 18, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.bgSurface, padding: 14, marginBottom: 12 },
-  subscriptionInactive: { opacity: 0.68 },
+  subscriptionInactive: { backgroundColor: theme.colors.bgSurfaceAlt },
   cardTopRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 },
+  cardTopRowInactive: { opacity: 0.78 },
   serviceInfo: { flex: 1 },
   serviceName: { color: theme.colors.textPrimary, fontSize: 16, lineHeight: 21 },
   billingText: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 },
@@ -299,18 +382,50 @@ const createStyles = (theme: Theme) => ({
   cardBottomRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, gap: 8 },
   badgesRow: { flexDirection: 'row' as const, alignItems: 'center' as const, flexWrap: 'wrap' as const, gap: 6, flex: 1 },
   statusPill: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
-  statusPillActive: { backgroundColor: theme.colors.bgSuccess },
-  statusPillPaused: { backgroundColor: theme.colors.bgSurfaceAlt },
+  statusPillActive: { backgroundColor: theme.colors.badgeSuccessBg, borderWidth: 1, borderColor: theme.colors.badgeSuccessBorder },
+  statusPillPaused: { backgroundColor: theme.colors.badgeNeutralBg, borderWidth: 1, borderColor: theme.colors.badgeNeutralBorder },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusDotActive: { backgroundColor: theme.colors.successText },
-  statusDotPaused: { backgroundColor: theme.colors.textMuted },
-  statusTextActive: { color: theme.colors.successText, fontSize: 12 },
-  statusTextPaused: { color: theme.colors.textSecondary, fontSize: 12 },
+  statusDotActive: { backgroundColor: theme.colors.badgeSuccessText },
+  statusDotPaused: { backgroundColor: theme.colors.badgeNeutralDot },
+  statusTextActive: { color: theme.colors.badgeSuccessText, fontSize: 12 },
+  statusTextPaused: { color: theme.colors.badgeNeutralText, fontSize: 12 },
   reminderBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: theme.colors.savedActiveBg },
   reminderText: { color: theme.colors.savedActiveText, fontSize: 12 },
-  subscriptionActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
-  iconActionBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: theme.colors.bgSurfaceAlt, alignItems: 'center' as const, justifyContent: 'center' as const },
   switchHitArea: { minWidth: 44, minHeight: 44, alignItems: 'center' as const, justifyContent: 'center' as const, paddingLeft: 2 },
+  actionSheetBody: { gap: 16 },
+  actionSheetHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 },
+  actionSheetCopy: { flex: 1 },
+  actionSheetTitle: { color: theme.colors.textPrimary, fontSize: 20, lineHeight: 25 },
+  actionSheetSubtitle: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
+  actionSheetList: { gap: 10 },
+  actionSheetItem: {
+    minHeight: 54,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+  },
+  actionSheetItemDanger: {
+    borderColor: theme.colors.dangerBorder,
+    backgroundColor: theme.colors.bgSurface,
+  },
+  actionSheetIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  actionSheetIconBoxDanger: {
+    backgroundColor: theme.colors.dangerIconBg,
+  },
+  actionSheetItemText: { flex: 1, color: theme.colors.textPrimary, fontSize: 14.5 },
+  actionSheetItemDangerText: { flex: 1, color: theme.colors.dangerText, fontSize: 14.5 },
   addRow: { minHeight: 70, flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.borderSubtle, borderStyle: 'dashed' as const, backgroundColor: theme.colors.bgSurface, marginTop: 6 },
   addIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: theme.colors.accentPrimary, marginRight: 12 },
   addCopy: { flex: 1 },
