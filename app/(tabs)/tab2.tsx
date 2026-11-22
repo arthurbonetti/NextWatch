@@ -479,7 +479,7 @@ export default function ExploreScreen() {
             </View>
 
             <ScrollView
-              showsVerticalScrollIndicator
+              showsVerticalScrollIndicator={false}
               bounces={false}
               style={styles.sheetScroll}
               contentContainerStyle={styles.sheetScrollContent}>
