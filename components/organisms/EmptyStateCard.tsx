@@ -1,13 +1,10 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps } from 'react';
 import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
 
+import { AppIcon, type MaterialIconName } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { SpinningIcon } from '@/components/atoms/SpinningIcon';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-
-type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 type EmptyStateCardProps = {
   icon: MaterialIconName;
@@ -45,7 +42,7 @@ export function EmptyStateCard({
         {spinIcon ? (
           <SpinningIcon name={icon} size={iconSize} color={resolvedIconColor} />
         ) : (
-          <MaterialIcons name={icon} size={iconSize} color={resolvedIconColor} />
+          <AppIcon name={icon} size={iconSize} color={resolvedIconColor} />
         )}
       </View>
       <AppText tipo={compact ? 'texto' : 'subtitulo'} peso="forte" style={[styles.title, compact && styles.titleCompact]}>
@@ -59,7 +56,7 @@ export function EmptyStateCard({
           style={({ pressed }) => [styles.actionButton, compact && styles.actionButtonCompact, pressed && styles.pressed]}
           onPress={onAction}
           accessibilityRole="button">
-          {actionIcon && <MaterialIcons name={actionIcon} size={18} color={colors.textOnAccent} />}
+          {actionIcon && <AppIcon name={actionIcon} size={18} color={colors.textOnAccent} />}
           <AppText peso="forte" tipo={compact ? 'legenda' : 'texto'} style={styles.actionText}>
             {actionLabel}
           </AppText>

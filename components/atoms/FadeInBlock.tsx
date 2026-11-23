@@ -1,12 +1,13 @@
 import { useFocusEffect } from 'expo-router';
 import { ReactNode, useCallback, useState } from 'react';
-import { Animated, Easing, Platform, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Easing, LayoutChangeEvent, Platform, StyleProp, ViewStyle } from 'react-native';
 
 type FadeInBlockProps = {
   children: ReactNode;
   delay?: number;
   duration?: number;
   offsetY?: number;
+  onLayout?: (event: LayoutChangeEvent) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -18,6 +19,7 @@ export function FadeInBlock({
   delay = 0,
   duration = 220,
   offsetY = 10,
+  onLayout,
   style,
 }: FadeInBlockProps) {
   const [opacity] = useState(() => new Animated.Value(0));
@@ -55,7 +57,7 @@ export function FadeInBlock({
   );
 
   return (
-    <Animated.View style={[style, { opacity, transform: [{ translateY }] }]}>
+    <Animated.View onLayout={onLayout} style={[style, { opacity, transform: [{ translateY }] }]}>
       {children}
     </Animated.View>
   );

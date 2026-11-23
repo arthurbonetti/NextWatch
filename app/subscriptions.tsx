@@ -5,6 +5,7 @@ import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
@@ -93,7 +94,7 @@ export default function SubscriptionsScreen() {
           <View style={styles.totalCard}>
             <View style={styles.totalGlow} />
             <View style={styles.totalTopline}>
-              <View style={styles.totalIcon}><MaterialIcons name="account-balance-wallet" size={20} color={colors.accentPrimary} /></View>
+              <View style={styles.totalIcon}><AppIcon name="account-balance-wallet" size={20} color={colors.accentPrimary} /></View>
               <AppText tipo="legenda" peso="forte" style={styles.totalLabel}>GASTO MENSAL ATIVO</AppText>
               <View style={styles.activeBadge}>
                 <View style={styles.activeDot} />
@@ -221,7 +222,7 @@ export default function SubscriptionsScreen() {
               style={({ pressed }) => [styles.addRow, pressed && styles.pressed]}
               onPress={addSubscription}
               accessibilityRole="button">
-              <View style={styles.addIcon}><MaterialIcons name="add" size={22} color={colors.textOnAccent} /></View>
+              <View style={styles.addIcon}><AppIcon name="add" size={22} color={colors.textOnAccent} /></View>
               <View style={styles.addCopy}>
                 <AppText peso="forte" style={styles.addTitle}>Adicionar outro streaming</AppText>
                 <AppText tipo="legenda" style={styles.addSubtitle}>Netflix, Disney+, Max, Prime Video e mais</AppText>
@@ -262,7 +263,7 @@ export default function SubscriptionsScreen() {
                 }}
                 accessibilityRole="button">
                 <View style={styles.actionSheetIconBox}>
-                  <MaterialIcons name="edit" size={19} color={colors.textPrimary} />
+                  <AppIcon name="edit" size={19} color={colors.textPrimary} />
                 </View>
                 <AppText peso="forte" style={styles.actionSheetItemText}>
                   Editar assinatura
@@ -279,7 +280,7 @@ export default function SubscriptionsScreen() {
                 }}
                 accessibilityRole="button">
                 <View style={styles.actionSheetIconBox}>
-                  <MaterialIcons
+                  <AppIcon
                     name={actionSubscription.active ? 'pause-circle-outline' : 'play-circle-outline'}
                     size={19}
                     color={colors.textPrimary}
@@ -300,7 +301,7 @@ export default function SubscriptionsScreen() {
                 }}
                 accessibilityRole="button">
                 <View style={[styles.actionSheetIconBox, styles.actionSheetIconBoxDanger]}>
-                  <MaterialIcons name="delete-outline" size={19} color={colors.dangerText} />
+                  <AppIcon name="delete-outline" size={19} color={colors.dangerText} />
                 </View>
                 <AppText peso="forte" style={styles.actionSheetItemDangerText}>
                   Excluir assinatura

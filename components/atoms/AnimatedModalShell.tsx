@@ -10,7 +10,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, PointerType, State } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -18,7 +18,6 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +29,15 @@ import { useThemedStyles } from '@/contexts/ThemeContext';
 
 const SHEET_ENTER_OFFSET = 72;
 const CENTER_ENTER_OFFSET = 14;
+const SHEET_ENTER_MS = 240;
+const CENTER_ENTER_MS = 200;
+const SHEET_SNAP_MS = 200;
+const SHEET_LAYOUT_MS = 220;
+const IS_ANDROID = Platform.OS === 'android';
+const POINTER_TYPE_MOUSE = PointerType.MOUSE;
+const STATE_UNDETERMINED = State.UNDETERMINED;
+const STATE_BEGAN = State.BEGAN;
+const STATE_ACTIVE = State.ACTIVE;
 
 export type ModalShellVariant = 'center' | 'sheet';
 
@@ -81,8 +89,8 @@ export function useCenterEntranceStyle(active: boolean) {
     translateY.set(10);
     opacity.set(0);
 
-    scale.set(withSpring(1, THEME.motion.centerEnterSpring));
-    translateY.set(withSpring(0, THEME.motion.centerEnterSpring));
+    scale.set(withTiming(1, { duration: CENTER_ENTER_MS, easing: Easing.out(Easing.cubic) }));
+    translateY.set(withTiming(0, { duration: CENTER_ENTER_MS, easing: Easing.out(Easing.cubic) }));
     opacity.set(withTiming(1, { duration: THEME.motion.backdropFadeMs, easing: Easing.out(Easing.cubic) }));
   }, [active, opacity, reducedMotion, scale, translateY]);
 
@@ -94,7 +102,7 @@ export function useCenterEntranceStyle(active: boolean) {
 
 /**
  * Container global de modal do aplicativo com backdrop BlurView,
- * entrada com bounce sutil e curto, e suporte a bottom sheet com gesto de arrastar.
+ * entrada suave sem bounce, e suporte a bottom sheet com gesto de arrastar.
  */
 export function AnimatedModalShell({
   visible,
@@ -140,6 +148,7 @@ export function AnimatedModalShell({
   const effectiveExpanded = onSwipeExpandChange ? isExpanded : expandableSheet && internalExpanded;
   const effectiveSwipeExpandChange =
     onSwipeExpandChange ?? (expandableSheet ? setInternalExpanded : undefined);
+  const hasSwipeExpand = Boolean(effectiveSwipeExpandChange);
   const effectiveToggleExpand =
     onToggleExpand ??
     (expandableSheet ? () => setInternalExpanded((prev) => !prev) : undefined);
@@ -152,15 +161,45 @@ export function AnimatedModalShell({
     reducedMotion ? 0 : variant === 'sheet' ? SHEET_ENTER_OFFSET : CENTER_ENTER_OFFSET,
   );
   const dismissedBySwipe = useSharedValue(false);
+  const hasDragged = useSharedValue(false);
+
+  const [swipeDismissCount, setSwipeDismissCount] = useState(0);
+  const [swipeExpandRequest, setSwipeExpandRequest] = useState<{
+    expanded: boolean;
+    token: number;
+  } | null>(null);
 
   const wasVisibleRef = useRef(false);
   const prevVariantRef = useRef(variant);
   const closeTokenRef = useRef(0);
   const isVisibleRef = useRef(visible);
+  const onCloseRef = useRef(onClose);
+  const onSheetDismissRef = useRef(onSheetDismiss);
+  const swipeExpandChangeRef = useRef(effectiveSwipeExpandChange);
+  const handledDismissCountRef = useRef(0);
+  const handledExpandTokenRef = useRef(0);
 
   useEffect(() => {
     isVisibleRef.current = visible;
-  }, [visible]);
+    onCloseRef.current = onClose;
+    onSheetDismissRef.current = onSheetDismiss;
+    swipeExpandChangeRef.current = effectiveSwipeExpandChange;
+  }, [effectiveSwipeExpandChange, onClose, onSheetDismiss, visible]);
+
+  useEffect(() => {
+    if (swipeDismissCount > handledDismissCountRef.current) {
+      handledDismissCountRef.current = swipeDismissCount;
+      const dismissAction = onSheetDismissRef.current ?? onCloseRef.current;
+      dismissAction();
+    }
+  }, [swipeDismissCount]);
+
+  useEffect(() => {
+    if (swipeExpandRequest && swipeExpandRequest.token > handledExpandTokenRef.current) {
+      handledExpandTokenRef.current = swipeExpandRequest.token;
+      swipeExpandChangeRef.current?.(swipeExpandRequest.expanded);
+    }
+  }, [swipeExpandRequest]);
 
   const handleExitComplete = useCallback((token: number) => {
     if (token !== closeTokenRef.current || isVisibleRef.current) return;
@@ -169,9 +208,12 @@ export function AnimatedModalShell({
 
   const handleSwipeDismiss = useCallback(() => {
     setRendered(false);
-    const dismissAction = onSheetDismiss ?? onClose;
-    dismissAction();
-  }, [onClose, onSheetDismiss]);
+    setSwipeDismissCount((count) => count + 1);
+  }, []);
+
+  const handleSwipeExpandChange = useCallback((expanded: boolean) => {
+    setSwipeExpandRequest((prev) => ({ expanded, token: (prev?.token ?? 0) + 1 }));
+  }, []);
 
   useEffect(() => {
     if (!visible) {
@@ -187,6 +229,7 @@ export function AnimatedModalShell({
       prevVariantRef.current = variant;
       closeTokenRef.current += 1;
       dismissedBySwipe.set(false);
+      hasDragged.set(false);
 
       cancelAnimation(backdropOpacity);
       cancelAnimation(cardOpacity);
@@ -212,13 +255,13 @@ export function AnimatedModalShell({
           cardOpacity.set(0);
           translateY.set(SHEET_ENTER_OFFSET);
           cardOpacity.set(withTiming(1, { duration: 120, easing: Easing.out(Easing.cubic) }));
-          translateY.set(withSpring(0, THEME.motion.sheetEnterSpring));
+          translateY.set(withTiming(0, { duration: SHEET_ENTER_MS, easing: Easing.out(Easing.cubic) }));
         } else {
           translateY.set(CENTER_ENTER_OFFSET);
           cardScale.set(0.92);
           cardOpacity.set(0);
-          translateY.set(withSpring(0, THEME.motion.centerEnterSpring));
-          cardScale.set(withSpring(1, THEME.motion.centerEnterSpring));
+          translateY.set(withTiming(0, { duration: CENTER_ENTER_MS, easing: Easing.out(Easing.cubic) }));
+          cardScale.set(withTiming(1, { duration: CENTER_ENTER_MS, easing: Easing.out(Easing.cubic) }));
           cardOpacity.set(
             withTiming(1, { duration: THEME.motion.backdropFadeMs, easing: Easing.out(Easing.cubic) }),
           );
@@ -230,7 +273,7 @@ export function AnimatedModalShell({
         translateY.set(0);
         cardOpacity.set(1);
         cardScale.set(0.96);
-        cardScale.set(withSpring(1, THEME.motion.centerEnterSpring));
+        cardScale.set(withTiming(1, { duration: CENTER_ENTER_MS, easing: Easing.out(Easing.cubic) }));
       }
       return;
     }
@@ -292,6 +335,7 @@ export function AnimatedModalShell({
     cardScale,
     dismissedBySwipe,
     handleExitComplete,
+    hasDragged,
     reducedMotion,
     rendered,
     translateY,
@@ -306,33 +350,70 @@ export function AnimatedModalShell({
         .enabled(variant === 'sheet' && enableSheetDrag && visible)
         .activeOffsetY([-6, 6])
         .hitSlop(dragEntireSheet ? 0 : { top: 16, bottom: 36 })
+        .onBegin(() => {
+          'worklet';
+          hasDragged.set(false);
+        })
+        .onStart(() => {
+          'worklet';
+          if (dismissedBySwipe.get()) return;
+          cancelAnimation(translateY);
+          cancelAnimation(backdropOpacity);
+        })
         .onUpdate((event) => {
           'worklet';
+          if (dismissedBySwipe.get()) return;
+          hasDragged.set(true);
           if (event.translationY > 0) {
             translateY.set(event.translationY);
             if (!effectiveExpanded) {
               backdropOpacity.set(Math.max(0.2, 1 - event.translationY / 420));
             }
           } else {
-            translateY.set(event.translationY * 0.25);
+            translateY.set(0);
+            if (!effectiveExpanded) {
+              backdropOpacity.set(1);
+            }
           }
         })
-        .onEnd((event) => {
+        .onTouchesUp((event, stateManager) => {
           'worklet';
-          if (effectiveSwipeExpandChange && (event.translationY < -55 || event.velocityY < -500)) {
+          // Workaround para bug do react-native-gesture-handler no Android com mouse (ex.: Waydroid):
+          // GestureHandler.shouldActivateWithMouse ignora ACTION_UP para TOOL_TYPE_MOUSE esperando
+          // ACTION_BUTTON_RELEASE, mas RNGestureHandlerRootView só encaminha hover em
+          // dispatchGenericMotionEvent, deixando o gesto preso em STATE_ACTIVE ao soltar o mouse.
+          if (!IS_ANDROID || event.pointerType !== POINTER_TYPE_MOUSE || event.numberOfTouches > 0) {
+            return;
+          }
+          if (event.state === STATE_ACTIVE) {
+            stateManager.end();
+          } else if (event.state === STATE_BEGAN || event.state === STATE_UNDETERMINED) {
+            stateManager.fail();
+          }
+        })
+        .onEnd((event, success) => {
+          'worklet';
+          hasDragged.set(false);
+          if (dismissedBySwipe.get()) return;
+          if (!success) {
             backdropOpacity.set(withTiming(1, { duration: 120 }));
-            translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
-            scheduleOnRN(effectiveSwipeExpandChange, true);
+            translateY.set(withTiming(0, { duration: SHEET_SNAP_MS, easing: Easing.out(Easing.cubic) }));
+            return;
+          }
+          if (hasSwipeExpand && (event.translationY < -55 || event.velocityY < -500)) {
+            backdropOpacity.set(withTiming(1, { duration: 120 }));
+            translateY.set(withTiming(0, { duration: SHEET_SNAP_MS, easing: Easing.out(Easing.cubic) }));
+            scheduleOnRN(handleSwipeExpandChange, true);
             return;
           }
           if (
-            effectiveSwipeExpandChange &&
+            hasSwipeExpand &&
             effectiveExpanded &&
             (event.translationY > 55 || event.velocityY > 450)
           ) {
             backdropOpacity.set(withTiming(1, { duration: 120 }));
-            translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
-            scheduleOnRN(effectiveSwipeExpandChange, false);
+            translateY.set(withTiming(0, { duration: SHEET_SNAP_MS, easing: Easing.out(Easing.cubic) }));
+            scheduleOnRN(handleSwipeExpandChange, false);
             return;
           }
           if (!effectiveExpanded && (event.translationY > 80 || event.velocityY > 550)) {
@@ -355,16 +436,26 @@ export function AnimatedModalShell({
             return;
           }
           backdropOpacity.set(withTiming(1, { duration: 120 }));
-          translateY.set(withSpring(0, THEME.motion.sheetDragSnapSpring));
+          translateY.set(withTiming(0, { duration: SHEET_SNAP_MS, easing: Easing.out(Easing.cubic) }));
+        })
+        .onFinalize(() => {
+          'worklet';
+          if (hasDragged.get() && !dismissedBySwipe.get()) {
+            hasDragged.set(false);
+            backdropOpacity.set(withTiming(1, { duration: 120 }));
+            translateY.set(withTiming(0, { duration: SHEET_SNAP_MS, easing: Easing.out(Easing.cubic) }));
+          }
         }),
     [
       backdropOpacity,
       dismissedBySwipe,
       dragEntireSheet,
       effectiveExpanded,
-      effectiveSwipeExpandChange,
       enableSheetDrag,
       handleSwipeDismiss,
+      handleSwipeExpandChange,
+      hasDragged,
+      hasSwipeExpand,
       translateY,
       variant,
       visible,
@@ -400,10 +491,7 @@ export function AnimatedModalShell({
 
   const layoutTransition =
     effectiveLayoutAnimated && !reducedMotion
-      ? LinearTransition.springify()
-          .damping(THEME.motion.layoutSpring.damping)
-          .stiffness(THEME.motion.layoutSpring.stiffness)
-          .mass(THEME.motion.layoutSpring.mass)
+      ? LinearTransition.duration(SHEET_LAYOUT_MS).easing(Easing.out(Easing.cubic))
       : undefined;
 
   if (!rendered) return null;

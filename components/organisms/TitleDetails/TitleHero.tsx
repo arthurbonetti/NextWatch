@@ -1,4 +1,3 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -13,6 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { MediaTitle } from '@/constants/catalog';
@@ -151,7 +151,7 @@ export function TitleHero({
               accessibilityRole="button"
               accessibilityLabel={`Assistir trailer de ${title.title}`}>
               <View style={[styles.trailerPlayCircle, { backgroundColor: colors.accentPrimary }]}>
-                <MaterialIcons
+                <AppIcon
                   name="play-arrow"
                   size={26}
                   color={colors.textOnAccent}

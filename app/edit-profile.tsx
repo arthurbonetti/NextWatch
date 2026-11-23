@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/atoms/AppButton';
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppInput } from '@/components/atoms/AppInput';
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
@@ -496,7 +497,7 @@ export default function EditProfileScreen() {
                         </View>
                         {selected && (
                           <View style={styles.presetCheckBadge}>
-                            <MaterialIcons name="check" size={12} color={colors.textOnAccent} />
+                            <AppIcon name="check" size={12} color={colors.textOnAccent} />
                           </View>
                         )}
                       </View>

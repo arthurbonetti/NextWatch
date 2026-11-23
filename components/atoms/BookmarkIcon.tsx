@@ -1,7 +1,7 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet } from 'react-native';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type BookmarkIconProps = {
@@ -105,7 +105,7 @@ export function BookmarkIcon({
 
   return (
     <Animated.View style={[styles.wrapper, { width: size + 2, height: size + 2, transform: [{ scale: popScale }] }]}>
-      <MaterialIcons
+      <AppIcon
         name={saved ? 'bookmark' : 'bookmark-border'}
         size={size}
         color={saved ? resolvedColor : resolvedInactiveColor}
@@ -131,7 +131,7 @@ export function BookmarkIcon({
             ],
           },
         ]}>
-        <MaterialIcons name="check" size={checkIconSize} color={colors.textOnAccent} />
+        <AppIcon name="check" size={checkIconSize} color={colors.textOnAccent} />
       </Animated.View>
     </Animated.View>
   );

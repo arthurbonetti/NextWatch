@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { BottomFadeScrim } from '@/components/atoms/BottomFadeScrim';
 import { FilterChip } from '@/components/atoms/FilterChip';
@@ -228,7 +229,7 @@ export function DrawFiltersPhase({
               style={({ pressed }) => [styles.watchedRow, pressed && styles.pressed]}>
               <View style={styles.watchedCopyRow}>
                 <View style={styles.watchedIconWrap}>
-                  <MaterialIcons name="visibility-off" size={18} color={colors.textSecondary} />
+                  <AppIcon name="visibility-off" size={18} color={colors.textSecondary} />
                 </View>
                 <View style={styles.watchedCopy}>
                   <AppText tipo="legenda" peso="forte" style={styles.watchedTitle}>
@@ -283,7 +284,7 @@ export function DrawFiltersPhase({
                   {eligibleCount === 1 ? ' título' : ' títulos'}
                 </AppText>
                 <View style={styles.ctaIconWrap}>
-                  <MaterialIcons name="auto-awesome" size={19} color={colors.textOnAccent} />
+                  <AppIcon name="auto-awesome" size={19} color={colors.textOnAccent} />
                 </View>
               </View>
             ) : (

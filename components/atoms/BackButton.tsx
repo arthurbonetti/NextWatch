@@ -1,8 +1,8 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Href, router } from 'expo-router';
 import { useState } from 'react';
 import { Animated, Platform, Pressable, StyleProp, ViewStyle } from 'react-native';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
@@ -67,7 +67,7 @@ export function BackButton({
       accessibilityLabel={accessibilityLabel}>
       <Animated.View style={[styles.button, style, { transform: [{ scale: buttonScale }] }]}>
         <Animated.View style={{ transform: [{ translateX: arrowTranslateX }] }}>
-          <MaterialIcons name="arrow-back" size={22} color={colors.textPrimary} />
+          <AppIcon name="arrow-back" size={22} color={colors.textPrimary} />
         </Animated.View>
       </Animated.View>
     </Pressable>

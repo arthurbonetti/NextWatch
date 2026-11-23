@@ -11,6 +11,9 @@ import {
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 
+export const HEADER_AVATAR_SIZE = 44;
+export const HEADER_AVATAR_BORDER_WIDTH = 2;
+
 type UserAvatarProps = {
   name?: string | null;
   avatarType?: AvatarType;
@@ -27,8 +30,8 @@ export function UserAvatar({
   avatarType = 'initials',
   avatarPreset,
   avatarUrl,
-  size = 44,
-  borderWidth = 2,
+  size = HEADER_AVATAR_SIZE,
+  borderWidth = HEADER_AVATAR_BORDER_WIDTH,
   borderColor,
   style,
 }: UserAvatarProps) {

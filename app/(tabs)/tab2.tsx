@@ -5,6 +5,7 @@ import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, RefreshCo
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { BottomFadeScrim } from '@/components/atoms/BottomFadeScrim';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
@@ -311,7 +312,7 @@ export default function ExploreScreen() {
           />
           {search.length > 0 && (
             <Pressable onPress={() => handleSearchChange('')} hitSlop={10} accessibilityLabel="Limpar busca">
-              <MaterialIcons name="close" size={18} color={colors.textMuted} />
+              <AppIcon name="close" size={18} color={colors.textMuted} />
             </Pressable>
           )}
         </View>
@@ -328,7 +329,7 @@ export default function ExploreScreen() {
               ? `Abrir filtros (${activeSheetFilterCount} ${activeSheetFilterCount === 1 ? 'ativo' : 'ativos'})`
               : 'Abrir filtros e ordenação'
           }>
-          <MaterialIcons name="tune" size={21} color={activeSheetFilterCount > 0 ? colors.savedActiveText : colors.textPrimary} />
+          <AppIcon name="tune" size={21} color={activeSheetFilterCount > 0 ? colors.savedActiveText : colors.textPrimary} />
           {activeSheetFilterCount > 0 && (
             <View style={styles.filterCount}>
               <AppText peso="forte" tabular style={styles.filterCountText}>

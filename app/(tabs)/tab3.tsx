@@ -1,11 +1,19 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, View } from 'react-native';
+import Animated, {
+  useAnimatedReaction,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
+import { HeaderAvatar } from '@/components/atoms/HeaderAvatar';
 import { SpinningIcon } from '@/components/atoms/SpinningIcon';
 import { UserAvatar } from '@/components/atoms/UserAvatar';
 import { DrawHistoryCard } from '@/components/organisms/DrawHistoryCard';
@@ -25,6 +33,7 @@ import { triggerSelectionHaptic } from '@/utils/haptics';
 import { buildWatchedTitleIdsOrdered, computeMyListsCounts } from '@/utils/watchedProgress';
 
 const PREVIEW_HISTORY_LIMIT = 3;
+const HEADER_AVATAR_FADE_RANGE = 24;
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
@@ -46,10 +55,64 @@ export default function ProfileTabScreen() {
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollY = useSharedValue(0);
+  const avatarTriggerStart = useSharedValue(-1);
+  const avatarTriggerEnd = useSharedValue(-1);
+  const fadeBlockYRef = useRef<number | null>(null);
+  const profileCardYRef = useRef<number | null>(null);
+  const editButtonLayoutRef = useRef<{ y: number; height: number } | null>(null);
 
-  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const isScrolled = event.nativeEvent.contentOffset.y > 6;
-    setScrolled((prev) => (prev === isScrolled ? prev : isScrolled));
+  const updateAvatarTriggerRange = useCallback(() => {
+    const fadeY = fadeBlockYRef.current;
+    const cardY = profileCardYRef.current;
+    const buttonLayout = editButtonLayoutRef.current;
+    if (fadeY === null || cardY === null || buttonLayout === null) return;
+
+    const buttonBottomY = fadeY + cardY + buttonLayout.y + buttonLayout.height;
+    const end = Math.max(1, Math.round(buttonBottomY));
+    const start = Math.max(0, end - HEADER_AVATAR_FADE_RANGE);
+    avatarTriggerStart.set(start);
+    avatarTriggerEnd.set(end);
+  }, [avatarTriggerEnd, avatarTriggerStart]);
+
+  const handleProfileFadeLayout = useCallback((event: LayoutChangeEvent) => {
+    fadeBlockYRef.current = event.nativeEvent.layout.y;
+    updateAvatarTriggerRange();
+  }, [updateAvatarTriggerRange]);
+
+  const handleProfileCardLayout = useCallback((event: LayoutChangeEvent) => {
+    profileCardYRef.current = event.nativeEvent.layout.y;
+    updateAvatarTriggerRange();
+  }, [updateAvatarTriggerRange]);
+
+  const handleEditButtonLayout = useCallback((event: LayoutChangeEvent) => {
+    const { y, height } = event.nativeEvent.layout;
+    editButtonLayoutRef.current = { y, height };
+    updateAvatarTriggerRange();
+  }, [updateAvatarTriggerRange]);
+
+  const handleScrolledChange = useCallback((nextScrolled: boolean) => {
+    setScrolled((prev) => (prev === nextScrolled ? prev : nextScrolled));
+  }, []);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.set(event.contentOffset.y);
+    },
+  });
+
+  useAnimatedReaction(
+    () => scrollY.get() > 6,
+    (nextScrolled, prevScrolled) => {
+      if (nextScrolled !== prevScrolled) {
+        scheduleOnRN(handleScrolledChange, nextScrolled);
+      }
+    },
+    [handleScrolledChange],
+  );
+
+  const handleOpenEditProfile = useCallback(() => {
+    router.push('/edit-profile');
   }, []);
 
   useEffect(() => {
@@ -130,14 +193,30 @@ export default function ProfileTabScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScreenHeader eyebrow="MEU PERFIL" title="Perfil" scrolled={scrolled} />
-      <ScrollView
-        onScroll={handleScroll}
+      <ScreenHeader
+        eyebrow="SUA CONTA"
+        title="Meu perfil"
+        scrolled={scrolled}
+        rightSlot={
+          <HeaderAvatar
+            name={profile?.name ?? user?.name}
+            avatarType={profile?.avatarType}
+            avatarPreset={profile?.avatarPreset}
+            avatarUrl={profile?.avatarUrl}
+            scrollY={scrollY}
+            triggerStart={avatarTriggerStart}
+            triggerEnd={avatarTriggerEnd}
+            onPress={handleOpenEditProfile}
+          />
+        }
+      />
+      <Animated.ScrollView
+        onScroll={scrollHandler}
         scrollEventThrottle={16}
         contentContainerStyle={[styles.container, { paddingBottom: Math.max(124, 108 + insets.bottom) }]}
         showsVerticalScrollIndicator={false}>
-        <FadeInBlock delay={0}>
-          <View style={styles.profileCard}>
+        <FadeInBlock delay={0} onLayout={handleProfileFadeLayout}>
+          <View style={styles.profileCard} onLayout={handleProfileCardLayout}>
             <View style={styles.avatarWrap}>
               <UserAvatar
                 size={78}
@@ -150,8 +229,9 @@ export default function ProfileTabScreen() {
             <AppText tipo="subtitulo" familia="editorial" peso="forte" style={styles.name}>{profile?.name ?? user?.name ?? 'Usuário'}</AppText>
             <AppText tipo="legenda" style={styles.muted}>{user?.email ?? ''}</AppText>
             <Pressable
+              onLayout={handleEditButtonLayout}
               style={({ pressed }) => [styles.editProfileButton, pressed && styles.pressed]}
-              onPress={() => router.push('/edit-profile')}
+              onPress={handleOpenEditProfile}
               accessibilityRole="button"
               accessibilityLabel="Editar perfil">
               <MaterialIcons name="edit" size={16} color={colors.accentLink} />
@@ -209,7 +289,7 @@ export default function ProfileTabScreen() {
           <View style={styles.appearanceCard}>
             <View style={styles.appearanceHeader}>
               <View style={styles.appearanceIconBox}>
-                <MaterialIcons
+                <AppIcon
                   name={resolvedMode === 'dark' ? 'dark-mode' : 'light-mode'}
                   size={19}
                   color={colors.accentLink}
@@ -356,7 +436,7 @@ export default function ProfileTabScreen() {
               onPress={() => { void handleSignOut(); }}
               accessibilityRole="button">
               <View style={styles.logoutIconBox}>
-                <MaterialIcons name="logout" size={20} color={colors.dangerText} />
+                <AppIcon name="logout" size={20} color={colors.dangerText} />
               </View>
               <AppText peso="forte" style={styles.logoutText}>Sair da conta</AppText>
               <MaterialIcons name="chevron-right" size={22} color={colors.dangerText} />
@@ -367,7 +447,7 @@ export default function ProfileTabScreen() {
             Pôsteres e metadados: The Movie Database (TMDB). Este produto utiliza a API do TMDB, mas não é endossado ou certificado pelo TMDB.
           </AppText>
         </FadeInBlock>
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }

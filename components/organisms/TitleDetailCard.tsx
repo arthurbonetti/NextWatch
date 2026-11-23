@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { CollapsibleSection } from '@/components/atoms/CollapsibleSection';
@@ -415,7 +416,7 @@ export function TitleDetailCard({
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Fechar detalhes">
-        <MaterialIcons name="close" size={21} color={colors.textOnNavy} />
+        <AppIcon name="close" size={21} color={colors.textOnNavy} />
       </Pressable>
 
       <ScrollView
@@ -434,7 +435,7 @@ export function TitleDetailCard({
             backdropPath={title.tmdbBackdropPath}
             fallback={
               <View style={styles.backdropFallback}>
-                <MaterialIcons name={title.icon} size={48} color={colors.textOnNavy} />
+                <AppIcon name={title.icon} size={48} color={colors.textOnNavy} />
               </View>
             }
           />
@@ -458,7 +459,7 @@ export function TitleDetailCard({
                 variant="poster"
                 posterPath={title.tmdbPosterPath}
                 backdropPath={title.tmdbBackdropPath}
-                fallback={<MaterialIcons name={title.icon} size={30} color={colors.textOnNavy} />}
+                fallback={<AppIcon name={title.icon} size={30} color={colors.textOnNavy} />}
               />
             </Animated.View>
 
@@ -583,7 +584,7 @@ export function TitleDetailCard({
                   style={styles.tooltipCloseButton}
                   accessibilityRole="button"
                   accessibilityLabel="Fechar explicação das notas">
-                  <MaterialIcons name="close" size={16} color={colors.textSubtle} />
+                  <AppIcon name="close" size={16} color={colors.textSubtle} />
                 </Pressable>
               </View>
               <AppText tipo="legenda" style={styles.ratingTooltipText}>

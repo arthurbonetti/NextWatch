@@ -17,6 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { BackButton } from '@/components/atoms/BackButton';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
@@ -707,7 +708,7 @@ export default function TitleDetailsScreen() {
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={`Compartilhar ${title.title}`}>
-            <MaterialIcons name="share" size={19} color={colors.textPrimary} />
+            <AppIcon name="share" size={19} color={colors.textPrimary} />
           </Pressable>
         </View>
       </View>

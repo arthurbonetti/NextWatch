@@ -1,5 +1,4 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -13,11 +12,10 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
+import { AppIcon, type MaterialIconName } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { Theme, THEME } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-
-type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 type ConfirmDialogProps = {
   visible: boolean;
@@ -206,7 +204,7 @@ export function ConfirmDialog({
   const cardBody = (
     <View style={styles.card}>
       <View style={[styles.iconBadge, isWarning ? styles.iconBadgeWarning : styles.iconBadgeDanger]}>
-        <MaterialIcons
+        <AppIcon
           name={activeCopy.icon}
           size={24}
           color={isWarning ? colors.accentLink : colors.dangerText}
@@ -231,7 +229,7 @@ export function ConfirmDialog({
           onPress={onConfirm}
           accessibilityRole="button">
           {activeCopy.confirmIcon && (
-            <MaterialIcons
+            <AppIcon
               name={activeCopy.confirmIcon}
               size={18}
               color={isWarning ? colors.textOnAccent : colors.textOnNavy}

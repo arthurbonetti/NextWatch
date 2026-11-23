@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppIcon } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { NextWatchLogo } from '@/components/atoms/NextWatchLogo';
@@ -96,7 +97,7 @@ export default function HomeScreen() {
               hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel="Abrir Minhas Listas">
-              <MaterialIcons name="bookmark-border" size={28} color={colors.accentLink} />
+              <AppIcon name="bookmark-border" size={28} color={colors.accentLink} />
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}

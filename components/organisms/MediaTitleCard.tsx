@@ -1,8 +1,9 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps, memo } from 'react';
+import { memo } from 'react';
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { AppIcon, type MaterialIconName } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
@@ -10,8 +11,6 @@ import { TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { formatAverageRating, getTitleServices, MediaTitle } from '@/constants/catalog';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-
-type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 type MediaTitleCardProps = {
   title: MediaTitle;
@@ -57,7 +56,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
             backdropPath={title.tmdbBackdropPath}
             priority={imagePriority}
             transition={imagePriority === 'high' ? 0 : 200}
-            fallback={<MaterialIcons name={title.icon} size={25} color={colors.textOnNavy} />}
+            fallback={<AppIcon name={title.icon} size={25} color={colors.textOnNavy} />}
           />
         </Animated.View>
       </Pressable>
@@ -100,7 +99,7 @@ export const MediaTitleCard = memo(function MediaTitleCard({
             color={resolvedActionIconColor}
           />
         ) : (
-          <MaterialIcons name={actionIcon} size={18} color={resolvedActionIconColor} />
+          <AppIcon name={actionIcon} size={18} color={resolvedActionIconColor} />
         )}
       </Pressable>
     </View>
