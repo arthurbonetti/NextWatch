@@ -1,9 +1,15 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef } from 'react';
 
 import { isMediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  createOperationSequencer,
+  createPendingOpsMapStore,
+  createVersionedStorage,
+  readStorageFlag,
+  writeStorageFlag,
+} from '@/services/offlineStore';
 import { queryKeys } from '@/services/queryKeys';
 import {
   deleteMyListTitle,
@@ -27,40 +33,35 @@ type PendingOp =
 
 type PendingOpsMap = Record<string, PendingOp>;
 
-function parseStoredTitles(raw: string | null): MediaTitle[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed
-          .filter(isMediaTitle)
-          .map((item) => (item.catalogSource === 'tmdb' ? { ...item, metacriticScore: null } : item))
-      : [];
-  } catch {
-    return [];
-  }
+function parseStoredTitlesData(data: unknown): MediaTitle[] {
+  return Array.isArray(data)
+    ? data
+        .filter(isMediaTitle)
+        .map((item) => (item.catalogSource === 'tmdb' ? { ...item, metacriticScore: null } : item))
+    : [];
 }
 
-function parsePendingOps(raw: string | null): PendingOpsMap {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const result: PendingOpsMap = {};
-    for (const [id, entry] of Object.entries(parsed as Record<string, unknown>)) {
-      if (!id || !entry || typeof entry !== 'object') continue;
-      const candidate = entry as { type?: unknown; title?: unknown };
-      if (candidate.type === 'delete') {
-        result[id] = { type: 'delete' };
-      } else if (candidate.type === 'upsert' && isMediaTitle(candidate.title)) {
-        result[id] = { type: 'upsert', title: candidate.title };
-      }
-    }
-    return result;
-  } catch {
-    return {};
+function parsePendingOp(entry: unknown): PendingOp | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const candidate = entry as { type?: unknown; title?: unknown };
+  if (candidate.type === 'delete') {
+    return { type: 'delete' };
   }
+  if (candidate.type === 'upsert' && isMediaTitle(candidate.title)) {
+    return { type: 'upsert', title: candidate.title };
+  }
+  return null;
 }
+
+const myListStorage = createVersionedStorage<MediaTitle[]>({
+  version: 1,
+  fallback: EMPTY_TITLES,
+  parse: parseStoredTitlesData,
+});
+
+const myListPendingStore = createPendingOpsMapStore<PendingOp>({
+  parseOp: parsePendingOp,
+});
 
 function applyPendingOps(baseItems: MediaTitle[], pendingOps: PendingOpsMap): MediaTitle[] {
   const entries = Object.entries(pendingOps);
@@ -92,24 +93,6 @@ function applyPendingOps(baseItems: MediaTitle[], pendingOps: PendingOpsMap): Me
   return [...newUpserts, ...updatedBase];
 }
 
-async function readPendingOps(pendingKey: string): Promise<PendingOpsMap> {
-  const raw = await AsyncStorage.getItem(pendingKey).catch(() => null);
-  return parsePendingOps(raw);
-}
-
-async function writePendingOp(pendingKey: string, titleId: string, op: PendingOp): Promise<void> {
-  const current = await readPendingOps(pendingKey);
-  current[titleId] = op;
-  await AsyncStorage.setItem(pendingKey, JSON.stringify(current)).catch(() => {});
-}
-
-async function removePendingOp(pendingKey: string, titleId: string): Promise<void> {
-  const current = await readPendingOps(pendingKey);
-  if (!(titleId in current)) return;
-  delete current[titleId];
-  await AsyncStorage.setItem(pendingKey, JSON.stringify(current)).catch(() => {});
-}
-
 export function useMyList() {
   const { user, token } = useAuth();
   const userId = user?.id ?? null;
@@ -120,7 +103,7 @@ export function useMyList() {
 
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => queryKeys.myList(userId), [userId]);
-  const itemOpSeqRef = useRef<Map<string, number>>(new Map());
+  const sequencerRef = useRef(createOperationSequencer());
 
   const { data, isLoading } = useQuery<MediaTitle[]>({
     queryKey,
@@ -129,54 +112,30 @@ export function useMyList() {
     queryFn: async ({ signal }) => {
       if (!userId || !storageKey || !syncedKey || !pendingKey) return EMPTY_TITLES;
 
-      const [storedRaw, syncedRaw, pendingRaw] = await Promise.all([
-        AsyncStorage.getItem(storageKey).catch(() => null),
-        AsyncStorage.getItem(syncedKey).catch(() => null),
-        AsyncStorage.getItem(pendingKey).catch(() => null),
+      const [localCached, syncedFlag, pendingOps] = await Promise.all([
+        myListStorage.read(storageKey),
+        readStorageFlag(syncedKey),
+        myListPendingStore.read(pendingKey),
       ]);
-
-      const localCached = parseStoredTitles(storedRaw);
-      const pendingOps = parsePendingOps(pendingRaw);
-      const syncedFlag = syncedRaw === '1';
 
       if (!hasToken || !hasSupabaseConfig()) {
         return applyPendingOps(localCached, pendingOps);
       }
 
       // Reenvia mutações locais pendentes antes de consultar a nuvem
-      const remainingPending: PendingOpsMap = { ...pendingOps };
-      let pendingChanged = false;
-      let stoppedOnRetry = false;
-      for (const [titleId, op] of Object.entries(pendingOps)) {
-        if (signal.aborted) {
-          return applyPendingOps(localCached, remainingPending);
-        }
-        const opKey = `${userId}:${titleId}`;
-        const seqBefore = itemOpSeqRef.current.get(opKey) ?? 0;
+      const { remaining: remainingPending, stoppedOnRetry, aborted } =
+        await myListPendingStore.flush({
+          pendingKey,
+          scopePrefix: userId,
+          sequencer: sequencerRef.current,
+          signal,
+          execute: (titleId, op) =>
+            op.type === 'upsert'
+              ? upsertMyListTitle(userId, op.title)
+              : deleteMyListTitle(userId, titleId),
+        });
 
-        const outcome =
-          op.type === 'upsert'
-            ? await upsertMyListTitle(userId, op.title)
-            : await deleteMyListTitle(userId, titleId);
-
-        if (signal.aborted) {
-          return applyPendingOps(localCached, remainingPending);
-        }
-        if (outcome === 'retry') {
-          stoppedOnRetry = true;
-          break;
-        }
-
-        if ((itemOpSeqRef.current.get(opKey) ?? 0) === seqBefore) {
-          delete remainingPending[titleId];
-          pendingChanged = true;
-        }
-      }
-
-      if (pendingChanged) {
-        AsyncStorage.setItem(pendingKey, JSON.stringify(remainingPending)).catch(() => {});
-      }
-      if (stoppedOnRetry) {
+      if (aborted || stoppedOnRetry) {
         return applyPendingOps(localCached, remainingPending);
       }
 
@@ -207,15 +166,16 @@ export function useMyList() {
           }
           remoteTitles = [...localOnly, ...remoteTitles];
           if (migrationOutcome === 'ok' || migrationOutcome === 'drop') {
-            AsyncStorage.setItem(syncedKey, '1').catch(() => {});
+            void writeStorageFlag(syncedKey, true);
           }
         } else {
-          AsyncStorage.setItem(syncedKey, '1').catch(() => {});
+          void writeStorageFlag(syncedKey, true);
         }
       }
 
-      const finalTitles = applyPendingOps(remoteTitles, remainingPending);
-      AsyncStorage.setItem(storageKey, JSON.stringify(finalTitles)).catch(() => {});
+      const latestPending = await myListPendingStore.read(pendingKey);
+      const finalTitles = applyPendingOps(remoteTitles, latestPending);
+      void myListStorage.write(storageKey, finalTitles);
       return finalTitles;
     },
   });
@@ -240,12 +200,11 @@ export function useMyList() {
       const current = previous ?? [];
       const next = [snapshot, ...current.filter((item) => item.id !== snapshot.id)];
       queryClient.setQueryData<MediaTitle[]>(queryKey, next);
-      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
+      void myListStorage.write(storageKey, next);
 
       const opKey = `${userId}:${snapshot.id}`;
-      const seq = (itemOpSeqRef.current.get(opKey) ?? 0) + 1;
-      itemOpSeqRef.current.set(opKey, seq);
-      void writePendingOp(pendingKey, snapshot.id, { type: 'upsert', title: snapshot });
+      const seq = sequencerRef.current.next(opKey);
+      void myListPendingStore.set(pendingKey, snapshot.id, { type: 'upsert', title: snapshot });
 
       return { previous, opKey, seq };
     },
@@ -254,22 +213,22 @@ export function useMyList() {
         outcome === 'ok' &&
         pendingKey &&
         context &&
-        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+        sequencerRef.current.isCurrent(context.opKey, context.seq)
       ) {
-        void removePendingOp(pendingKey, snapshot.id);
+        void myListPendingStore.remove(pendingKey, snapshot.id);
       }
     },
     onError: (_error, snapshot, context) => {
       if (
         pendingKey &&
         context &&
-        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+        sequencerRef.current.isCurrent(context.opKey, context.seq)
       ) {
-        void removePendingOp(pendingKey, snapshot.id);
+        void myListPendingStore.remove(pendingKey, snapshot.id);
       }
       if (storageKey && context?.previous !== undefined) {
         queryClient.setQueryData<MediaTitle[]>(queryKey, context.previous);
-        AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+        void myListStorage.write(storageKey, context.previous);
       }
     },
     onSettled: (outcome) => {
@@ -296,12 +255,11 @@ export function useMyList() {
       const previous = queryClient.getQueryData<MediaTitle[]>(queryKey);
       const next = (previous ?? []).filter((item) => item.id !== targetId);
       queryClient.setQueryData<MediaTitle[]>(queryKey, next);
-      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
+      void myListStorage.write(storageKey, next);
 
       const opKey = `${userId}:${targetId}`;
-      const seq = (itemOpSeqRef.current.get(opKey) ?? 0) + 1;
-      itemOpSeqRef.current.set(opKey, seq);
-      void writePendingOp(pendingKey, targetId, { type: 'delete' });
+      const seq = sequencerRef.current.next(opKey);
+      void myListPendingStore.set(pendingKey, targetId, { type: 'delete' });
 
       return { previous, opKey, seq };
     },
@@ -310,22 +268,22 @@ export function useMyList() {
         outcome === 'ok' &&
         pendingKey &&
         context &&
-        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+        sequencerRef.current.isCurrent(context.opKey, context.seq)
       ) {
-        void removePendingOp(pendingKey, targetId);
+        void myListPendingStore.remove(pendingKey, targetId);
       }
     },
     onError: (_error, targetId, context) => {
       if (
         pendingKey &&
         context &&
-        (itemOpSeqRef.current.get(context.opKey) ?? 0) === context.seq
+        sequencerRef.current.isCurrent(context.opKey, context.seq)
       ) {
-        void removePendingOp(pendingKey, targetId);
+        void myListPendingStore.remove(pendingKey, targetId);
       }
       if (storageKey && context?.previous !== undefined) {
         queryClient.setQueryData<MediaTitle[]>(queryKey, context.previous);
-        AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+        void myListStorage.write(storageKey, context.previous);
       }
     },
     onSettled: (outcome) => {
@@ -384,7 +342,7 @@ export function useMyList() {
         const state = queryClient.getQueryState(queryKey);
         const lastUpdated = state?.dataUpdatedAt ?? 0;
         if (Date.now() - lastUpdated < options.minIntervalMs) {
-          const pending = await readPendingOps(pendingKey);
+          const pending = await myListPendingStore.read(pendingKey);
           if (Object.keys(pending).length === 0) {
             return;
           }

@@ -1,5 +1,7 @@
 import { sanitizeTmdbPath } from '@/constants/catalog';
 import { CATALOG } from '@/constants/fallbackCatalog';
+import { queryClient } from '@/services/queryClient';
+import { queryKeys } from '@/services/queryKeys';
 import type {
   CastMember,
   EpisodeSummary,
@@ -34,7 +36,6 @@ import {
   formatMovieRuntime,
   mapMedia,
   pickYoutubeTrailerKey,
-  resolvedDurationCache,
   resolveTmdbEndpointAndId,
   resolveTvDuration,
 } from './mappers';
@@ -56,17 +57,8 @@ import {
 } from './types';
 
 const isDevRuntime = typeof __DEV__ !== 'undefined' && __DEV__;
-
-const pendingDurationCache = new Map<string, Promise<string>>();
-const resolvedTotalEpisodesCache = new Map<string, number>();
-const resolvedTrailerCache = new Map<string, string | null>();
-const pendingTrailerCache = new Map<string, Promise<string | null>>();
-const richDetailsCache = new Map<string, RichTitleDetails>();
-const pendingRichDetailsCache = new Map<string, Promise<RichTitleDetails | null>>();
-const seasonEpisodesCache = new Map<string, EpisodeSummary[]>();
-const pendingSeasonEpisodesCache = new Map<string, Promise<EpisodeSummary[]>>();
-const relatedTitlesById = new Map<string, MediaTitle>();
-const pendingTitleByIdCache = new Map<string, Promise<MediaTitle | null>>();
+const TMDB_CACHE_STALE_TIME = 1000 * 60 * 30;
+const TMDB_CACHE_GC_TIME = 1000 * 60 * 60;
 
 function buildStaticFallbackCatalog(): MediaTitle[] {
   return shuffleArray(CATALOG);
@@ -80,18 +72,18 @@ function cacheTvTotalEpisodes(
   const fromSeasons = regularSeasons.reduce((acc, s) => acc + Math.max(0, s.episode_count ?? 0), 0);
   const total = fromSeasons > 0 ? fromSeasons : (details.number_of_episodes ?? 0);
   if (total > 0) {
-    resolvedTotalEpisodesCache.set(titleId, total);
+    queryClient.setQueryData<number>(queryKeys.titleTotalEpisodes(titleId), total);
     return total;
   }
   return null;
 }
 
 export function getCachedTitleTotalEpisodes(titleId: string): number | null {
-  return resolvedTotalEpisodesCache.get(titleId) ?? null;
+  return queryClient.getQueryData<number>(queryKeys.titleTotalEpisodes(titleId)) ?? null;
 }
 
 export function getCachedTitleDuration(title: MediaTitle): string {
-  return resolvedDurationCache.get(title.id) ?? title.duration;
+  return queryClient.getQueryData<string>(queryKeys.titleDuration(title.id)) ?? title.duration;
 }
 
 export async function fetchAllCatalogForProviders(
@@ -377,6 +369,32 @@ export async function fetchAllCatalogForProviders(
   }
 }
 
+export async function loadTitleDuration(title: MediaTitle): Promise<string> {
+  const target = resolveTmdbEndpointAndId(title.id);
+  if (!target || !hasCatalogBackend() || isUpstreamUnavailable()) {
+    return title.duration;
+  }
+
+  try {
+    const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+      language: 'pt-BR',
+    });
+    let formatted = title.duration;
+    if (target.endpoint === 'movie') {
+      if (details.runtime && details.runtime > 0) {
+        formatted = formatMovieRuntime(details.runtime);
+      }
+    } else {
+      const regularSeasons = extractRegularTmdbSeasons(details);
+      cacheTvTotalEpisodes(title.id, details, regularSeasons);
+      formatted = resolveTvDuration(title, details, regularSeasons);
+    }
+    return formatted;
+  } catch {
+    return title.duration;
+  }
+}
+
 export async function fetchTitleDuration(
   title: MediaTitle,
   signal?: AbortSignal,
@@ -384,7 +402,7 @@ export async function fetchTitleDuration(
   if (signal?.aborted) {
     throw createAbortError();
   }
-  const cached = resolvedDurationCache.get(title.id);
+  const cached = queryClient.getQueryData<string>(queryKeys.titleDuration(title.id));
   if (cached) {
     return cached;
   }
@@ -394,65 +412,28 @@ export async function fetchTitleDuration(
     return title.duration;
   }
 
-  const existingPromise = pendingDurationCache.get(title.id);
-  if (existingPromise) {
-    return raceWithAbort(existingPromise, signal);
-  }
-
-  const promise = request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
-    language: 'pt-BR',
-  })
-    .then((details) => {
-      let formatted = title.duration;
-      if (target.endpoint === 'movie') {
-        if (details.runtime && details.runtime > 0) {
-          formatted = formatMovieRuntime(details.runtime);
-        }
-      } else {
-        const regularSeasons = extractRegularTmdbSeasons(details);
-        cacheTvTotalEpisodes(title.id, details, regularSeasons);
-        formatted = resolveTvDuration(title, details, regularSeasons);
-      }
-      if (formatted) {
-        resolvedDurationCache.set(title.id, formatted);
-      }
-      return formatted;
-    })
-    .catch(() => title.duration)
-    .finally(() => {
-      pendingDurationCache.delete(title.id);
-    });
-
-  pendingDurationCache.set(title.id, promise);
-  return raceWithAbort(promise, signal);
+  return raceWithAbort(
+    queryClient.fetchQuery<string>({
+      queryKey: queryKeys.titleDuration(title.id),
+      staleTime: TMDB_CACHE_STALE_TIME,
+      gcTime: TMDB_CACHE_GC_TIME,
+      queryFn: () => loadTitleDuration(title),
+    }),
+    signal,
+  );
 }
 
 export function getCachedTitleTrailerUrl(title: MediaTitle): string | null {
-  return resolvedTrailerCache.get(title.id) ?? null;
+  return queryClient.getQueryData<string | null>(queryKeys.titleTrailerUrl(title.id)) ?? null;
 }
 
-export async function fetchTitleTrailerUrl(
-  title: MediaTitle,
-  signal?: AbortSignal,
-): Promise<string | null> {
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-  if (resolvedTrailerCache.has(title.id)) {
-    return resolvedTrailerCache.get(title.id) ?? null;
-  }
-
+export async function loadTitleTrailerUrl(title: MediaTitle): Promise<string | null> {
   const target = resolveTmdbEndpointAndId(title.id);
   if (!target || !hasCatalogBackend() || isUpstreamUnavailable()) {
     return null;
   }
 
-  const existingPromise = pendingTrailerCache.get(title.id);
-  if (existingPromise) {
-    return raceWithAbort(existingPromise, signal);
-  }
-
-  const promise = (async () => {
+  try {
     const ptRes = await request<TmdbVideosResponse>(`/${target.endpoint}/${target.tmdbId}/videos`, {
       language: 'pt-BR',
     }).catch(() => null);
@@ -468,21 +449,92 @@ export async function fetchTitleTrailerUrl(
       videoKey = pickYoutubeTrailerKey(enRes?.results);
     }
 
-    const url = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
-    resolvedTrailerCache.set(title.id, url);
-    return url;
-  })()
-    .catch(() => null)
-    .finally(() => {
-      pendingTrailerCache.delete(title.id);
-    });
+    return videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
+  } catch {
+    return null;
+  }
+}
 
-  pendingTrailerCache.set(title.id, promise);
-  return raceWithAbort(promise, signal);
+export async function fetchTitleTrailerUrl(
+  title: MediaTitle,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+  const queryKey = queryKeys.titleTrailerUrl(title.id);
+  if (queryClient.getQueryState(queryKey)?.status === 'success') {
+    return queryClient.getQueryData<string | null>(queryKey) ?? null;
+  }
+
+  const target = resolveTmdbEndpointAndId(title.id);
+  if (!target || !hasCatalogBackend() || isUpstreamUnavailable()) {
+    return null;
+  }
+
+  return raceWithAbort(
+    queryClient.fetchQuery<string | null>({
+      queryKey,
+      staleTime: TMDB_CACHE_STALE_TIME,
+      gcTime: TMDB_CACHE_GC_TIME,
+      queryFn: () => loadTitleTrailerUrl(title),
+    }),
+    signal,
+  );
 }
 
 export function findCachedRelatedTitle(id: string): MediaTitle | undefined {
-  return relatedTitlesById.get(id);
+  return (
+    queryClient.getQueryData<MediaTitle>(queryKeys.relatedTitle(id)) ??
+    queryClient.getQueryData<MediaTitle>(queryKeys.titleById(id))
+  );
+}
+
+export async function loadTitleById(titleId: string): Promise<MediaTitle | null> {
+  const cachedRelated = queryClient.getQueryData<MediaTitle>(queryKeys.relatedTitle(titleId));
+  if (cachedRelated) return cachedRelated;
+
+  const staticMatch = CATALOG.find((item) => item.id === titleId) ?? null;
+  const target = resolveTmdbEndpointAndId(titleId);
+  if (!target || !hasCatalogBackend() || isUpstreamUnavailable()) {
+    return staticMatch;
+  }
+
+  try {
+    const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+      language: 'pt-BR',
+      append_to_response: 'watch/providers',
+    });
+    if (target.endpoint === 'movie') {
+      if (details.runtime && details.runtime > 0) {
+        queryClient.setQueryData<string>(
+          queryKeys.titleDuration(titleId),
+          formatMovieRuntime(details.runtime),
+        );
+      }
+    } else {
+      const regularSeasons = extractRegularTmdbSeasons(details);
+      cacheTvTotalEpisodes(titleId, details, regularSeasons);
+      const formatted = resolveTvDuration({ duration: '' } as MediaTitle, details, regularSeasons);
+      if (formatted) {
+        queryClient.setQueryData<string>(queryKeys.titleDuration(titleId), formatted);
+      }
+    }
+    const genreIds = (details.genres ?? [])
+      .map((g) => g.id)
+      .filter((id): id is number => typeof id === 'number');
+    const providers = extractProvidersFromDetails(details) ?? [];
+    const mapped = mapMedia(
+      { ...details, id: details.id ?? Number(target.tmdbId), genre_ids: genreIds },
+      target.endpoint,
+      providers,
+    );
+    const resolved = mapped.id === titleId ? mapped : { ...mapped, id: titleId };
+    queryClient.setQueryData<MediaTitle>(queryKeys.relatedTitle(titleId), resolved);
+    return resolved;
+  } catch {
+    return staticMatch;
+  }
 }
 
 export async function fetchTitleById(
@@ -492,7 +544,7 @@ export async function fetchTitleById(
   if (signal?.aborted) {
     throw createAbortError();
   }
-  const cached = relatedTitlesById.get(titleId);
+  const cached = findCachedRelatedTitle(titleId);
   if (cached) return cached;
 
   const staticMatch = CATALOG.find((item) => item.id === titleId) ?? null;
@@ -501,50 +553,131 @@ export async function fetchTitleById(
     return staticMatch;
   }
 
-  const pending = pendingTitleByIdCache.get(titleId);
-  if (pending) return raceWithAbort(pending, signal);
-
-  const promise = request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
-    language: 'pt-BR',
-    append_to_response: 'watch/providers',
-  })
-    .then((details) => {
-      if (target.endpoint === 'movie') {
-        if (details.runtime && details.runtime > 0) {
-          resolvedDurationCache.set(titleId, formatMovieRuntime(details.runtime));
-        }
-      } else {
-        const regularSeasons = extractRegularTmdbSeasons(details);
-        cacheTvTotalEpisodes(titleId, details, regularSeasons);
-        const formatted = resolveTvDuration({ duration: '' } as MediaTitle, details, regularSeasons);
-        if (formatted) {
-          resolvedDurationCache.set(titleId, formatted);
-        }
-      }
-      const genreIds = (details.genres ?? [])
-        .map((g) => g.id)
-        .filter((id): id is number => typeof id === 'number');
-      const providers = extractProvidersFromDetails(details) ?? [];
-      const mapped = mapMedia(
-        { ...details, id: details.id ?? Number(target.tmdbId), genre_ids: genreIds },
-        target.endpoint,
-        providers,
-      );
-      const resolved = mapped.id === titleId ? mapped : { ...mapped, id: titleId };
-      relatedTitlesById.set(titleId, resolved);
-      return resolved;
-    })
-    .catch(() => staticMatch)
-    .finally(() => {
-      pendingTitleByIdCache.delete(titleId);
-    });
-
-  pendingTitleByIdCache.set(titleId, promise);
-  return raceWithAbort(promise, signal);
+  return raceWithAbort(
+    queryClient.fetchQuery<MediaTitle | null>({
+      queryKey: queryKeys.titleById(titleId),
+      staleTime: TMDB_CACHE_STALE_TIME,
+      gcTime: TMDB_CACHE_GC_TIME,
+      queryFn: () => loadTitleById(titleId),
+    }),
+    signal,
+  );
 }
 
 export function getCachedRichTitleDetails(titleId: string): RichTitleDetails | null {
-  return richDetailsCache.get(titleId) ?? null;
+  return queryClient.getQueryData<RichTitleDetails>(queryKeys.titleDetails(titleId)) ?? null;
+}
+
+export async function loadRichTitleDetails(
+  title: MediaTitle,
+  options?: { throwOnError?: boolean },
+): Promise<RichTitleDetails | null> {
+  const target = resolveTmdbEndpointAndId(title.id);
+  if (!target || !hasCatalogBackend() || isUpstreamUnavailable()) {
+    return null;
+  }
+
+  try {
+    const append =
+      target.endpoint === 'tv'
+        ? 'videos,credits,recommendations,similar,content_ratings,watch/providers'
+        : 'videos,credits,recommendations,similar,release_dates,watch/providers';
+
+    const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
+      language: 'pt-BR',
+      append_to_response: append,
+    });
+
+    const regularSeasons =
+      target.endpoint === 'tv' ? extractRegularTmdbSeasons(details) : [];
+
+    let duration = title.duration;
+    if (target.endpoint === 'movie') {
+      if (details.runtime && details.runtime > 0) {
+        duration = formatMovieRuntime(details.runtime);
+      }
+    } else {
+      cacheTvTotalEpisodes(title.id, details, regularSeasons);
+      duration = resolveTvDuration(title, details, regularSeasons);
+    }
+    if (duration) {
+      queryClient.setQueryData<string>(queryKeys.titleDuration(title.id), duration);
+    }
+
+    const rawEpRuntime =
+      details.episode_run_time?.find((val) => typeof val === 'number' && val > 0) ??
+      (details.last_episode_to_air?.runtime && details.last_episode_to_air.runtime > 0
+        ? details.last_episode_to_air.runtime
+        : null);
+    const episodeDuration = rawEpRuntime ? `${rawEpRuntime}min/ep` : null;
+
+    const videoKey = pickYoutubeTrailerKey(details.videos?.results);
+    let trailerUrl = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
+    if (trailerUrl) {
+      queryClient.setQueryData<string | null>(queryKeys.titleTrailerUrl(title.id), trailerUrl);
+    } else {
+      trailerUrl = await fetchTitleTrailerUrl(title);
+    }
+
+    const cast: CastMember[] = (details.credits?.cast ?? [])
+      .filter((member) => Boolean(member.name?.trim()))
+      .slice(0, 14)
+      .map((member) => ({
+        id: member.id,
+        name: member.name!.trim(),
+        character: member.character?.trim() || '',
+        profilePath: sanitizeTmdbPath(member.profile_path),
+      }));
+
+    const seasons: SeasonSummary[] = regularSeasons.map((season) => ({
+      seasonNumber: season.season_number!,
+      name: season.name?.trim() || `Temporada ${season.season_number}`,
+      episodeCount: season.episode_count ?? 0,
+      voteAverage:
+        typeof season.vote_average === 'number' && season.vote_average > 0
+          ? Number(season.vote_average.toFixed(1))
+          : null,
+      airDate: season.air_date ?? null,
+      posterPath: sanitizeTmdbPath(season.poster_path),
+    }));
+
+    const rawRelated = [
+      ...(details.recommendations?.results ?? []),
+      ...(details.similar?.results ?? []),
+    ];
+    const seenRelatedIds = new Set<number>([Number(target.tmdbId)]);
+    const similarTitles: MediaTitle[] = [];
+    for (const item of rawRelated) {
+      if (!item?.id || seenRelatedIds.has(item.id)) continue;
+      seenRelatedIds.add(item.id);
+      const mapped = mapMedia(item, target.endpoint, []);
+      queryClient.setQueryData<MediaTitle>(queryKeys.relatedTitle(mapped.id), mapped);
+      queryClient.setQueryData<MediaTitle>(queryKeys.titleById(mapped.id), mapped);
+      similarTitles.push(mapped);
+      if (similarTitles.length >= 14) break;
+    }
+
+    return {
+      duration,
+      episodeDuration,
+      statusLabel: details.status ? (TMDB_STATUS_LABELS[details.status] ?? null) : null,
+      certification: extractBrCertification(target.endpoint, details),
+      voteCount:
+        typeof details.vote_count === 'number' && details.vote_count > 0
+          ? details.vote_count
+          : null,
+      trailerUrl,
+      providers: extractProvidersFromDetails(details),
+      cast,
+      seasons,
+      similarTitles,
+    };
+  } catch (error) {
+    if (options?.throwOnError) {
+      throw error;
+    }
+    return null;
+  }
 }
 
 export async function fetchRichTitleDetails(
@@ -554,7 +687,7 @@ export async function fetchRichTitleDetails(
   if (options?.signal?.aborted) {
     throw createAbortError();
   }
-  const cached = richDetailsCache.get(title.id);
+  const cached = getCachedRichTitleDetails(title.id);
   if (cached) return cached;
 
   const target = resolveTmdbEndpointAndId(title.id);
@@ -562,123 +695,60 @@ export async function fetchRichTitleDetails(
     return null;
   }
 
-  let pending = pendingRichDetailsCache.get(title.id);
-  if (!pending) {
-    pending = (async () => {
-      const append =
-        target.endpoint === 'tv'
-          ? 'videos,credits,recommendations,similar,content_ratings,watch/providers'
-          : 'videos,credits,recommendations,similar,release_dates,watch/providers';
-
-      const details = await request<TmdbMediaDetails>(`/${target.endpoint}/${target.tmdbId}`, {
-        language: 'pt-BR',
-        append_to_response: append,
-      });
-
-      const regularSeasons =
-        target.endpoint === 'tv' ? extractRegularTmdbSeasons(details) : [];
-
-      let duration = title.duration;
-      if (target.endpoint === 'movie') {
-        if (details.runtime && details.runtime > 0) {
-          duration = formatMovieRuntime(details.runtime);
-        }
-      } else {
-        cacheTvTotalEpisodes(title.id, details, regularSeasons);
-        duration = resolveTvDuration(title, details, regularSeasons);
-      }
-      if (duration) {
-        resolvedDurationCache.set(title.id, duration);
-      }
-
-      const rawEpRuntime =
-        details.episode_run_time?.find((val) => typeof val === 'number' && val > 0) ??
-        (details.last_episode_to_air?.runtime && details.last_episode_to_air.runtime > 0
-          ? details.last_episode_to_air.runtime
-          : null);
-      const episodeDuration = rawEpRuntime ? `${rawEpRuntime}min/ep` : null;
-
-      const videoKey = pickYoutubeTrailerKey(details.videos?.results);
-      let trailerUrl = videoKey ? `https://www.youtube.com/watch?v=${videoKey}` : null;
-      if (trailerUrl) {
-        resolvedTrailerCache.set(title.id, trailerUrl);
-      } else {
-        trailerUrl = await fetchTitleTrailerUrl(title);
-      }
-
-      const cast: CastMember[] = (details.credits?.cast ?? [])
-        .filter((member) => Boolean(member.name?.trim()))
-        .slice(0, 14)
-        .map((member) => ({
-          id: member.id,
-          name: member.name!.trim(),
-          character: member.character?.trim() || '',
-          profilePath: sanitizeTmdbPath(member.profile_path),
-        }));
-
-      const seasons: SeasonSummary[] = regularSeasons.map((season) => ({
-        seasonNumber: season.season_number!,
-        name: season.name?.trim() || `Temporada ${season.season_number}`,
-        episodeCount: season.episode_count ?? 0,
-        voteAverage:
-          typeof season.vote_average === 'number' && season.vote_average > 0
-            ? Number(season.vote_average.toFixed(1))
-            : null,
-        airDate: season.air_date ?? null,
-        posterPath: sanitizeTmdbPath(season.poster_path),
-      }));
-
-      const rawRelated = [
-        ...(details.recommendations?.results ?? []),
-        ...(details.similar?.results ?? []),
-      ];
-      const seenRelatedIds = new Set<number>([Number(target.tmdbId)]);
-      const similarTitles: MediaTitle[] = [];
-      for (const item of rawRelated) {
-        if (!item?.id || seenRelatedIds.has(item.id)) continue;
-        seenRelatedIds.add(item.id);
-        const mapped = mapMedia(item, target.endpoint, []);
-        relatedTitlesById.set(mapped.id, mapped);
-        similarTitles.push(mapped);
-        if (similarTitles.length >= 14) break;
-      }
-
-      const rich: RichTitleDetails = {
-        duration,
-        episodeDuration,
-        statusLabel: details.status ? (TMDB_STATUS_LABELS[details.status] ?? null) : null,
-        certification: extractBrCertification(target.endpoint, details),
-        voteCount:
-          typeof details.vote_count === 'number' && details.vote_count > 0
-            ? details.vote_count
-            : null,
-        trailerUrl,
-        providers: extractProvidersFromDetails(details),
-        cast,
-        seasons,
-        similarTitles,
-      };
-
-      richDetailsCache.set(title.id, rich);
-      return rich;
-    })().finally(() => {
-      pendingRichDetailsCache.delete(title.id);
-    });
-
-    pendingRichDetailsCache.set(title.id, pending);
-  }
-
-  if (options?.throwOnError) {
-    return raceWithAbort(pending, options.signal);
-  }
-  return raceWithAbort(pending.catch(() => null), options?.signal);
+  return raceWithAbort(
+    queryClient.fetchQuery<RichTitleDetails | null>({
+      queryKey: queryKeys.titleDetails(title.id),
+      staleTime: TMDB_CACHE_STALE_TIME,
+      gcTime: TMDB_CACHE_GC_TIME,
+      queryFn: () => loadRichTitleDetails(title, options),
+    }),
+    options?.signal,
+  );
 }
 
 export function getCachedTvSeasonEpisodes(
   titleId: string,
   seasonNumber: number,
 ): EpisodeSummary[] | null {
-  return seasonEpisodesCache.get(`${titleId}:s${seasonNumber}`) ?? null;
+  return (
+    queryClient.getQueryData<EpisodeSummary[]>(queryKeys.seasonEpisodes(titleId, seasonNumber)) ??
+    null
+  );
+}
+
+export async function loadTvSeasonEpisodes(
+  titleId: string,
+  seasonNumber: number,
+  options?: { throwOnError?: boolean },
+): Promise<EpisodeSummary[]> {
+  const target = resolveTmdbEndpointAndId(titleId);
+  if (!target || target.endpoint !== 'tv' || !hasCatalogBackend() || isUpstreamUnavailable()) {
+    return [];
+  }
+
+  try {
+    const res = await request<TmdbSeasonDetailsResponse>(
+      `/tv/${target.tmdbId}/season/${seasonNumber}`,
+      { language: 'pt-BR' },
+    );
+    return (res.episodes ?? [])
+      .filter((ep) => typeof ep.episode_number === 'number' && ep.episode_number > 0)
+      .map((ep) => ({
+        episodeNumber: ep.episode_number!,
+        name: ep.name?.trim() || `Episódio ${ep.episode_number}`,
+        runtime: typeof ep.runtime === 'number' && ep.runtime > 0 ? ep.runtime : null,
+        airDate: ep.air_date ?? null,
+        voteAverage:
+          typeof ep.vote_average === 'number' && ep.vote_average > 0
+            ? Number(ep.vote_average.toFixed(1))
+            : null,
+      }));
+  } catch (error) {
+    if (options?.throwOnError) {
+      throw error;
+    }
+    return [];
+  }
 }
 
 export async function fetchTvSeasonEpisodes(
@@ -689,8 +759,7 @@ export async function fetchTvSeasonEpisodes(
   if (options?.signal?.aborted) {
     throw createAbortError();
   }
-  const cacheKey = `${titleId}:s${seasonNumber}`;
-  const cached = seasonEpisodesCache.get(cacheKey);
+  const cached = getCachedTvSeasonEpisodes(titleId, seasonNumber);
   if (cached) return cached;
 
   const target = resolveTmdbEndpointAndId(titleId);
@@ -698,37 +767,13 @@ export async function fetchTvSeasonEpisodes(
     return [];
   }
 
-  let pending = pendingSeasonEpisodesCache.get(cacheKey);
-  if (!pending) {
-    pending = request<TmdbSeasonDetailsResponse>(
-      `/tv/${target.tmdbId}/season/${seasonNumber}`,
-      { language: 'pt-BR' },
-    )
-      .then((res) => {
-        const episodes: EpisodeSummary[] = (res.episodes ?? [])
-          .filter((ep) => typeof ep.episode_number === 'number' && ep.episode_number > 0)
-          .map((ep) => ({
-            episodeNumber: ep.episode_number!,
-            name: ep.name?.trim() || `Episódio ${ep.episode_number}`,
-            runtime: typeof ep.runtime === 'number' && ep.runtime > 0 ? ep.runtime : null,
-            airDate: ep.air_date ?? null,
-            voteAverage:
-              typeof ep.vote_average === 'number' && ep.vote_average > 0
-                ? Number(ep.vote_average.toFixed(1))
-                : null,
-          }));
-        seasonEpisodesCache.set(cacheKey, episodes);
-        return episodes;
-      })
-      .finally(() => {
-        pendingSeasonEpisodesCache.delete(cacheKey);
-      });
-
-    pendingSeasonEpisodesCache.set(cacheKey, pending);
-  }
-
-  if (options?.throwOnError) {
-    return raceWithAbort(pending, options.signal);
-  }
-  return raceWithAbort(pending.catch(() => []), options?.signal);
+  return raceWithAbort(
+    queryClient.fetchQuery<EpisodeSummary[]>({
+      queryKey: queryKeys.seasonEpisodes(titleId, seasonNumber),
+      staleTime: TMDB_CACHE_STALE_TIME,
+      gcTime: TMDB_CACHE_GC_TIME,
+      queryFn: () => loadTvSeasonEpisodes(titleId, seasonNumber, options),
+    }),
+    options?.signal,
+  );
 }

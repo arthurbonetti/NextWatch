@@ -1,10 +1,18 @@
 import * as ExpoSecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import {
+  CHUNK_MAX_BYTES,
+  itemChunkKey,
+  metaChunkKey,
+  parseChunkCount,
+  sanitizeStorageKey,
+  splitUtf8Chunks,
+} from '@/utils/secureStoreChunking';
+
 const SECURE_PREFIX = 'nextwatch_secure_';
 const SAFE_KEY_PATTERN = /^[a-zA-Z0-9._-]+$/;
 const MAX_SECRET_LENGTH = 2048;
-const CHUNK_MAX_BYTES = 1800;
 const ORPHAN_PROBE_LIMIT = 16;
 
 function assertValidKey(key: string): void {
@@ -63,56 +71,6 @@ export const SecureStore = {
     await ExpoSecureStore.deleteItemAsync(`${SECURE_PREFIX}${key}`);
   },
 };
-
-function sanitizeStorageKey(key: string): string {
-  const sanitized = key.replace(/[^a-zA-Z0-9._-]/g, '_');
-  return sanitized || 'default';
-}
-
-function utf8ByteLengthOfCodePoint(codePoint: number): number {
-  if (codePoint <= 0x7f) return 1;
-  if (codePoint <= 0x7ff) return 2;
-  if (codePoint <= 0xffff) return 3;
-  return 4;
-}
-
-function splitUtf8Chunks(value: string, maxBytes: number): string[] {
-  const chunks: string[] = [];
-  let currentChunk = '';
-  let currentBytes = 0;
-
-  for (const char of value) {
-    const codePoint = char.codePointAt(0) ?? 0;
-    const charBytes = utf8ByteLengthOfCodePoint(codePoint);
-    if (currentChunk.length > 0 && currentBytes + charBytes > maxBytes) {
-      chunks.push(currentChunk);
-      currentChunk = char;
-      currentBytes = charBytes;
-    } else {
-      currentChunk += char;
-      currentBytes += charBytes;
-    }
-  }
-
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-  }
-  return chunks;
-}
-
-function parseChunkCount(raw: string | null): number {
-  if (!raw || !/^\d+$/.test(raw)) return 0;
-  const count = Number(raw);
-  return Number.isSafeInteger(count) && count > 0 && count <= 256 ? count : 0;
-}
-
-function metaChunkKey(safeKey: string): string {
-  return `${safeKey}.__chunks`;
-}
-
-function itemChunkKey(safeKey: string, index: number): string {
-  return `${safeKey}.__chunk.${index}`;
-}
 
 async function deleteTrailingOrphanChunks(safeKey: string, startIndex: number, prevCount: number): Promise<void> {
   if (prevCount > 0) {

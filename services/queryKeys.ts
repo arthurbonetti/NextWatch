@@ -12,6 +12,7 @@ export const queryKeys = {
   catalogSearch: (normalizedQuery: string, providerKey: string) =>
     ['catalogSearch', normalizedQuery, providerKey] as const,
   titleById: (titleId: string) => ['titleById', titleId] as const,
+  relatedTitle: (titleId: string) => ['relatedTitle', titleId] as const,
   titleDetails: (titleId: string) => ['titleDetails', titleId] as const,
   seasonEpisodes: (titleId: string, seasonNumber: number) => ['seasonEpisodes', titleId, seasonNumber] as const,
   titleDuration: (titleId: string) => ['titleDuration', titleId] as const,

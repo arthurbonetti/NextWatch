@@ -7,19 +7,20 @@ import { queryKeys } from '@/services/queryKeys';
 import {
   type CatalogFetchResult,
   fetchAllCatalogForProviders,
-  fetchRichTitleDetails,
-  fetchTitleById,
   fetchTitleDuration,
-  fetchTitleTrailerUrl,
-  fetchTvSeasonEpisodes,
   findCachedRelatedTitle,
-  getCachedRichTitleDetails,
   getCachedTitleDuration,
   getCachedTitleTotalEpisodes,
   getCachedTitleTrailerUrl,
   getCachedTvSeasonEpisodes,
   getDevCatalogMetrics,
   hasCatalogBackend,
+  loadRichTitleDetails,
+  loadTitleById,
+  loadTitleDuration,
+  loadTitleTrailerUrl,
+  loadTvSeasonEpisodes,
+  raceWithAbort,
   searchCatalogTitles,
 } from '@/services/tmdb';
 import type { EpisodeSummary, MediaTitle, RichTitleDetails, SeasonSummary } from '@/types/media';
@@ -253,7 +254,7 @@ export function useTitleById(titleId: string, enabled = true) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
-    queryFn: ({ signal }) => fetchTitleById(titleId, signal),
+    queryFn: ({ signal }) => raceWithAbort(loadTitleById(titleId), signal),
   });
 }
 
@@ -270,7 +271,7 @@ export function useTitleQuickDetails(title: MediaTitle | null) {
     retry: 0,
     queryFn: async ({ signal }) => {
       if (!title) return '';
-      const resolved = await fetchTitleDuration(title, signal);
+      const resolved = await raceWithAbort(loadTitleDuration(title), signal);
       return resolved || title.duration;
     },
   });
@@ -283,7 +284,8 @@ export function useTitleQuickDetails(title: MediaTitle | null) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
-    queryFn: ({ signal }) => (title ? fetchTitleTrailerUrl(title, signal) : Promise.resolve(null)),
+    queryFn: ({ signal }) =>
+      title ? raceWithAbort(loadTitleTrailerUrl(title), signal) : Promise.resolve(null),
   });
 
   const duration = title
@@ -327,7 +329,7 @@ export function useTitleDurationPrefetch() {
             queryKey: queryKeys.titleDuration(title.id),
             staleTime: 1000 * 60 * 30,
             gcTime: 1000 * 60 * 60,
-            queryFn: ({ signal }) => fetchTitleDuration(title, signal),
+            queryFn: ({ signal }) => raceWithAbort(loadTitleDuration(title), signal),
           })
           .then((resolved) => {
             if (!mountedRef.current || !resolved) return;
@@ -371,7 +373,8 @@ export function useTitlesDurations(titles: readonly MediaTitle[]) {
       gcTime: 1000 * 60 * 60,
       refetchOnWindowFocus: false,
       retry: 0,
-      queryFn: ({ signal }: { signal: AbortSignal }) => fetchTitleDuration(title, signal),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        raceWithAbort(loadTitleDuration(title), signal),
     })),
   });
 
@@ -444,7 +447,7 @@ export function useTitlesByIds(
       gcTime: 1000 * 60 * 60,
       refetchOnWindowFocus: false,
       retry: 0,
-      queryFn: ({ signal }: { signal: AbortSignal }) => fetchTitleById(id, signal),
+      queryFn: ({ signal }: { signal: AbortSignal }) => raceWithAbort(loadTitleById(id), signal),
     })),
   });
 
@@ -483,17 +486,10 @@ export function useTitleDetails(title: MediaTitle | undefined) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
-    initialData: () => (title ? (getCachedRichTitleDetails(title.id) ?? undefined) : undefined),
-    queryFn: async ({ signal }) => {
-      if (!title) return null;
-      const details = await fetchRichTitleDetails(title, { throwOnError: true, signal });
-      if (details) {
-        for (const related of details.similarTitles) {
-          queryClient.setQueryData<MediaTitle>(queryKeys.titleById(related.id), related);
-        }
-      }
-      return details;
-    },
+    queryFn: ({ signal }) =>
+      title
+        ? raceWithAbort(loadRichTitleDetails(title, { throwOnError: true }), signal)
+        : Promise.resolve(null),
   });
 
   const cachedDuration = title
@@ -530,12 +526,8 @@ export function useSeasonEpisodes(
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
-    initialData: () =>
-      titleId && validSeason > 0
-        ? (getCachedTvSeasonEpisodes(titleId, validSeason) ?? undefined)
-        : undefined,
     queryFn: ({ signal }) =>
-      fetchTvSeasonEpisodes(titleId, validSeason, { throwOnError: true, signal }),
+      raceWithAbort(loadTvSeasonEpisodes(titleId, validSeason, { throwOnError: true }), signal),
   });
 
   const episodes = query.data ?? EMPTY_EPISODES;

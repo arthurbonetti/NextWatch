@@ -42,6 +42,11 @@ export {
   getCachedTitleTotalEpisodes,
   getCachedTitleTrailerUrl,
   getCachedTvSeasonEpisodes,
+  loadRichTitleDetails,
+  loadTitleById,
+  loadTitleDuration,
+  loadTitleTrailerUrl,
+  loadTvSeasonEpisodes,
 } from './details';
 export {
   extractBrCertification,

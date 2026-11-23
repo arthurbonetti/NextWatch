@@ -1,7 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
+import {
+  createOperationSequencer,
+  createVersionedStorage,
+  parseVersionedPayload,
+  readStorageFlag,
+  writeStorageFlag,
+} from '@/services/offlineStore';
 import { queryKeys } from '@/services/queryKeys';
 import {
   deleteSeriesProgress,
@@ -24,6 +31,12 @@ const EMPTY_MAP: SeriesProgressMap = {};
 const EMPTY_IDS: string[] = [];
 const EMPTY_BY_TITLE: Record<string, SeriesProgressMap> = {};
 
+const seriesProgressStorage = createVersionedStorage<SeriesProgressMap>({
+  version: 1,
+  fallback: EMPTY_MAP,
+  parse: sanitizeProgressObject,
+});
+
 type WatchedProgressData = {
   ids: string[];
   byTitleId: Record<string, SeriesProgressMap>;
@@ -32,18 +45,10 @@ type WatchedProgressData = {
 type ProgressMutationInput = {
   updater: (prev: SeriesProgressMap) => SeriesProgressMap;
   resolvedMap?: SeriesProgressMap;
+  seq?: number;
 };
 
 type ProgressMutationOutcome = 'ok' | 'retry' | 'offline';
-
-function parseProgressMap(raw: string | null): SeriesProgressMap {
-  if (!raw) return EMPTY_MAP;
-  try {
-    return sanitizeProgressObject(JSON.parse(raw));
-  } catch {
-    return EMPTY_MAP;
-  }
-}
 
 async function syncSeriesProgressEntry(
   userId: string,
@@ -53,24 +58,23 @@ async function syncSeriesProgressEntry(
   hasToken: boolean,
   signal: AbortSignal,
 ): Promise<SeriesProgressMap> {
-  const [rawLocal, rawPending] = await Promise.all([
-    AsyncStorage.getItem(storageKey).catch(() => null),
-    AsyncStorage.getItem(pendingKey).catch(() => null),
+  const [localMap, isPending] = await Promise.all([
+    seriesProgressStorage.read(storageKey),
+    readStorageFlag(pendingKey),
   ]);
 
-  const localMap = parseProgressMap(rawLocal);
   if (!hasToken || !hasSupabaseConfig() || signal.aborted) {
     return localMap;
   }
 
-  if (rawPending === '1') {
+  if (isPending) {
     const outcome =
       Object.keys(localMap).length === 0
         ? await deleteSeriesProgress(userId, titleId)
         : await upsertSeriesProgress(userId, titleId, localMap);
 
     if (!signal.aborted && (outcome === 'ok' || outcome === 'drop')) {
-      await AsyncStorage.removeItem(pendingKey).catch(() => {});
+      await writeStorageFlag(pendingKey, false);
     }
     return localMap;
   }
@@ -81,7 +85,7 @@ async function syncSeriesProgressEntry(
   }
 
   if (remote.found) {
-    await AsyncStorage.setItem(storageKey, JSON.stringify(remote.map)).catch(() => {});
+    await seriesProgressStorage.write(storageKey, remote.map);
     return remote.map;
   }
 
@@ -89,7 +93,7 @@ async function syncSeriesProgressEntry(
     // Migra progresso salvo apenas localmente antes da sincronização em nuvem.
     const outcome = await upsertSeriesProgress(userId, titleId, localMap);
     if (outcome === 'retry') {
-      await AsyncStorage.setItem(pendingKey, '1').catch(() => {});
+      await writeStorageFlag(pendingKey, true);
     }
   }
   return localMap;
@@ -117,7 +121,12 @@ async function readLocalWatchedProgress(scope: string): Promise<{
             pendingIds.add(key.slice(pendingPrefix.length));
           }
         } else if (key.startsWith(localPrefix)) {
-          localById[key.slice(localPrefix.length)] = parseProgressMap(raw);
+          localById[key.slice(localPrefix.length)] = parseVersionedPayload(
+            raw,
+            1,
+            sanitizeProgressObject,
+            EMPTY_MAP,
+          );
         }
       }
     }
@@ -164,6 +173,7 @@ export function useSeriesProgress(
   const pendingKey = `${PENDING_SYNC_PREFIX}:${scope}:${titleId}`;
 
   const queryClient = useQueryClient();
+  const sequencerRef = useRef(createOperationSequencer());
   const authQueryKey = useMemo(
     () => queryKeys.seriesProgress(userId, titleId),
     [titleId, userId],
@@ -187,10 +197,7 @@ export function useSeriesProgress(
     queryKey: guestQueryKey,
     enabled: Boolean(!userId && titleId),
     staleTime: Infinity,
-    queryFn: async () => {
-      const rawLocal = await AsyncStorage.getItem(storageKey).catch(() => null);
-      return parseProgressMap(rawLocal);
-    },
+    queryFn: () => seriesProgressStorage.read(storageKey),
   });
 
   const activeQuery = userId ? authQuery : guestQuery;
@@ -203,30 +210,31 @@ export function useSeriesProgress(
     {
       previous: SeriesProgressMap | undefined;
       previousWatched: WatchedProgressData | undefined;
+      seq: number;
     }
   >({
     mutationFn: async (input) => {
       const nextMap = input.resolvedMap ?? EMPTY_MAP;
+      const seq = input.seq ?? 0;
       if (!userId || !titleId || !hasToken || !hasSupabaseConfig()) {
         return 'offline';
       }
 
-      await AsyncStorage.setItem(pendingKey, '1').catch(() => {});
+      await writeStorageFlag(pendingKey, true);
       const outcome =
         Object.keys(nextMap).length === 0
           ? await deleteSeriesProgress(userId, titleId)
           : await upsertSeriesProgress(userId, titleId, nextMap);
 
       if (outcome === 'drop') {
-        await AsyncStorage.removeItem(pendingKey).catch(() => {});
+        if (sequencerRef.current.isCurrent(storageKey, seq)) {
+          await writeStorageFlag(pendingKey, false);
+        }
         throw new Error('Não foi possível salvar o progresso da série.');
       }
 
-      if (outcome === 'ok') {
-        const latestCached = queryClient.getQueryData<SeriesProgressMap>(activeQueryKey);
-        if (latestCached === nextMap) {
-          await AsyncStorage.removeItem(pendingKey).catch(() => {});
-        }
+      if (outcome === 'ok' && sequencerRef.current.isCurrent(storageKey, seq)) {
+        await writeStorageFlag(pendingKey, false);
       }
       return outcome;
     },
@@ -235,23 +243,25 @@ export function useSeriesProgress(
       const previous = queryClient.getQueryData<SeriesProgressMap>(activeQueryKey);
       const previousWatched = queryClient.getQueryData<WatchedProgressData>(watchedQueryKey);
       const nextMap = input.updater(previous ?? EMPTY_MAP);
+      const seq = sequencerRef.current.next(storageKey);
       input.resolvedMap = nextMap;
+      input.seq = seq;
 
       queryClient.setQueryData<SeriesProgressMap>(activeQueryKey, nextMap);
       queryClient.setQueryData<WatchedProgressData | undefined>(watchedQueryKey, (current) =>
         updateWatchedCacheEntry(current, titleId, nextMap),
       );
-      void AsyncStorage.setItem(storageKey, JSON.stringify(nextMap)).catch(() => {});
+      void seriesProgressStorage.write(storageKey, nextMap);
       if (userId) {
-        void AsyncStorage.setItem(pendingKey, '1').catch(() => {});
+        void writeStorageFlag(pendingKey, true);
       }
 
-      return { previous, previousWatched };
+      return { previous, previousWatched, seq };
     },
     onError: (_error, _input, context) => {
       if (context?.previous !== undefined) {
         queryClient.setQueryData<SeriesProgressMap>(activeQueryKey, context.previous);
-        void AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+        void seriesProgressStorage.write(storageKey, context.previous);
       }
       if (context?.previousWatched !== undefined) {
         queryClient.setQueryData<WatchedProgressData>(watchedQueryKey, context.previousWatched);

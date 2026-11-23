@@ -1,4 +1,6 @@
 import { TMDB_ARTWORK } from '@/constants/tmdb-artwork';
+import { queryClient } from '@/services/queryClient';
+import { queryKeys } from '@/services/queryKeys';
 import type { MediaIcon, MediaTitle } from '@/types/media';
 
 import { COVER_COLORS, GENRE_NAMES, SAFE_YOUTUBE_KEY_REGEX } from './constants';
@@ -9,8 +11,6 @@ import type {
   TmdbSeasonSummary,
   TmdbVideoItem,
 } from './types';
-
-export const resolvedDurationCache = new Map<string, string>();
 
 export function formatMovieRuntime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -138,7 +138,7 @@ export function mapMedia(
   const rating = item.vote_average ?? 0;
   const resolvedServices = services.length > 0 ? services : ['Netflix'];
   const id = `tmdb-${endpoint}-${item.id}`;
-  const duration = resolvedDurationCache.get(id) ?? '';
+  const duration = queryClient.getQueryData<string>(queryKeys.titleDuration(id)) ?? '';
 
   return {
     id,

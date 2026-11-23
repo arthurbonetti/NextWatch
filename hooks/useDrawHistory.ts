@@ -1,9 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
+import { createPendingListStore, createVersionedStorage } from '@/services/offlineStore';
 import { queryKeys } from '@/services/queryKeys';
 import {
   clearDrawHistory as clearRemoteDrawHistory,
@@ -37,21 +37,20 @@ function isPendingInsert(value: unknown): value is PendingInsert {
   );
 }
 
-function parseStoredArray<T>(
-  raw: string | null,
-  guard: (value: unknown) => value is T,
-  limit?: number,
-): T[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const valid = parsed.filter(guard);
-    return limit ? valid.slice(0, limit) : valid;
-  } catch {
-    return [];
-  }
+function parseHistoryData(data: unknown): DrawHistoryEntry[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(isDrawHistoryEntry).slice(0, MAX_HISTORY_ENTRIES);
 }
+
+const drawHistoryStorage = createVersionedStorage<DrawHistoryEntry[]>({
+  version: 1,
+  fallback: EMPTY_HISTORY,
+  parse: parseHistoryData,
+});
+
+const drawHistoryPendingStore = createPendingListStore<PendingInsert>({
+  isItem: isPendingInsert,
+});
 
 function generateLocalEntryId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -64,17 +63,6 @@ function generateLocalEntryId(): string {
     return `local-${hex}`;
   }
   return `local-${Date.now().toString(36)}`;
-}
-
-async function readPendingInserts(pendingKey: string): Promise<PendingInsert[]> {
-  const raw = await AsyncStorage.getItem(pendingKey).catch(() => null);
-  return parseStoredArray(raw, isPendingInsert);
-}
-
-async function appendPendingInsert(pendingKey: string, item: PendingInsert): Promise<void> {
-  const current = await readPendingInserts(pendingKey);
-  const next = [item, ...current.filter((existing) => existing.localId !== item.localId)];
-  await AsyncStorage.setItem(pendingKey, JSON.stringify(next)).catch(() => {});
 }
 
 export function useDrawHistory() {
@@ -94,13 +82,11 @@ export function useDrawHistory() {
     queryFn: async ({ signal }) => {
       if (!userId || !storageKey || !pendingKey) return EMPTY_HISTORY;
 
-      const [storedRaw, pendingRaw] = await Promise.all([
-        AsyncStorage.getItem(storageKey).catch(() => null),
-        AsyncStorage.getItem(pendingKey).catch(() => null),
+      const [localCached, pendingList] = await Promise.all([
+        drawHistoryStorage.read(storageKey),
+        drawHistoryPendingStore.read(pendingKey),
       ]);
 
-      const localCached = parseStoredArray(storedRaw, isDrawHistoryEntry, MAX_HISTORY_ENTRIES);
-      const pendingList = parseStoredArray(pendingRaw, isPendingInsert);
       const pendingEntries = pendingList.map((item) => item.entry);
       const initialItems = [
         ...pendingEntries,
@@ -112,38 +98,31 @@ export function useDrawHistory() {
       }
 
       if (pendingList.length > 0) {
-        const remaining: PendingInsert[] = [];
-        let stopFlush = false;
-        for (const pendingItem of pendingList) {
-          if (stopFlush) {
-            remaining.push(pendingItem);
-            continue;
-          }
-          if (signal.aborted) return initialItems;
-          const latestLocal = localCached.find((item) => item.id === pendingItem.localId);
-          const entryToInsert = latestLocal ?? pendingItem.entry;
-          const result = await insertDrawHistoryEntry(userId, entryToInsert);
-          if (signal.aborted) return initialItems;
-          if (result.status === 'retry') {
-            remaining.push({ ...pendingItem, entry: entryToInsert });
-            stopFlush = true;
-          }
-        }
-        AsyncStorage.setItem(pendingKey, JSON.stringify(remaining)).catch(() => {});
-        if (stopFlush) return initialItems;
+        const { stoppedOnRetry, aborted } = await drawHistoryPendingStore.flush({
+          pendingKey,
+          signal,
+          getId: (item) => item.localId,
+          execute: async (pendingItem) => {
+            const latestLocal = localCached.find((item) => item.id === pendingItem.localId);
+            const entryToInsert = latestLocal ?? pendingItem.entry;
+            const result = await insertDrawHistoryEntry(userId, entryToInsert);
+            return result.status;
+          },
+        });
+        if (aborted || stoppedOnRetry) return initialItems;
       }
 
       const remoteItems = await fetchDrawHistory(userId);
       if (signal.aborted || remoteItems === null) return initialItems;
 
-      const remainingPending = await readPendingInserts(pendingKey);
+      const remainingPending = await drawHistoryPendingStore.read(pendingKey);
       const unsyncedLocal = remainingPending.map((item) => item.entry);
       const merged = [
         ...unsyncedLocal,
         ...remoteItems.filter((item) => !unsyncedLocal.some((u) => u.id === item.id)),
       ].slice(0, MAX_HISTORY_ENTRIES);
 
-      AsyncStorage.setItem(storageKey, JSON.stringify(merged)).catch(() => {});
+      void drawHistoryStorage.write(storageKey, merged);
       return merged;
     },
   });
@@ -160,7 +139,11 @@ export function useDrawHistory() {
       }
 
       if (!hasToken || !hasSupabaseConfig()) {
-        await appendPendingInsert(pendingKey, { localId: newEntry.id, entry: newEntry });
+        await drawHistoryPendingStore.prepend(
+          pendingKey,
+          { localId: newEntry.id, entry: newEntry },
+          (item) => item.localId,
+        );
         return newEntry.id;
       }
 
@@ -173,7 +156,7 @@ export function useDrawHistory() {
           item.id === newEntry.id ? { ...result.saved, acao: resolvedAction } : item,
         );
         queryClient.setQueryData<DrawHistoryEntry[]>(queryKey, updated);
-        AsyncStorage.setItem(storageKey, JSON.stringify(updated)).catch(() => {});
+        void drawHistoryStorage.write(storageKey, updated);
 
         if (result.saved.id !== newEntry.id && resolvedAction !== result.saved.acao) {
           void updateDrawHistoryAction(userId, result.saved.id, resolvedAction);
@@ -184,7 +167,11 @@ export function useDrawHistory() {
       if (result.status === 'retry') {
         const current = queryClient.getQueryData<DrawHistoryEntry[]>(queryKey) ?? [];
         const latestLocal = current.find((item) => item.id === newEntry.id) ?? newEntry;
-        await appendPendingInsert(pendingKey, { localId: newEntry.id, entry: latestLocal });
+        await drawHistoryPendingStore.prepend(
+          pendingKey,
+          { localId: newEntry.id, entry: latestLocal },
+          (item) => item.localId,
+        );
         return newEntry.id;
       }
 
@@ -196,13 +183,13 @@ export function useDrawHistory() {
       const previous = queryClient.getQueryData<DrawHistoryEntry[]>(queryKey);
       const next = [newEntry, ...(previous ?? [])].slice(0, MAX_HISTORY_ENTRIES);
       queryClient.setQueryData<DrawHistoryEntry[]>(queryKey, next);
-      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
+      void drawHistoryStorage.write(storageKey, next);
       return { previous };
     },
     onError: (_error, _newEntry, context) => {
       if (storageKey && context?.previous !== undefined) {
         queryClient.setQueryData<DrawHistoryEntry[]>(queryKey, context.previous);
-        AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+        void drawHistoryStorage.write(storageKey, context.previous);
       }
     },
   });
@@ -225,15 +212,13 @@ export function useDrawHistory() {
       const previous = queryClient.getQueryData<DrawHistoryEntry[]>(queryKey);
       const next = (previous ?? []).map((item) => (item.id === entryId ? { ...item, acao } : item));
       queryClient.setQueryData<DrawHistoryEntry[]>(queryKey, next);
-      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
+      void drawHistoryStorage.write(storageKey, next);
 
-      const pendingList = await readPendingInserts(pendingKey);
-      if (pendingList.some((p) => p.localId === entryId)) {
-        const nextPending = pendingList.map((p) =>
+      void drawHistoryPendingStore.update(pendingKey, (pendingList) =>
+        pendingList.map((p) =>
           p.localId === entryId ? { ...p, entry: { ...p.entry, acao } } : p,
-        );
-        AsyncStorage.setItem(pendingKey, JSON.stringify(nextPending)).catch(() => {});
-      }
+        ),
+      );
 
       return { previous };
     },
@@ -258,19 +243,19 @@ export function useDrawHistory() {
       }
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<DrawHistoryEntry[]>(queryKey);
-      const previousPending = await readPendingInserts(pendingKey);
+      const previousPending = await drawHistoryPendingStore.read(pendingKey);
       queryClient.setQueryData<DrawHistoryEntry[]>(queryKey, []);
-      AsyncStorage.setItem(storageKey, JSON.stringify([])).catch(() => {});
-      AsyncStorage.setItem(pendingKey, JSON.stringify([])).catch(() => {});
+      void drawHistoryStorage.write(storageKey, []);
+      void drawHistoryPendingStore.replace(pendingKey, []);
       return { previous, previousPending };
     },
     onError: (_error, _vars, context) => {
       if (storageKey && context?.previous !== undefined) {
         queryClient.setQueryData<DrawHistoryEntry[]>(queryKey, context.previous);
-        AsyncStorage.setItem(storageKey, JSON.stringify(context.previous)).catch(() => {});
+        void drawHistoryStorage.write(storageKey, context.previous);
       }
       if (pendingKey && context?.previousPending) {
-        AsyncStorage.setItem(pendingKey, JSON.stringify(context.previousPending)).catch(() => {});
+        void drawHistoryPendingStore.replace(pendingKey, context.previousPending);
       }
     },
     onSettled: (_data, error) => {
@@ -330,7 +315,7 @@ export function useDrawHistory() {
         const state = queryClient.getQueryState(queryKey);
         const lastUpdated = state?.dataUpdatedAt ?? 0;
         if (Date.now() - lastUpdated < options.minIntervalMs) {
-          const pending = await readPendingInserts(pendingKey);
+          const pending = await drawHistoryPendingStore.read(pendingKey);
           if (pending.length === 0) {
             return;
           }
