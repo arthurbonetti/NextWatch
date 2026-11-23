@@ -116,9 +116,8 @@ export function HeaderAvatar({
       style={[
         styles.slot,
         {
-          width: size + EDIT_BADGE_OFFSET,
+          width: size,
           height: size,
-          paddingRight: EDIT_BADGE_OFFSET,
           pointerEvents: isVisible ? 'auto' : 'none',
         },
       ]}

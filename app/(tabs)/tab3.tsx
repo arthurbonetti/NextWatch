@@ -197,6 +197,7 @@ export default function ProfileTabScreen() {
         eyebrow="SUA CONTA"
         title="Meu perfil"
         scrolled={scrolled}
+        rightSlotAlign="start"
         rightSlot={
           <HeaderAvatar
             name={profile?.name ?? user?.name}

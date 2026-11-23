@@ -28,6 +28,7 @@ import {
   type AvatarPresetId,
   type AvatarType,
   getAvatarPresetById,
+  getAvatarPresetSource,
 } from '@/constants/avatars';
 import { Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -216,7 +217,7 @@ export default function EditProfileScreen() {
         allowsMultipleSelection: false,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.82,
+        quality: 0.9,
         exif: false,
         base64: true,
       });
@@ -466,6 +467,7 @@ export default function EditProfileScreen() {
               <View style={styles.presetsGrid}>
                 {AVATAR_PRESETS.map((preset) => {
                   const selected = avatarType === 'preset' && avatarPreset === preset.id;
+                  const innerSize = selected ? 58 : 61;
                   return (
                     <Pressable
                       key={preset.id}
@@ -488,10 +490,11 @@ export default function EditProfileScreen() {
                             },
                           ]}>
                           <Image
-                            source={preset.source}
+                            source={getAvatarPresetSource(preset, innerSize)}
                             style={styles.presetImage}
                             contentFit="cover"
                             cachePolicy="memory-disk"
+                            allowDownscaling={false}
                             accessible={false}
                           />
                         </View>

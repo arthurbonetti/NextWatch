@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps, useEffect } from 'react';
+import { useEffect } from 'react';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -12,10 +12,6 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { MaterialIconName } from '@/components/atoms/AppIcon';
-
-const AnimatedMaterialIcons = Animated.createAnimatedComponent(
-  MaterialIcons as React.ComponentType<ComponentProps<typeof MaterialIcons>>,
-);
 
 type SpinningIconProps = {
   name: MaterialIconName;
@@ -77,19 +73,27 @@ export function SpinningIcon({
         },
         style,
       ]}>
-      <AnimatedMaterialIcons
-        name={name}
-        size={size}
-        color={color}
+      <Animated.View
         style={[
           {
+            width: size,
+            height: size,
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+          animatedStyle,
+        ]}>
+        <MaterialIcons
+          name={name}
+          size={size}
+          color={color}
+          style={{
             includeFontPadding: false,
             textAlign: 'center',
             textAlignVertical: 'center',
-          },
-          animatedStyle,
-        ]}
-      />
+          }}
+        />
+      </Animated.View>
     </View>
   );
 }

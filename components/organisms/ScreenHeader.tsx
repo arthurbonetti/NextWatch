@@ -15,6 +15,7 @@ type ScreenHeaderProps = {
   onBackPress?: () => void;
   fallbackHref?: Href;
   rightSlot?: ReactNode;
+  rightSlotAlign?: 'center' | 'start';
   bottomSlot?: ReactNode;
   scrolled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -32,6 +33,7 @@ export function ScreenHeader({
   onBackPress,
   fallbackHref = '/(tabs)',
   rightSlot,
+  rightSlotAlign = 'center',
   bottomSlot,
   scrolled = false,
   style,
@@ -56,7 +58,11 @@ export function ScreenHeader({
               {title}
             </AppText>
           </View>
-          {rightSlot ? <View style={styles.rightSlot}>{rightSlot}</View> : null}
+          {rightSlot ? (
+            <View style={[styles.rightSlot, rightSlotAlign === 'start' && styles.rightSlotStart]}>
+              {rightSlot}
+            </View>
+          ) : null}
         </View>
 
         {bottomSlot ? <View style={styles.bottomSlot}>{bottomSlot}</View> : null}
@@ -117,6 +123,9 @@ const createStyles = (theme: Theme) => ({
   },
   rightSlot: {
     flexShrink: 0,
+  },
+  rightSlotStart: {
+    alignSelf: 'flex-start' as const,
   },
   bottomSlot: {
     marginTop: 12,

@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Platform, StyleProp, View, ViewStyle } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import {
   type AvatarPresetId,
   type AvatarType,
   getAvatarPresetById,
+  getAvatarPresetSource,
 } from '@/constants/avatars';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
@@ -41,6 +42,8 @@ export function UserAvatar({
 
   const initial = name?.trim().charAt(0).toLocaleUpperCase() || '?';
   const preset = avatarType === 'preset' ? getAvatarPresetById(avatarPreset) : null;
+  const innerSize = Math.max(1, size - borderWidth * 2);
+  const presetSource = preset ? getAvatarPresetSource(preset, innerSize) : null;
   const showCustomImage =
     avatarType === 'custom' && Boolean(avatarUrl) && failedUrl !== avatarUrl;
 
@@ -64,20 +67,20 @@ export function UserAvatar({
       {showCustomImage ? (
         <Image
           source={{ uri: avatarUrl! }}
-          style={StyleSheet.absoluteFill}
+          style={styles.image}
           contentFit="cover"
           cachePolicy="memory-disk"
-          transition={150}
+          transition={Platform.OS === 'web' ? 0 : 150}
           onError={() => setFailedUrl(avatarUrl ?? null)}
           accessible={false}
         />
-      ) : preset ? (
+      ) : presetSource ? (
         <Image
-          source={preset.source}
-          style={StyleSheet.absoluteFill}
+          source={presetSource}
+          style={styles.image}
           contentFit="cover"
           cachePolicy="memory-disk"
-          transition={150}
+          allowDownscaling={false}
           accessible={false}
         />
       ) : (
@@ -95,6 +98,10 @@ const createStyles = (theme: Theme) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     overflow: 'hidden' as const,
+  },
+  image: {
+    width: '100%' as const,
+    height: '100%' as const,
   },
   initialText: {
     color: theme.colors.avatarText,
