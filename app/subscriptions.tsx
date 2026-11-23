@@ -14,7 +14,7 @@ import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { EmptyStateCard } from '@/components/organisms/EmptyStateCard';
 import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import { SubscriptionEditorModal } from '@/components/organisms/SubscriptionEditorModal';
-import { Subscription } from '@/constants/subscriptions';
+import type { Subscription } from '@/types/subscription';
 import { darkColors, Theme, withAlpha } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
@@ -68,7 +68,7 @@ export default function SubscriptionsScreen() {
         eyebrow="SEU PAINEL"
         title="Assinaturas"
         showBack
-        fallbackHref="/(tabs)/tab3"
+        fallbackHref="/(tabs)/profile"
         scrolled={scrolled}
         rightSlot={
           <Pressable

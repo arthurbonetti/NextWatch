@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, View } from 'react-native';
 import Animated, {
   useAnimatedReaction,
@@ -10,7 +10,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { AppIcon } from '@/components/atoms/AppIcon';
+import { AppIcon, type MaterialIconName } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
 import { HeaderAvatar } from '@/components/atoms/HeaderAvatar';
@@ -22,20 +22,12 @@ import { ScreenHeader } from '@/components/organisms/ScreenHeader';
 import { Theme, ThemeMode } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-import { useCatalog } from '@/hooks/useCatalog';
-import { useDrawHistory } from '@/hooks/useDrawHistory';
-import { useMyList } from '@/hooks/useMyList';
-import { useProfile } from '@/hooks/useProfile';
-import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
-import { useSubscriptions } from '@/hooks/useSubscriptions';
+import { useProfileSummary } from '@/hooks/useProfileSummary';
 import { formatCount } from '@/utils/format';
 import { triggerSelectionHaptic } from '@/utils/haptics';
-import { buildWatchedTitleIdsOrdered, computeMyListsCounts } from '@/utils/watchedProgress';
 
 const PREVIEW_HISTORY_LIMIT = 3;
 const HEADER_AVATAR_FADE_RANGE = 24;
-
-type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 const THEME_OPTIONS: { id: ThemeMode; label: string; icon: MaterialIconName }[] = [
   { id: 'light', label: 'Claro', icon: 'light-mode' },
@@ -47,14 +39,25 @@ export default function ProfileTabScreen() {
   const insets = useSafeAreaInsets();
   const { colors, themeMode, resolvedMode, setThemeMode } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { user, token, signOut } = useAuth();
-  const { profile, refreshProfile } = useProfile();
-  const { subscriptions } = useSubscriptions();
-  const { savedTitles, findSavedTitle, refreshMyList } = useMyList();
-  const { titles, status, isFetchingCatalog, errorMessage, findTitle, refreshCatalog } = useCatalog();
-  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const { user, signOut } = useAuth();
+  const {
+    profile,
+    activeSubscriptionsCount,
+    monthlyTotal,
+    watchedCount,
+    myListsCount,
+    historyCount,
+    previewHistory,
+    resolveHistoryTitle,
+    catalogCount,
+    catalogStatus,
+    catalogErrorMessage,
+    isRefreshingCatalog,
+    handleRefreshCatalog,
+    refreshSummary,
+  } = useProfileSummary({ previewHistoryLimit: PREVIEW_HISTORY_LIMIT });
+
   const [scrolled, setScrolled] = useState(false);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollY = useSharedValue(0);
   const avatarTriggerStart = useSharedValue(-1);
   const avatarTriggerEnd = useSharedValue(-1);
@@ -115,69 +118,10 @@ export default function ProfileTabScreen() {
     router.push('/edit-profile');
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    };
-  }, []);
-
-  const isRefreshingCatalog = status === 'loading' || isFetchingCatalog || isManualRefreshing;
-
-  const handleRefreshCatalog = async () => {
-    if (isRefreshingCatalog) return;
-    setIsManualRefreshing(true);
-    const startedAt = Date.now();
-    try {
-      await refreshCatalog();
-    } finally {
-      const remaining = Math.max(0, 650 - (Date.now() - startedAt));
-      if (remaining === 0) {
-        setIsManualRefreshing(false);
-      } else {
-        refreshTimerRef.current = setTimeout(() => {
-          refreshTimerRef.current = null;
-          setIsManualRefreshing(false);
-        }, remaining);
-      }
-    }
-  };
-  const { history, refreshDrawHistory } = useDrawHistory();
-  const { progressTitleIds, refreshProgressIds } = useWatchedProgressIds(user?.id ?? null, token);
-
   useFocusEffect(
     useCallback(() => {
-      void refreshProfile();
-      void refreshMyList({ minIntervalMs: 3000 });
-      void refreshDrawHistory({ minIntervalMs: 3000 });
-      void refreshProgressIds();
-    }, [refreshDrawHistory, refreshMyList, refreshProfile, refreshProgressIds]),
-  );
-
-  const activeSubscriptions = useMemo(
-    () => subscriptions.filter((subscription) => subscription.active),
-    [subscriptions],
-  );
-  const monthlyTotal = useMemo(
-    () => activeSubscriptions.reduce((total, subscription) => total + subscription.monthlyPrice, 0),
-    [activeSubscriptions],
-  );
-  const watchedIds = useMemo(
-    () => buildWatchedTitleIdsOrdered(history, progressTitleIds),
-    [history, progressTitleIds],
-  );
-  const { watchedCount, totalCount: myListsCount } = useMemo(
-    () =>
-      computeMyListsCounts(
-        savedTitles.map((title) => title.id),
-        watchedIds,
-      ),
-    [savedTitles, watchedIds],
-  );
-  const previewHistory = useMemo(
-    () => history.slice(0, PREVIEW_HISTORY_LIMIT),
-    [history],
+      refreshSummary();
+    }, [refreshSummary]),
   );
 
   const handleSignOut = async () => {
@@ -245,7 +189,7 @@ export default function ProfileTabScreen() {
           <AppText tipo="subtitulo" peso="forte" style={styles.sectionTitle}>Resumo da sua conta</AppText>
           <View style={styles.stats}>
             <View style={styles.stat}>
-              <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{activeSubscriptions.length}</AppText>
+              <AppText tipo="subtitulo" peso="forte" tabular style={styles.number}>{activeSubscriptionsCount}</AppText>
               <AppText tipo="legenda" style={styles.muted}>assinaturas</AppText>
             </View>
             <View style={styles.statDivider} />
@@ -348,12 +292,12 @@ export default function ProfileTabScreen() {
               <View style={styles.historyHeaderCopy}>
                 <AppText tipo="subtitulo" peso="forte" style={styles.historyTitle}>Histórico de sorteios</AppText>
                 <AppText tipo="legenda" style={styles.muted}>
-                  {history.length === 0
+                  {historyCount === 0
                     ? 'Seus últimos sorteios na Roleta'
-                    : `${formatCount(history.length)} ${history.length === 1 ? 'sorteio registrado' : 'sorteios registrados'}`}
+                    : `${formatCount(historyCount)} ${historyCount === 1 ? 'sorteio registrado' : 'sorteios registrados'}`}
                 </AppText>
               </View>
-              {history.length > 0 && (
+              {historyCount > 0 && (
                 <Pressable
                   style={({ pressed }) => [styles.seeAllLinkBtn, pressed && styles.pressed]}
                   onPress={() => router.push('/draw-history')}
@@ -369,7 +313,7 @@ export default function ProfileTabScreen() {
             {previewHistory.length > 0 ? (
               <View style={styles.historyList}>
                 {previewHistory.map((entry) => {
-                  const resolved = findTitle(entry.tmdbId) ?? findSavedTitle(entry.tmdbId);
+                  const resolved = resolveHistoryTitle(entry.tmdbId);
                   return (
                     <DrawHistoryCard
                       key={entry.id}
@@ -397,22 +341,22 @@ export default function ProfileTabScreen() {
           <View style={styles.catalogNotice}>
             <View style={styles.catalogNoticeCopy}>
               <AppText tipo="legenda" peso="forte" style={styles.catalogNoticeTitle}>
-                {status === 'loading'
+                {catalogStatus === 'loading'
                   ? 'Carregando catálogo completo…'
-                  : status === 'ready'
+                  : catalogStatus === 'ready'
                     ? 'Catálogo conectado ao TMDB'
-                    : status === 'needs-api-key'
+                    : catalogStatus === 'needs-api-key'
                       ? 'Catálogo de demonstração'
                       : 'Falha ao atualizar catálogo'}
               </AppText>
               <AppText tipo="legenda" style={styles.catalogNoticeText}>
-                {status === 'loading'
+                {catalogStatus === 'loading'
                   ? 'Buscando filmes, séries e animes nos seus serviços ativos.'
-                  : status === 'ready'
-                    ? `${formatCount(titles.length)} títulos sincronizados · disponibilidade no Brasil`
-                    : status === 'needs-api-key'
+                  : catalogStatus === 'ready'
+                    ? `${formatCount(catalogCount)} títulos sincronizados · disponibilidade no Brasil`
+                    : catalogStatus === 'needs-api-key'
                       ? 'Configure o segredo TMDB_API_TOKEN na Edge Function tmdb-proxy do Supabase para carregar títulos automaticamente.'
-                      : errorMessage ?? 'Confira a conexão e tente novamente.'}
+                      : catalogErrorMessage ?? 'Confira a conexão e tente novamente.'}
               </AppText>
             </View>
             <Pressable

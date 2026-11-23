@@ -4,7 +4,8 @@ import Animated from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { formatAverageRating, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating } from '@/constants/catalog';
+import type { MediaTitle } from '@/types/media';
 import { Theme, withAlpha } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 

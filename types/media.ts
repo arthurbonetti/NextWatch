@@ -1,4 +1,30 @@
-import type { MediaTitle } from '@/constants/catalog';
+export type MediaKind = 'Filme' | 'Série' | 'Anime';
+export type MediaKindFilter = 'Todos' | MediaKind;
+export type MediaIcon = 'movie' | 'live-tv' | 'theaters';
+export type RatingSource = 'IMDb' | 'TMDB';
+
+export type MediaTitle = {
+  id: string;
+  title: string;
+  kind: MediaKind;
+  year: number;
+  duration: string;
+  genres: string[];
+  service: string;
+  services?: string[];
+  imdbRating: string;
+  metacriticScore?: number | null;
+  synopsis: string;
+  color: string;
+  icon: MediaIcon;
+  ratingSource?: RatingSource;
+  catalogSource?: 'tmdb';
+  tmdbPosterPath?: string | null;
+  tmdbBackdropPath?: string | null;
+  originalTitle?: string;
+  popularity?: number;
+  voteCount?: number;
+};
 
 export type TmdbImageSize = 'w92' | 'w154' | 'w342' | 'w500' | 'w780';
 

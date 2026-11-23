@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { Subscription } from '@/constants/subscriptions';
+import type { Subscription } from '@/types/subscription';
 import { isSubscription } from '@/services/repositories/subscriptionsRepo';
 
 const BASE_STORAGE_KEY = '@nextwatch/subscriptions';

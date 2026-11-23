@@ -8,7 +8,8 @@ import { AppText } from '@/components/atoms/AppText';
 import { BookmarkIcon } from '@/components/atoms/BookmarkIcon';
 import { ServiceLogoList } from '@/components/atoms/ServiceLogo';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { formatAverageRating, getTitleServices, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating, getTitleServices } from '@/constants/catalog';
+import type { MediaTitle } from '@/types/media';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 

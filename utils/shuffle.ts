@@ -1,8 +1,8 @@
 /**
- * Embaralha uma coleção em tempo O(n) utilizando o algoritmo Fisher-Yates,
- * sem alocações recursivas ou objetos intermediários na memória.
+ * Embaralha uma coleção em tempo O(n) utilizando o algoritmo Fisher-Yates
+ * de forma pura (retorna um novo array sem mutar a entrada).
  */
-export function quickSortByRandom<T>(values: readonly T[]): T[] {
+export function shuffleArray<T>(values: readonly T[]): T[] {
   const result = values.slice();
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

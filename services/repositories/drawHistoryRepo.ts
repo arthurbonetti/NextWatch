@@ -1,4 +1,8 @@
-import { type MediaKind, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
+import {
+  sanitizeHexColor,
+  sanitizeTmdbPath,
+  VALID_MEDIA_KINDS,
+} from '@/constants/catalog';
 import {
   classifySupabaseError,
   hasSupabaseConfig,
@@ -6,12 +10,11 @@ import {
   type SupabaseOutcome,
 } from '@/services/supabase';
 import { type DrawAction, type DrawHistoryEntry, isDrawAction } from '@/types/drawHistory';
+import type { MediaKind } from '@/types/media';
 
 const TABLE_NAME = 'user_draw_history';
 const SELECT_COLUMNS = 'id,user_id,tmdb_id,sorteado_em,acao,title,kind,tmdb_poster_path,color';
 export const MAX_HISTORY_ENTRIES = 100;
-
-const VALID_KINDS = new Set<MediaKind>(['Filme', 'Série', 'Anime']);
 
 type DbDrawHistoryRow = {
   id: number | string;
@@ -27,7 +30,7 @@ type DbDrawHistoryRow = {
 
 function mapDbRowToEntry(row: DbDrawHistoryRow): DrawHistoryEntry | null {
   if (!isDrawAction(row.acao) || typeof row.tmdb_id !== 'string' || !row.tmdb_id) return null;
-  const kind = typeof row.kind === 'string' && VALID_KINDS.has(row.kind as MediaKind)
+  const kind = typeof row.kind === 'string' && VALID_MEDIA_KINDS.has(row.kind)
     ? (row.kind as MediaKind)
     : undefined;
   return {

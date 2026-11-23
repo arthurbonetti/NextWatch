@@ -1,6 +1,6 @@
 import { TitleDetailCard } from '@/components/organisms/TitleDetailCard';
-import { MediaTitle } from '@/constants/catalog';
-import { Subscription } from '@/constants/subscriptions';
+import type { MediaTitle } from '@/types/media';
+import type { Subscription } from '@/types/subscription';
 
 type DrawResultPhaseProps = {
   title: MediaTitle;

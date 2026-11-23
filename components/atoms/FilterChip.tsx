@@ -9,8 +9,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { type MaterialIconName } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
-import { MaterialIconName } from '@/constants/catalog';
 import { Theme, THEME } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { triggerSelectionHaptic } from '@/utils/haptics';

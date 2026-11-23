@@ -6,12 +6,13 @@ import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
 import { SwitchToggle } from '@/components/atoms/SwitchToggle';
-import { SUBSCRIPTION_PROVIDERS, Subscription, SubscriptionProvider } from '@/constants/subscriptions';
+import { SUBSCRIPTION_PROVIDERS } from '@/constants/subscriptions';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import type { Subscription, SubscriptionProvider } from '@/types/subscription';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 
-type Props = {
+type SubscriptionEditorModalProps = {
   visible?: boolean;
   initialSubscription?: Subscription;
   onClose: () => void;
@@ -35,7 +36,12 @@ function generateSubscriptionId(providerName: string): string {
   return `${slug}-${Date.now().toString(36)}`;
 }
 
-export function SubscriptionEditorModal({ visible = true, initialSubscription, onClose, onSave }: Props) {
+export function SubscriptionEditorModal({
+  visible = true,
+  initialSubscription,
+  onClose,
+  onSave,
+}: SubscriptionEditorModalProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 

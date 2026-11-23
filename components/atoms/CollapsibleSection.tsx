@@ -11,10 +11,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { CLOSE_EASING, OPEN_EASING } from '@/constants/animations';
 import { THEME } from '@/constants/theme';
-
-const OPEN_EASING = Easing.bezier(0.22, 1, 0.36, 1);
-const CLOSE_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 
 type CollapsibleSectionProps = {
   expanded: boolean;

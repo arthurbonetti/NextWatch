@@ -10,7 +10,7 @@ import { useThemedStyles } from '@/contexts/ThemeContext';
 
 import { AppText } from './AppText';
 
-type BotaoProps = PressableProps & {
+type AppButtonProps = PressableProps & {
   titulo: string;
   estilo?: StyleProp<ViewStyle>;
 };
@@ -20,7 +20,7 @@ export function AppButton({
   estilo,
   disabled,
   ...props
-}: BotaoProps) {
+}: AppButtonProps) {
   const styles = useThemedStyles(createStyles);
 
   return (

@@ -28,7 +28,7 @@ test('isPasswordRecoveryUrl detects recovery links landing on root Site URL', ()
     'http://localhost:8081/#access_token=tok1&refresh_token=ref1&type=recovery';
   const otpRecoveryUrl =
     'https://nextwatch.app/?token_hash=hash123&type=recovery';
-  const normalUrl = 'http://localhost:8081/tab2?q=matrix';
+  const normalUrl = 'http://localhost:8081/explore?q=matrix';
 
   assert.equal(isPasswordRecoveryUrl(rootRecoveryUrl), true);
   assert.equal(isPasswordRecoveryUrl(otpRecoveryUrl), true);

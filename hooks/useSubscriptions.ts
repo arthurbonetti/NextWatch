@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
-import type { Subscription } from '@/constants/subscriptions';
+import type { Subscription } from '@/types/subscription';
 import { useAuth } from '@/contexts/AuthContext';
 import { queryKeys } from '@/services/queryKeys';
 import {
@@ -20,10 +20,9 @@ import {
   subscribeLocalCache,
 } from '@/services/subscriptionsLocalCache';
 import { hasSupabaseConfig } from '@/services/supabase';
+import type { MutationOutcome } from '@/types/common';
 
 const EMPTY_SUBSCRIPTIONS: Subscription[] = [];
-
-type MutationOutcome = 'ok' | 'retry' | 'offline';
 
 export function useSubscriptions() {
   const { user, token } = useAuth();

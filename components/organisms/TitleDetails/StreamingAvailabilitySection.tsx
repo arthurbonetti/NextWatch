@@ -3,7 +3,7 @@ import { Pressable, View } from 'react-native';
 
 import { AppText } from '@/components/atoms/AppText';
 import { ServiceLogo } from '@/components/atoms/ServiceLogo';
-import { Subscription } from '@/constants/subscriptions';
+import type { Subscription } from '@/types/subscription';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 

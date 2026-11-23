@@ -21,12 +21,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppText } from '@/components/atoms/AppText';
+import { CLOSE_EASING, OPEN_EASING } from '@/constants/animations';
 import { Theme, withAlpha } from '@/constants/theme';
 import { TextRole, TextWeight } from '@/constants/typography';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
-
-const OPEN_EASING = Easing.bezier(0.22, 1, 0.36, 1);
-const CLOSE_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 
 type ExpandableTextProps = {
   text: string;

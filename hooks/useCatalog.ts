@@ -1,7 +1,6 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { MediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import { queryKeys } from '@/services/queryKeys';
@@ -23,7 +22,8 @@ import {
   hasCatalogBackend,
   searchCatalogTitles,
 } from '@/services/tmdb';
-import type { EpisodeSummary, RichTitleDetails, SeasonSummary } from '@/types/media';
+import type { EpisodeSummary, MediaTitle, RichTitleDetails, SeasonSummary } from '@/types/media';
+import { nowMs } from '@/utils/time';
 
 export type CatalogStatus = 'loading' | 'ready' | 'needs-api-key' | 'error';
 
@@ -31,10 +31,6 @@ const EMPTY_TITLES: MediaTitle[] = [];
 const EMPTY_EPISODES: EpisodeSummary[] = [];
 
 const isDevRuntime = typeof __DEV__ !== 'undefined' && __DEV__;
-const nowMs = () =>
-  typeof performance !== 'undefined' && typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now();
 
 let devFirstHookMountAt: number | null = null;
 let devFirstUiBatchLogged = false;

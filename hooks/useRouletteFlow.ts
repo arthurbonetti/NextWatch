@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'react-native-reanimated';
 
-import {
-  getDrawGenres,
-  isEligibleForDraw,
-  type MediaTitle,
-} from '@/constants/catalog';
+import { getDrawGenres } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCatalog, useTitleQuickDetails } from '@/hooks/useCatalog';
 import { useDrawHistory } from '@/hooks/useDrawHistory';
@@ -14,10 +10,12 @@ import { usePersistedDrawFilters } from '@/hooks/usePersistedDrawFilters';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
 import type { DrawAction } from '@/types/drawHistory';
+import type { MediaTitle } from '@/types/media';
 import {
   buildWatchedTitleIds,
   filterRouletteCandidates,
   filterTitlesByActiveServices,
+  isEligibleForDraw,
   parseRouletteDeepLinkPreset,
   pickRouletteWinner,
   resolveLockedFeaturedTitle,

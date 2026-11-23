@@ -7,8 +7,8 @@ import { ConfirmDialog } from '@/components/organisms/ConfirmDialog';
 import { DrawFiltersPhase } from '@/components/organisms/DrawModal/DrawFiltersPhase';
 import { DrawResultPhase } from '@/components/organisms/DrawModal/DrawResultPhase';
 import { DrawRoulettePhase } from '@/components/organisms/DrawModal/DrawRoulettePhase';
-import { MediaTitle } from '@/constants/catalog';
-import { Subscription } from '@/constants/subscriptions';
+import type { MediaTitle } from '@/types/media';
+import type { Subscription } from '@/types/subscription';
 import { DrawFiltersState, DrawKindFilter } from '@/hooks/usePersistedDrawFilters';
 import type { DrawPhase, SpinSession } from '@/hooks/useRouletteFlow';
 

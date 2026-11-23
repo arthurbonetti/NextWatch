@@ -1,5 +1,27 @@
-export type RouletteMediaKind = 'Filme' | 'Série' | 'Anime';
-export type RouletteKindFilter = 'Todos' | RouletteMediaKind;
+import {
+  EXCLUDED_DRAW_GENRES,
+  getTitleAverageRating,
+  MIN_DRAW_RATING,
+  MIN_DRAW_VOTE_COUNT,
+  VALID_KIND_FILTERS,
+} from '../constants/catalog.ts';
+import type { MediaKind, MediaKindFilter, MediaTitle } from '../types/media.ts';
+
+export type RouletteMediaKind = MediaKind;
+export type RouletteKindFilter = MediaKindFilter;
+
+export function isEligibleForDraw(title: MediaTitle): boolean {
+  if (title.genres.some((genre) => EXCLUDED_DRAW_GENRES.has(genre))) {
+    return false;
+  }
+  if (getTitleAverageRating(title) < MIN_DRAW_RATING) {
+    return false;
+  }
+  if (title.catalogSource === 'tmdb' && (title.voteCount ?? 0) < MIN_DRAW_VOTE_COUNT) {
+    return false;
+  }
+  return true;
+}
 
 export type RouletteTitle = {
   id: string;
@@ -19,8 +41,6 @@ export type RouletteHistoryEntry = {
   tmdbId: string;
   acao: string;
 };
-
-const VALID_ROULETTE_KINDS: readonly RouletteKindFilter[] = ['Todos', 'Filme', 'Série', 'Anime'];
 
 export function getRouletteTitleServices(
   title: Pick<RouletteTitle, 'service' | 'services'>,
@@ -126,13 +146,38 @@ export function parseRouletteDeepLinkPreset(params: {
   genres: string[];
   shouldAutoSpin: boolean;
 } {
-  const kind = VALID_ROULETTE_KINDS.includes(params.drawKind as RouletteKindFilter)
-    ? (params.drawKind as RouletteKindFilter)
-    : 'Todos';
+  const kind =
+    typeof params.drawKind === 'string' && VALID_KIND_FILTERS.has(params.drawKind)
+      ? (params.drawKind as RouletteKindFilter)
+      : 'Todos';
 
   return {
     kind,
     genres: params.drawGenre ? [params.drawGenre] : [],
     shouldAutoSpin: params.autoSpin === '1',
   };
+}
+
+export function buildDrawReason(title: MediaTitle): string {
+  const avg = getTitleAverageRating(title);
+  const genre = title.genres.find((item) => item !== 'Outros');
+
+  if (genre === 'Documentário' && title.kind === 'Filme') {
+    const quality = avg >= 8.2 ? 'aclamado' : 'bem avaliado';
+    return `Documentário ${quality}`;
+  }
+
+  const isFeminine = title.kind === 'Série';
+  const quality = avg >= 8.2
+    ? isFeminine
+      ? 'aclamada'
+      : 'aclamado'
+    : isFeminine
+      ? 'bem avaliada'
+      : 'bem avaliado';
+
+  if (genre) {
+    return `${title.kind} de ${genre} ${quality}`;
+  }
+  return `${title.kind} ${quality}`;
 }

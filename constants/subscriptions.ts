@@ -1,23 +1,9 @@
-import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
-export type Subscription = {
-  id: string;
-  provider: string;
-  monthlyPrice: number;
-  billingDay: number;
-  active: boolean;
-  renewalAlert: boolean;
-  alertDays: 1 | 3 | 7;
-};
-
-export type SubscriptionProvider = {
-  name: string;
-  color: string;
-  symbol: string;
-  // Caminho da logo no TMDB (lista de provedores de streaming do Brasil, /watch/providers).
-  logo?: string;
-};
+import type {
+  ProviderDeepLinkConfig,
+  SubscriptionProvider,
+} from '@/types/subscription';
 
 export const SUBSCRIPTION_PROVIDERS: SubscriptionProvider[] = [
   { name: 'Netflix', color: '#e50914', symbol: 'N', logo: '/rK1KljqmbvO9HQa1PBFLILWah72.png' },
@@ -28,11 +14,6 @@ export const SUBSCRIPTION_PROVIDERS: SubscriptionProvider[] = [
   { name: 'Globoplay', color: '#ed1c24', symbol: 'G', logo: '/9A6Oxd3F7iXm7mds7CxYOBicojs.png' },
   { name: 'Crunchyroll', color: '#f47521', symbol: 'C', logo: '/fzN5Jok5Ig1eJ7gyNGoMhnLSCfh.jpg' },
 ];
-
-export type ProviderDeepLinkConfig = {
-  buildAppUrls: (encodedQuery: string) => string[];
-  buildWebUrl: (encodedQuery: string) => string;
-};
 
 export const PROVIDER_DEEP_LINKS: Record<string, ProviderDeepLinkConfig> = {
   Netflix: {
@@ -66,35 +47,3 @@ export const PROVIDER_DEEP_LINKS: Record<string, ProviderDeepLinkConfig> = {
     buildWebUrl: (q) => (q ? `https://www.crunchyroll.com/search?q=${q}` : 'https://www.crunchyroll.com'),
   },
 };
-
-/**
- * Abre o aplicativo do streaming via deep link direto (sem bloqueio de canOpenURL no Android 11+),
- * com fallback automático para a página web / App Link.
- */
-export async function openStreamingService(providerName: string, titleQuery?: string): Promise<void> {
-  const target = PROVIDER_DEEP_LINKS[providerName];
-  const trimmedQuery = titleQuery?.trim() ?? '';
-  const encodedQuery = trimmedQuery ? encodeURIComponent(trimmedQuery) : '';
-  const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(
-    trimmedQuery ? `${trimmedQuery} ${providerName}` : providerName,
-  )}`;
-
-  if (!target) {
-    await Linking.openURL(fallbackSearchUrl).catch(() => {});
-    return;
-  }
-
-  if (Platform.OS !== 'web') {
-    const appUrls = target.buildAppUrls(encodedQuery);
-    for (const appUrl of appUrls) {
-      try {
-        await Linking.openURL(appUrl);
-        return;
-      } catch {
-        // Continua para o próximo esquema ou fallback web caso o app não esteja instalado
-      }
-    }
-  }
-
-  await Linking.openURL(target.buildWebUrl(encodedQuery)).catch(() => {});
-}

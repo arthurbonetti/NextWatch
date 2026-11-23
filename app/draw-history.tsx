@@ -97,7 +97,7 @@ export default function DrawHistoryScreen() {
         eyebrow="HISTÓRICO"
         title="Sorteios"
         showBack
-        fallbackHref="/(tabs)/tab3"
+        fallbackHref="/(tabs)/profile"
         scrolled={scrolled}
         rightSlot={
           history.length > 0 ? (

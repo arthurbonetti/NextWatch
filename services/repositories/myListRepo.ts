@@ -1,10 +1,11 @@
-import { isMediaTitle, type MediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
+import { isMediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
 import {
   classifySupabaseError,
   hasSupabaseConfig,
   supabase,
   type SupabaseOutcome,
 } from '@/services/supabase';
+import type { MediaTitle } from '@/types/media';
 
 const TABLE_NAME = 'user_my_list';
 

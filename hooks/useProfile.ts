@@ -17,8 +17,54 @@ import {
 import {
   MAX_NAME_LENGTH,
   MIN_NAME_LENGTH,
+  type PendingAvatarUpload,
   type UpdateProfilePayload,
 } from '@/types/auth';
+import { decodeBase64ToBytes, validateAvatarBytes } from '@/utils/avatarImage';
+
+export type SelectedAvatarAsset = {
+  uri?: string | null;
+  base64?: string | null;
+};
+
+export type PrepareAvatarUploadResult =
+  | { ok: true; upload: PendingAvatarUpload }
+  | { ok: false; error: string };
+
+/**
+ * Decodifica e valida uma imagem selecionada da galeria, preparando o payload de upload do avatar.
+ */
+export async function prepareAvatarUpload(
+  asset: SelectedAvatarAsset | null | undefined,
+): Promise<PrepareAvatarUploadResult> {
+  if (!asset?.uri) {
+    return { ok: false, error: 'Não foi possível ler a imagem selecionada.' };
+  }
+
+  let bytes: Uint8Array;
+  if (typeof asset.base64 === 'string' && asset.base64.length > 0) {
+    bytes = decodeBase64ToBytes(asset.base64);
+  } else {
+    const response = await fetch(asset.uri);
+    const arrayBuffer = await response.arrayBuffer();
+    bytes = new Uint8Array(arrayBuffer);
+  }
+
+  const validation = validateAvatarBytes(bytes);
+  if (!validation.ok) {
+    return { ok: false, error: validation.error };
+  }
+
+  return {
+    ok: true,
+    upload: {
+      uri: asset.uri,
+      bytes,
+      contentType: validation.contentType,
+      extension: validation.extension,
+    },
+  };
+}
 
 export type UserProfile = {
   userId: string;
@@ -252,5 +298,6 @@ export function useProfile() {
     isUpdatingProfile: mutation.isPending,
     updateProfile,
     refreshProfile,
+    prepareAvatarUpload,
   };
 }

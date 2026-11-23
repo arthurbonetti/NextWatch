@@ -1,17 +1,16 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ComponentProps, memo, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { type MaterialIconName } from '@/components/atoms/AppIcon';
 import { AppText } from '@/components/atoms/AppText';
 import { TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { MediaTitle } from '@/constants/catalog';
 import { Theme, ThemeColors } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { type DrawAction, type DrawHistoryEntry } from '@/types/drawHistory';
+import type { MediaTitle } from '@/types/media';
 import { formatShortDateTime } from '@/utils/format';
-
-type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 function getActionMeta(
   colors: ThemeColors,

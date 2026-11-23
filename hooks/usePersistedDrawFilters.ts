@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { MediaKind } from '@/constants/catalog';
+import { VALID_KIND_FILTERS } from '@/constants/catalog';
+import type { MediaKindFilter } from '@/types/media';
 
-export type DrawKindFilter = 'Todos' | MediaKind;
+export type DrawKindFilter = MediaKindFilter;
 
 export type DrawFiltersState = {
   kind: DrawKindFilter;
@@ -21,8 +22,6 @@ const DEFAULT_FILTERS: DrawFiltersState = {
   hideWatched: false,
 };
 
-const VALID_KINDS = new Set<DrawKindFilter>(['Todos', 'Filme', 'Série', 'Anime']);
-
 function parseStoredFilters(raw: string | null): DrawFiltersState {
   if (!raw) return DEFAULT_FILTERS;
   try {
@@ -32,7 +31,7 @@ function parseStoredFilters(raw: string | null): DrawFiltersState {
     }
     const candidate = parsed as Partial<DrawFiltersState>;
     const kind: DrawKindFilter =
-      typeof candidate.kind === 'string' && VALID_KINDS.has(candidate.kind as DrawKindFilter)
+      typeof candidate.kind === 'string' && VALID_KIND_FILTERS.has(candidate.kind)
         ? (candidate.kind as DrawKindFilter)
         : 'Todos';
     const selectedGenres = Array.isArray(candidate.selectedGenres)

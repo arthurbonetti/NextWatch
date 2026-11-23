@@ -15,7 +15,7 @@ import { StreamingChip } from '@/components/atoms/StreamingChip';
 import { SwitchVisual } from '@/components/atoms/SwitchToggle';
 import { AnimatedRollingNumber } from '@/components/organisms/DrawModal/AnimatedRollingNumber';
 import { getGenreIcon, getKindIcon } from '@/constants/catalog';
-import { Subscription } from '@/constants/subscriptions';
+import type { Subscription } from '@/types/subscription';
 import { Theme, THEME } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { DrawFiltersState, DrawKindFilter } from '@/hooks/usePersistedDrawFilters';

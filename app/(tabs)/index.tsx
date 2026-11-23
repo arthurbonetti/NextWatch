@@ -18,13 +18,13 @@ import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
 import {
   formatAverageRating,
   getTitleServices,
-  MediaTitle,
 } from '@/constants/catalog';
 import { Theme, withAlpha } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useTitleQuickDetails } from '@/hooks/useCatalog';
 import { useProfile } from '@/hooks/useProfile';
 import { useRouletteFlow } from '@/hooks/useRouletteFlow';
+import type { MediaTitle } from '@/types/media';
 import { formatCount, formatCurrency } from '@/utils/format';
 
 export default function HomeScreen() {
@@ -101,7 +101,7 @@ export default function HomeScreen() {
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
-              onPress={() => router.push('/(tabs)/tab3')}
+              onPress={() => router.push('/(tabs)/profile')}
               hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel="Abrir perfil">
@@ -142,7 +142,7 @@ export default function HomeScreen() {
             <View style={styles.statDivider} />
             <Pressable
               style={({ pressed }) => [styles.statBlock, pressed && styles.pressed]}
-              onPress={() => router.push('/(tabs)/tab2')}
+              onPress={() => router.push('/(tabs)/explore')}
               accessibilityRole="button">
               <AppText tipo="subtitulo" peso="forte" tabular style={styles.statNumber}>{formatCount(availableTitles.length)}</AppText>
               <AppText tipo="legenda" peso="medio" style={styles.statLabel}>no catálogo</AppText>
@@ -272,7 +272,7 @@ export default function HomeScreen() {
             </View>
             <Pressable
               style={({ pressed }) => [styles.sectionLinkBtn, pressed && styles.pressed]}
-              onPress={() => router.push('/(tabs)/tab2')}
+              onPress={() => router.push('/(tabs)/explore')}
               accessibilityRole="button">
               <AppText tipo="legenda" peso="forte" style={styles.link}>Explorar catálogo</AppText>
               <MaterialIcons name="chevron-right" size={18} color={colors.accentLink} />

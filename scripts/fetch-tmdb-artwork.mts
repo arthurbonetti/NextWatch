@@ -1,7 +1,8 @@
 // Busca no TMDB o pôster e o banner de cada título do catálogo e grava em constants/tmdb-artwork.ts.
 // Rodar com: npm run artwork  (lê TMDB_API_KEY de .env.local)
 import { writeFileSync } from 'node:fs';
-import { CATALOG, type MediaTitle } from '../constants/catalog.ts';
+import { CATALOG } from '../constants/fallbackCatalog.ts';
+import type { MediaTitle } from '../types/media.ts';
 
 type TmdbResult = {
   id: number;

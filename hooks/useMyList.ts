@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef } from 'react';
 
-import { isMediaTitle, type MediaTitle } from '@/constants/catalog';
+import { isMediaTitle } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { queryKeys } from '@/services/queryKeys';
 import {
@@ -13,22 +13,19 @@ import {
 } from '@/services/repositories/myListRepo';
 import { hasSupabaseConfig } from '@/services/supabase';
 import { getCachedTitleDuration } from '@/services/tmdb';
+import type { MutationOutcome, RefreshOptions } from '@/types/common';
+import type { MediaTitle } from '@/types/media';
 
 const BASE_STORAGE_KEY = '@nextwatch/my-list';
 const SYNCED_FLAG_PREFIX = '@nextwatch/my-list-synced';
 const PENDING_OPS_PREFIX = '@nextwatch/my-list-pending';
 const EMPTY_TITLES: MediaTitle[] = [];
 
-type RefreshOptions = {
-  minIntervalMs?: number;
-};
-
 type PendingOp =
   | { type: 'upsert'; title: MediaTitle }
   | { type: 'delete' };
 
 type PendingOpsMap = Record<string, PendingOp>;
-type MutationOutcome = 'ok' | 'retry' | 'offline';
 
 function parseStoredTitles(raw: string | null): MediaTitle[] {
   if (!raw) return [];

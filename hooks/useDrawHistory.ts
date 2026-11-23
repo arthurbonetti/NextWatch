@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
-import { type MediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
+import { sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
 import { useAuth } from '@/contexts/AuthContext';
 import { queryKeys } from '@/services/queryKeys';
 import {
@@ -13,17 +13,15 @@ import {
   updateDrawHistoryAction,
 } from '@/services/repositories/drawHistoryRepo';
 import { hasSupabaseConfig } from '@/services/supabase';
+import type { RefreshOptions } from '@/types/common';
 import { type DrawAction, type DrawHistoryEntry, isDrawHistoryEntry } from '@/types/drawHistory';
+import type { MediaTitle } from '@/types/media';
 
 export type { DrawAction, DrawHistoryEntry } from '@/types/drawHistory';
 
 const BASE_STORAGE_KEY = '@nextwatch/draw-history';
 const PENDING_STORAGE_PREFIX = '@nextwatch/draw-history-pending';
 const EMPTY_HISTORY: DrawHistoryEntry[] = [];
-
-type RefreshOptions = {
-  minIntervalMs?: number;
-};
 
 type PendingInsert = {
   localId: string;

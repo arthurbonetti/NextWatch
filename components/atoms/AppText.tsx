@@ -10,7 +10,7 @@ import {
 } from '@/constants/typography';
 import { useThemedStyles } from '@/contexts/ThemeContext';
 
-type TextoProps = TextProps & {
+type AppTextProps = TextProps & {
   tipo?: TextRole;
   peso?: TextWeight;
   familia?: TextFamily;
@@ -42,7 +42,7 @@ export function AppText({
   style,
   children,
   ...props
-}: TextoProps) {
+}: AppTextProps) {
   const styles = useThemedStyles(createStyles);
   const resolvedFamily: TextFamily = familia ?? (tipo === 'destaque' || tipo === 'titulo' ? 'editorial' : 'sans');
   const fontFamily = resolveFontFamily(resolvedFamily, peso);
@@ -51,7 +51,7 @@ export function AppText({
     <Text
       style={[
         styles.base,
-        estiloTipo[tipo],
+        textStyle[tipo],
         { fontFamily },
         tabular && TABULAR_NUMS_STYLE,
         style,
@@ -63,7 +63,7 @@ export function AppText({
   );
 }
 
-const estiloTipo = StyleSheet.create({
+const textStyle = StyleSheet.create({
   destaque: {
     fontSize: 32,
     lineHeight: 37,

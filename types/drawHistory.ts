@@ -1,4 +1,4 @@
-import type { MediaKind } from '@/constants/catalog';
+import type { MediaKind } from '@/types/media';
 
 export type DrawAction = 'assistiu' | 'salvou' | 'sorteou outro' | 'ignorou';
 

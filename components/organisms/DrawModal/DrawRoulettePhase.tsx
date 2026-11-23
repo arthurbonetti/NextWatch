@@ -21,12 +21,12 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { AppText } from '@/components/atoms/AppText';
 import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
-import { MediaTitle } from '@/constants/catalog';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import type { MediaTitle } from '@/types/media';
 import { formatCount } from '@/utils/format';
 import { triggerLightImpactHaptic, triggerSuccessHaptic } from '@/utils/haptics';
-import { quickSortByRandom } from '@/utils/quickSort';
+import { shuffleArray } from '@/utils/shuffle';
 
 type DrawRoulettePhaseProps = {
   winner: MediaTitle;
@@ -94,7 +94,7 @@ function buildReelItems(
 ): MediaTitle[] {
   const decoysPool = candidates.filter((item) => item.id !== winner.id);
   const basePool = decoysPool.length > 0 ? decoysPool : [winner];
-  const shuffledPool = quickSortByRandom(basePool);
+  const shuffledPool = shuffleArray(basePool);
   const rotationOffset = spinKey % shuffledPool.length;
 
   const items: MediaTitle[] = [];

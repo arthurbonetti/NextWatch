@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { TitleDetailCard } from '@/components/organisms/TitleDetailCard';
-import { MediaTitle } from '@/constants/catalog';
-import { Subscription } from '@/constants/subscriptions';
+import type { MediaTitle } from '@/types/media';
+import type { Subscription } from '@/types/subscription';
 
-type Props = {
+type TitleDetailsModalProps = {
   title: MediaTitle | null;
   visible: boolean;
   activeSubscriptions: Subscription[];
@@ -37,7 +37,7 @@ export function TitleDetailsModal({
   onToggleSave,
   onSaveChange,
   onDrawAnother,
-}: Props) {
+}: TitleDetailsModalProps) {
   const [cachedTitle, setCachedTitle] = useState<MediaTitle | null>(title);
 
   if (title && title !== cachedTitle) {

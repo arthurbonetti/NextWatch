@@ -1,4 +1,4 @@
-import type { Subscription } from '@/constants/subscriptions';
+import type { Subscription } from '@/types/subscription';
 import {
   classifySupabaseError,
   hasSupabaseConfig,

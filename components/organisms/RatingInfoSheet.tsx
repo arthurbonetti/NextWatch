@@ -3,7 +3,8 @@ import { View } from 'react-native';
 
 import { AnimatedModalShell } from '@/components/atoms/AnimatedModalShell';
 import { AppText } from '@/components/atoms/AppText';
-import { formatAverageRating, getMetacriticScore, MediaTitle } from '@/constants/catalog';
+import { formatAverageRating, getMetacriticScore } from '@/constants/catalog';
+import type { MediaTitle } from '@/types/media';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { formatCount } from '@/utils/format';

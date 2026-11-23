@@ -1,38 +1,25 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Redirect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
-  Pressable,
   ScrollView,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppButton } from '@/components/atoms/AppButton';
-import { AppIcon } from '@/components/atoms/AppIcon';
-import { AppInput } from '@/components/atoms/AppInput';
-import { AppText } from '@/components/atoms/AppText';
 import { FadeInBlock } from '@/components/atoms/FadeInBlock';
-import { PasswordInput } from '@/components/atoms/PasswordInput';
-import { UserAvatar } from '@/components/atoms/UserAvatar';
+import { StatusFeedbackBanner } from '@/components/organisms/AuthStatusBanners';
+import { AvatarPickerSection } from '@/components/organisms/Profile/AvatarPickerSection';
+import { PasswordChangeSection } from '@/components/organisms/Profile/PasswordChangeSection';
+import { ProfileDetailsForm } from '@/components/organisms/Profile/ProfileDetailsForm';
 import { ScreenHeader } from '@/components/organisms/ScreenHeader';
-import {
-  AVATAR_PRESETS,
-  type AvatarPresetId,
-  type AvatarType,
-  getAvatarPresetById,
-  getAvatarPresetSource,
-} from '@/constants/avatars';
-import { Theme, withAlpha } from '@/constants/theme';
+import type { AvatarPresetId, AvatarType } from '@/constants/avatars';
+import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { useThemedStyles } from '@/contexts/ThemeContext';
 import { useProfile } from '@/hooks/useProfile';
 import {
   isStrongPassword,
@@ -42,35 +29,7 @@ import {
   MIN_PASSWORD_LENGTH,
   type PendingAvatarUpload,
 } from '@/types/auth';
-import { decodeBase64ToBytes, validateAvatarBytes } from '@/utils/avatarImage';
 import { triggerSelectionHaptic } from '@/utils/haptics';
-
-type FeedbackBannerProps = {
-  tone: 'error' | 'success';
-  message: string;
-};
-
-function FeedbackBanner({ tone, message }: FeedbackBannerProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const isSuccess = tone === 'success';
-
-  return (
-    <View style={[styles.feedbackBanner, isSuccess ? styles.successBanner : styles.errorBanner]}>
-      <MaterialIcons
-        name={isSuccess ? 'check-circle-outline' : 'error-outline'}
-        size={18}
-        color={isSuccess ? colors.successText : colors.dangerText}
-      />
-      <AppText
-        tipo="legenda"
-        peso="semiforte"
-        style={[styles.feedbackText, isSuccess ? styles.successText : styles.errorText]}>
-        {message}
-      </AppText>
-    </View>
-  );
-}
 
 type ProfileSnapshot = {
   userId: string;
@@ -82,8 +41,7 @@ type ProfileSnapshot = {
 
 export default function EditProfileScreen() {
   const { user, authReady, isPasswordRecovery, isConnected, updatePassword } = useAuth();
-  const { profile, updateProfile } = useProfile();
-  const { colors } = useTheme();
+  const { profile, updateProfile, prepareAvatarUpload } = useProfile();
   const styles = useThemedStyles(createStyles);
 
   const [name, setName] = useState(profile?.name ?? user?.name ?? '');
@@ -164,7 +122,6 @@ export default function EditProfileScreen() {
   const currentAvatarPreset = profile?.avatarPreset ?? null;
   const currentAvatarUrl = profile?.avatarUrl ?? null;
 
-  const activePreset = avatarType === 'preset' ? getAvatarPresetById(avatarPreset) : null;
   const previewAvatarUrl = avatarType === 'custom' ? (pendingUpload?.uri ?? currentAvatarUrl) : null;
 
   const trimmedName = name.trim().slice(0, MAX_NAME_LENGTH);
@@ -226,34 +183,14 @@ export default function EditProfileScreen() {
         return;
       }
 
-      const asset = result.assets[0];
-      if (!asset?.uri) {
-        setPickerError('Não foi possível ler a imagem selecionada.');
-        return;
-      }
-
-      let bytes: Uint8Array;
-      if (typeof asset.base64 === 'string' && asset.base64.length > 0) {
-        bytes = decodeBase64ToBytes(asset.base64);
-      } else {
-        const response = await fetch(asset.uri);
-        const arrayBuffer = await response.arrayBuffer();
-        bytes = new Uint8Array(arrayBuffer);
-      }
-
-      const validation = validateAvatarBytes(bytes);
-      if (!validation.ok) {
-        setPickerError(validation.error);
+      const prepared = await prepareAvatarUpload(result.assets[0]);
+      if (!prepared.ok) {
+        setPickerError(prepared.error);
         return;
       }
 
       triggerSelectionHaptic();
-      setPendingUpload({
-        uri: asset.uri,
-        bytes,
-        contentType: validation.contentType,
-        extension: validation.extension,
-      });
+      setPendingUpload(prepared.upload);
       setAvatarType('custom');
       setAvatarPreset(null);
     } catch {
@@ -347,7 +284,7 @@ export default function EditProfileScreen() {
         eyebrow="CONTA"
         title="Editar perfil"
         showBack
-        fallbackHref="/(tabs)/tab3"
+        fallbackHref="/(tabs)/profile"
         scrolled={scrolled}
       />
       <KeyboardAvoidingView
@@ -360,319 +297,88 @@ export default function EditProfileScreen() {
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}>
-
           {isConnected === false && (
             <FadeInBlock delay={15}>
-              <View style={styles.offlineBanner}>
-                <MaterialIcons name="wifi-off" size={18} color={colors.accentLink} />
-                <AppText tipo="legenda" style={styles.offlineText}>
-                  Sem conexão com a internet. Conecte-se para salvar alterações no perfil ou na senha.
-                </AppText>
-              </View>
+              <StatusFeedbackBanner
+                tone="warning"
+                message="Sem conexão com a internet. Conecte-se para salvar alterações no perfil ou na senha."
+              />
             </FadeInBlock>
           )}
 
           <FadeInBlock delay={35}>
-            <View style={styles.card}>
-              <AppText tipo="legenda" peso="forte" style={styles.cardEyebrow}>
-                ÍCONE DO PERFIL
-              </AppText>
-              <AppText tipo="subtitulo" peso="forte" style={styles.cardTitle}>
-                Foto e avatares
-              </AppText>
-              <AppText tipo="legenda" style={styles.cardSubtitle}>
-                Escolha um ícone cinematográfico exclusivo ou envie uma foto da sua galeria.
-              </AppText>
-
-              <View style={styles.previewArea}>
-                <UserAvatar
-                  size={104}
-                  name={name || currentProfileName}
-                  avatarType={avatarType}
-                  avatarPreset={avatarPreset}
-                  avatarUrl={previewAvatarUrl}
-                  borderWidth={3}
-                  borderColor={activePreset?.accentColor ?? colors.avatarBorder}
-                />
-              </View>
-
-              <View style={styles.avatarActionsRow}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.avatarActionBtn,
-                    styles.avatarActionUpload,
-                    (isPickingImage || isSavingProfile) && styles.disabledControl,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => {
-                    void handlePickImage();
-                  }}
-                  disabled={isPickingImage || isSavingProfile}
-                  accessibilityRole="button"
-                  accessibilityLabel="Enviar foto da galeria">
-                  {isPickingImage ? (
-                    <ActivityIndicator size="small" color={colors.accentLink} />
-                  ) : (
-                    <MaterialIcons name="photo-library" size={18} color={colors.accentLink} />
-                  )}
-                  <AppText tipo="legenda" peso="forte" style={styles.avatarActionUploadText}>
-                    {isPickingImage ? 'Abrindo…' : 'Enviar foto'}
-                  </AppText>
-                </Pressable>
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.avatarActionBtn,
-                    avatarType === 'initials' && styles.avatarActionActive,
-                    isSavingProfile && styles.disabledControl,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={handleUseInitials}
-                  disabled={isSavingProfile}
-                  accessibilityRole="button"
-                  accessibilityLabel="Usar inicial do nome como ícone">
-                  <MaterialIcons
-                    name="person-outline"
-                    size={18}
-                    color={avatarType === 'initials' ? colors.accentLink : colors.textSecondary}
-                  />
-                  <AppText
-                    tipo="legenda"
-                    peso="forte"
-                    style={
-                      avatarType === 'initials'
-                        ? styles.avatarActionTextActive
-                        : styles.avatarActionText
-                    }>
-                    Usar inicial
-                  </AppText>
-                </Pressable>
-              </View>
-
-              {pickerError ? (
-                <AppText tipo="legenda" peso="medio" style={styles.pickerErrorText}>
-                  {pickerError}
-                </AppText>
-              ) : null}
-
-              <View style={styles.presetsHeader}>
-                <AppText tipo="legenda" peso="forte" style={styles.presetsLabel}>
-                  ÍCONES CINEMATOGRÁFICOS
-                </AppText>
-                <AppText tipo="legenda" style={styles.presetsHint}>
-                  {AVATAR_PRESETS.length} estilos exclusivos
-                </AppText>
-              </View>
-
-              <View style={styles.presetsGrid}>
-                {AVATAR_PRESETS.map((preset) => {
-                  const selected = avatarType === 'preset' && avatarPreset === preset.id;
-                  const innerSize = selected ? 58 : 61;
-                  return (
-                    <Pressable
-                      key={preset.id}
-                      onPress={() => handleSelectPreset(preset.id)}
-                      disabled={isSavingProfile}
-                      style={({ pressed }) => [
-                        styles.presetTile,
-                        pressed && styles.pressed,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={`Selecionar ícone ${preset.label}`}>
-                      <View style={styles.presetAvatarWrap}>
-                        <View
-                          style={[
-                            styles.presetCircle,
-                            {
-                              borderColor: selected ? colors.accentPrimary : colors.borderSubtle,
-                              borderWidth: selected ? 3 : 1.5,
-                            },
-                          ]}>
-                          <Image
-                            source={getAvatarPresetSource(preset, innerSize)}
-                            style={styles.presetImage}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
-                            allowDownscaling={false}
-                            accessible={false}
-                          />
-                        </View>
-                        {selected && (
-                          <View style={styles.presetCheckBadge}>
-                            <AppIcon name="check" size={12} color={colors.textOnAccent} />
-                          </View>
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+            <AvatarPickerSection
+              displayName={name || currentProfileName}
+              avatarType={avatarType}
+              avatarPreset={avatarPreset}
+              previewAvatarUrl={previewAvatarUrl}
+              isPickingImage={isPickingImage}
+              isSavingProfile={isSavingProfile}
+              pickerError={pickerError}
+              onPickImage={() => {
+                void handlePickImage();
+              }}
+              onUseInitials={handleUseInitials}
+              onSelectPreset={handleSelectPreset}
+            />
           </FadeInBlock>
 
           <FadeInBlock delay={70}>
-            <View style={styles.card}>
-              <AppText tipo="legenda" peso="forte" style={styles.cardEyebrow}>
-                DADOS DA CONTA
-              </AppText>
-              <AppText tipo="subtitulo" peso="forte" style={styles.cardTitle}>
-                Identificação
-              </AppText>
-
-              <AppInput
-                rotulo="Nome"
-                placeholder="Como podemos chamar você?"
-                value={name}
-                onChangeText={(value) => {
-                  setName(value);
-                  setNameError('');
-                  setProfileError('');
-                  setProfileSuccess('');
-                }}
-                maxLength={MAX_NAME_LENGTH}
-                autoCapitalize="words"
-                autoComplete="name"
-                textContentType="name"
-                returnKeyType="done"
-                editable={!isSavingProfile}
-                erro={nameError}
-              />
-
-              <View style={styles.readOnlyField}>
-                <AppText tipo="legenda" peso="semiforte" style={styles.readOnlyLabel}>
-                  E-mail
-                </AppText>
-                <View style={styles.readOnlyBox}>
-                  <MaterialIcons name="lock-outline" size={18} color={colors.textSecondary} />
-                  <AppText
-                    tipo="texto"
-                    selectable
-                    numberOfLines={1}
-                    style={styles.readOnlyValue}>
-                    {user.email}
-                  </AppText>
-                </View>
-                <AppText tipo="legenda" style={styles.readOnlyHint}>
-                  O e-mail da conta não pode ser alterado.
-                </AppText>
-              </View>
-
-              {profileError ? <FeedbackBanner tone="error" message={profileError} /> : null}
-              {profileSuccess ? <FeedbackBanner tone="success" message={profileSuccess} /> : null}
-
-              <AppButton
-                titulo={isSavingProfile ? 'Salvando perfil…' : 'Salvar alterações do perfil'}
-                onPress={() => {
-                  void handleSaveProfile();
-                }}
-                disabled={!hasProfileChanges || isSavingProfile || isConnected === false}
-                estilo={styles.primaryBtn}
-              />
-
-              {isSavingProfile && (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color={colors.accentLink} />
-                  <AppText tipo="legenda" style={styles.loadingText}>
-                    Salvando foto e dados do perfil…
-                  </AppText>
-                </View>
-              )}
-            </View>
+            <ProfileDetailsForm
+              name={name}
+              email={user.email}
+              nameError={nameError}
+              profileError={profileError}
+              profileSuccess={profileSuccess}
+              hasProfileChanges={hasProfileChanges}
+              isSavingProfile={isSavingProfile}
+              isConnected={isConnected}
+              onChangeName={(value) => {
+                setName(value);
+                setNameError('');
+                setProfileError('');
+                setProfileSuccess('');
+              }}
+              onSaveProfile={() => {
+                void handleSaveProfile();
+              }}
+            />
           </FadeInBlock>
 
           <FadeInBlock delay={105}>
-            <View style={styles.card}>
-              <AppText tipo="legenda" peso="forte" style={styles.cardEyebrow}>
-                SEGURANÇA
-              </AppText>
-              <AppText tipo="subtitulo" peso="forte" style={styles.cardTitle}>
-                Alterar senha
-              </AppText>
-              <AppText tipo="legenda" style={styles.cardSubtitle}>
-                Confirme sua senha atual para definir uma nova senha com letras e números.
-              </AppText>
-
-              <PasswordInput
-                rotulo="Senha atual"
-                placeholder="Digite sua senha atual"
-                value={currentPassword}
-                onChangeText={(value) => {
-                  setCurrentPassword(value);
-                  setCurrentPasswordError('');
-                  setPasswordError('');
-                  setPasswordSuccess('');
-                }}
-                autoComplete="current-password"
-                textContentType="password"
-                returnKeyType="next"
-                editable={!isSavingPassword}
-                erro={currentPasswordError}
-              />
-
-              <PasswordInput
-                rotulo="Nova senha"
-                placeholder="Digite a nova senha"
-                helperText={`Mínimo de ${MIN_PASSWORD_LENGTH} caracteres com letras e números`}
-                value={newPassword}
-                onChangeText={(value) => {
-                  setNewPassword(value);
-                  setNewPasswordError('');
-                  setPasswordError('');
-                  setPasswordSuccess('');
-                }}
-                autoComplete="new-password"
-                textContentType="newPassword"
-                returnKeyType="next"
-                editable={!isSavingPassword}
-                erro={newPasswordError}
-              />
-
-              <PasswordInput
-                rotulo="Confirmar nova senha"
-                placeholder="Repita a nova senha"
-                value={confirmPassword}
-                onChangeText={(value) => {
-                  setConfirmPassword(value);
-                  setConfirmPasswordError('');
-                  setPasswordError('');
-                  setPasswordSuccess('');
-                }}
-                autoComplete="new-password"
-                textContentType="newPassword"
-                returnKeyType="done"
-                editable={!isSavingPassword}
-                onSubmitEditing={() => {
-                  void handleUpdatePassword();
-                }}
-                erro={confirmPasswordError}
-              />
-
-              {passwordError ? <FeedbackBanner tone="error" message={passwordError} /> : null}
-              {passwordSuccess ? <FeedbackBanner tone="success" message={passwordSuccess} /> : null}
-
-              <AppButton
-                titulo={isSavingPassword ? 'Atualizando senha…' : 'Atualizar senha'}
-                onPress={() => {
-                  void handleUpdatePassword();
-                }}
-                disabled={
-                  isSavingPassword ||
-                  isConnected === false ||
-                  (!currentPassword && !newPassword && !confirmPassword)
-                }
-                estilo={styles.primaryBtn}
-              />
-
-              {isSavingPassword && (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color={colors.accentLink} />
-                  <AppText tipo="legenda" style={styles.loadingText}>
-                    Validando credenciais e atualizando senha…
-                  </AppText>
-                </View>
-              )}
-            </View>
+            <PasswordChangeSection
+              currentPassword={currentPassword}
+              newPassword={newPassword}
+              confirmPassword={confirmPassword}
+              currentPasswordError={currentPasswordError}
+              newPasswordError={newPasswordError}
+              confirmPasswordError={confirmPasswordError}
+              passwordError={passwordError}
+              passwordSuccess={passwordSuccess}
+              isSavingPassword={isSavingPassword}
+              isConnected={isConnected}
+              onChangeCurrentPassword={(value) => {
+                setCurrentPassword(value);
+                setCurrentPasswordError('');
+                setPasswordError('');
+                setPasswordSuccess('');
+              }}
+              onChangeNewPassword={(value) => {
+                setNewPassword(value);
+                setNewPasswordError('');
+                setPasswordError('');
+                setPasswordSuccess('');
+              }}
+              onChangeConfirmPassword={(value) => {
+                setConfirmPassword(value);
+                setConfirmPasswordError('');
+                setPasswordError('');
+                setPasswordSuccess('');
+              }}
+              onSubmit={() => {
+                void handleUpdatePassword();
+              }}
+            />
           </FadeInBlock>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -696,231 +402,5 @@ const createStyles = (theme: Theme) => ({
     paddingTop: 10,
     paddingBottom: 42,
     gap: 16,
-  },
-  pressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  disabledControl: {
-    opacity: 0.55,
-  },
-  offlineBanner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 10,
-    backgroundColor: theme.colors.bgWarning,
-    borderWidth: 1,
-    borderColor: theme.colors.borderWarning,
-    borderRadius: 14,
-    padding: 12,
-  },
-  offlineText: {
-    flex: 1,
-    color: theme.colors.textWarm,
-  },
-  card: {
-    backgroundColor: theme.colors.bgSurface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    padding: 20,
-  },
-  cardEyebrow: {
-    color: theme.colors.accentLink,
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-  cardTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 19,
-    lineHeight: 24,
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  previewArea: {
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  avatarActionsRow: {
-    flexDirection: 'row' as const,
-    gap: 10,
-    marginBottom: 12,
-  },
-  avatarActionBtn: {
-    flex: 1,
-    minHeight: 46,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 7,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.bgSurfaceAlt,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  avatarActionUpload: {
-    borderColor: withAlpha(theme.colors.accentPrimary, 0.45),
-    backgroundColor: theme.colors.savedActiveBg,
-  },
-  avatarActionActive: {
-    borderColor: theme.colors.accentLink,
-    backgroundColor: theme.colors.bgHighlight,
-  },
-  avatarActionUploadText: {
-    color: theme.colors.accentLink,
-    fontSize: 13,
-  },
-  avatarActionText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-  },
-  avatarActionTextActive: {
-    color: theme.colors.accentLink,
-    fontSize: 13,
-  },
-  pickerErrorText: {
-    color: theme.colors.dangerText,
-    marginBottom: 12,
-  },
-  presetsHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    marginTop: 6,
-    marginBottom: 12,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.borderSubtle,
-  },
-  presetsLabel: {
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.9,
-  },
-  presetsHint: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-  },
-  presetsGrid: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
-    justifyContent: 'center' as const,
-    gap: 10,
-  },
-  presetTile: {
-    width: 72,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    padding: 4,
-  },
-  presetAvatarWrap: {
-    width: 64,
-    height: 64,
-    position: 'relative' as const,
-  },
-  presetCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    overflow: 'hidden' as const,
-    backgroundColor: theme.colors.avatarBg,
-  },
-  presetImage: {
-    width: '100%' as const,
-    height: '100%' as const,
-  },
-  presetCheckBadge: {
-    position: 'absolute' as const,
-    right: -2,
-    bottom: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: theme.colors.accentPrimary,
-    borderWidth: 2,
-    borderColor: theme.colors.bgSurface,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  readOnlyField: {
-    marginBottom: 16,
-  },
-  readOnlyLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 7,
-  },
-  readOnlyBox: {
-    minHeight: 50,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.bgSurfaceAlt,
-    borderRadius: 14,
-    paddingHorizontal: 15,
-  },
-  readOnlyValue: {
-    flex: 1,
-    color: theme.colors.textStrongBody,
-    fontSize: 15,
-  },
-  readOnlyHint: {
-    color: theme.colors.textHint,
-    fontSize: 12,
-    marginTop: 6,
-  },
-  feedbackBanner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 14,
-  },
-  errorBanner: {
-    backgroundColor: theme.colors.dangerIconBg,
-    borderColor: theme.colors.dangerBorder,
-  },
-  successBanner: {
-    backgroundColor: theme.colors.bgSuccess,
-    borderColor: theme.colors.borderSuccess,
-  },
-  feedbackText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  errorText: {
-    color: theme.colors.dangerText,
-  },
-  successText: {
-    color: theme.colors.successText,
-  },
-  primaryBtn: {
-    borderRadius: 14,
-    marginTop: 2,
-  },
-  loadingRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 8,
-    marginTop: 12,
-  },
-  loadingText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
   },
 });
