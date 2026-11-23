@@ -1,9 +1,8 @@
 import type { Subscription } from '@/types/subscription';
 import {
   classifySupabaseError,
-  hasSupabaseConfig,
-  supabase,
   type SupabaseOutcome,
+  withSupabaseClient,
 } from '@/services/supabase';
 
 const TABLE_NAME = 'user_subscriptions';
@@ -58,10 +57,10 @@ function mapRowToSubscription(row: Partial<DbSubscriptionRow>): Subscription | n
 }
 
 export async function fetchSubscriptions(userId: string): Promise<Subscription[] | null> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return null;
+  if (!userId) return null;
 
-  try {
-    const { data, error } = await supabase
+  return withSupabaseClient<Subscription[] | null>(null, async (client) => {
+    const { data, error } = await client
       .from(TABLE_NAME)
       .select('*')
       .eq('user_id', userId);
@@ -71,19 +70,17 @@ export async function fetchSubscriptions(userId: string): Promise<Subscription[]
     return (data as Partial<DbSubscriptionRow>[])
       .map(mapRowToSubscription)
       .filter((item): item is Subscription => item !== null);
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function upsertSubscription(
   userId: string,
   sub: Subscription,
 ): Promise<SupabaseOutcome> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return 'retry';
+  if (!userId) return 'retry';
 
-  try {
-    const { error, status } = await supabase
+  return withSupabaseClient<SupabaseOutcome>('retry', async (client) => {
+    const { error, status } = await client
       .from(TABLE_NAME)
       .upsert({
         user_id: userId,
@@ -97,26 +94,22 @@ export async function upsertSubscription(
       });
 
     return classifySupabaseError(error ? { code: error.code, status, message: error.message } : null);
-  } catch {
-    return 'retry';
-  }
+  });
 }
 
 export async function deleteSubscription(
   userId: string,
   subId: string,
 ): Promise<SupabaseOutcome> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return 'retry';
+  if (!userId) return 'retry';
 
-  try {
-    const { error, status } = await supabase
+  return withSupabaseClient<SupabaseOutcome>('retry', async (client) => {
+    const { error, status } = await client
       .from(TABLE_NAME)
       .delete()
       .eq('user_id', userId)
       .eq('subscription_id', subId);
 
     return classifySupabaseError(error ? { code: error.code, status, message: error.message } : null);
-  } catch {
-    return 'retry';
-  }
+  });
 }

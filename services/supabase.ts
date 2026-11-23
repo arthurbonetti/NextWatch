@@ -65,6 +65,24 @@ export function getSupabaseClient(): SupabaseClient | null {
   return supabase;
 }
 
+export function getConfiguredSupabaseClient(): SupabaseClient | null {
+  if (!hasSupabaseConfig()) return null;
+  return getSupabaseClient();
+}
+
+export async function withSupabaseClient<T>(
+  fallback: T,
+  fn: (client: SupabaseClient) => Promise<T>,
+): Promise<T> {
+  const client = getConfiguredSupabaseClient();
+  if (!client) return fallback;
+  try {
+    return await fn(client);
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Cria um cliente Supabase efêmero e isolado para o fluxo de redefinição de senha,
  * sem persistir sessão no armazenamento local nem disparar login no cliente principal.

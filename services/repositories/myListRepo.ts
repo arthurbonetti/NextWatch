@@ -1,9 +1,8 @@
 import { isMediaTitle, sanitizeHexColor, sanitizeTmdbPath } from '@/constants/catalog';
 import {
   classifySupabaseError,
-  hasSupabaseConfig,
-  supabase,
   type SupabaseOutcome,
+  withSupabaseClient,
 } from '@/services/supabase';
 import type { MediaTitle } from '@/types/media';
 
@@ -128,10 +127,10 @@ export function mapMediaTitleToDbRow(
 }
 
 export async function fetchMyList(userId: string): Promise<MediaTitle[] | null> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return null;
+  if (!userId) return null;
 
-  try {
-    const { data, error } = await supabase
+  return withSupabaseClient<MediaTitle[] | null>(null, async (client) => {
+    const { data, error } = await client
       .from(TABLE_NAME)
       .select('*')
       .eq('user_id', userId)
@@ -142,9 +141,7 @@ export async function fetchMyList(userId: string): Promise<MediaTitle[] | null> 
     return (data as Partial<DbMyListRow>[])
       .map(mapRowToMediaTitle)
       .filter((item): item is MediaTitle => item !== null);
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function upsertMyListBatch(
@@ -152,18 +149,16 @@ export async function upsertMyListBatch(
   items: { title: MediaTitle; createdAt?: string }[],
 ): Promise<SupabaseOutcome> {
   if (items.length === 0) return 'ok';
-  if (!userId || !supabase || !hasSupabaseConfig()) return 'retry';
+  if (!userId) return 'retry';
 
-  try {
+  return withSupabaseClient<SupabaseOutcome>('retry', async (client) => {
     const rows = items.map(({ title, createdAt }) => mapMediaTitleToDbRow(userId, title, createdAt));
-    const { error, status } = await supabase
+    const { error, status } = await client
       .from(TABLE_NAME)
       .upsert(rows.length === 1 ? rows[0]! : rows);
 
     return classifySupabaseError(error ? { code: error.code, status, message: error.message } : null);
-  } catch {
-    return 'retry';
-  }
+  });
 }
 
 export async function upsertMyListTitle(
@@ -178,17 +173,15 @@ export async function deleteMyListTitle(
   userId: string,
   titleId: string,
 ): Promise<SupabaseOutcome> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return 'retry';
+  if (!userId) return 'retry';
 
-  try {
-    const { error, status } = await supabase
+  return withSupabaseClient<SupabaseOutcome>('retry', async (client) => {
+    const { error, status } = await client
       .from(TABLE_NAME)
       .delete()
       .eq('user_id', userId)
       .eq('title_id', titleId);
 
     return classifySupabaseError(error ? { code: error.code, status, message: error.message } : null);
-  } catch {
-    return 'retry';
-  }
+  });
 }

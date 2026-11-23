@@ -6,15 +6,17 @@ import {
   changeUserPassword,
   clearAuthSession,
   clearLocalAuthSessionOnly,
-  completePasswordRecovery as completePasswordRecoveryService,
   loginWithCredentials,
   onAuthStateChange,
-  type RecoverySessionHandle,
   registerAccount,
   requestPasswordReset,
   restoreAuthSession,
 } from '@/services/authService';
 import { queryClient } from '@/services/queryClient';
+import {
+  completePasswordRecovery as completePasswordRecoveryService,
+  type RecoverySessionHandle,
+} from '@/services/recoveryService';
 import { clearSubscriptionsLocalCache } from '@/services/subscriptionsLocalCache';
 import {
   type AuthSession,

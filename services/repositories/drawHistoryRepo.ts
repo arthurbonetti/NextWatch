@@ -5,9 +5,8 @@ import {
 } from '@/constants/catalog';
 import {
   classifySupabaseError,
-  hasSupabaseConfig,
-  supabase,
   type SupabaseOutcome,
+  withSupabaseClient,
 } from '@/services/supabase';
 import { type DrawAction, type DrawHistoryEntry, isDrawAction } from '@/types/drawHistory';
 import type { MediaKind } from '@/types/media';
@@ -49,10 +48,10 @@ export async function fetchDrawHistory(
   userId: string,
   limit = MAX_HISTORY_ENTRIES,
 ): Promise<DrawHistoryEntry[] | null> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return null;
+  if (!userId) return null;
 
-  try {
-    const { data, error } = await supabase
+  return withSupabaseClient<DrawHistoryEntry[] | null>(null, async (client) => {
+    const { data, error } = await client
       .from(TABLE_NAME)
       .select(SELECT_COLUMNS)
       .eq('user_id', userId)
@@ -64,19 +63,19 @@ export async function fetchDrawHistory(
     return (data as DbDrawHistoryRow[])
       .map(mapDbRowToEntry)
       .filter((entry): entry is DrawHistoryEntry => entry !== null);
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function insertDrawHistoryEntry(
   userId: string,
   entry: DrawHistoryEntry,
 ): Promise<{ status: 'ok'; saved: DrawHistoryEntry } | { status: Exclude<SupabaseOutcome, 'ok'> }> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return { status: 'retry' };
+  if (!userId) return { status: 'retry' };
 
-  try {
-    const { data, error, status } = await supabase
+  return withSupabaseClient<
+    { status: 'ok'; saved: DrawHistoryEntry } | { status: Exclude<SupabaseOutcome, 'ok'> }
+  >({ status: 'retry' }, async (client) => {
+    const { data, error, status } = await client
       .from(TABLE_NAME)
       .insert({
         user_id: userId,
@@ -98,9 +97,7 @@ export async function insertDrawHistoryEntry(
 
     const mapped = data ? mapDbRowToEntry(data as DbDrawHistoryRow) : null;
     return { status: 'ok', saved: mapped ?? entry };
-  } catch {
-    return { status: 'retry' };
-  }
+  });
 }
 
 export async function updateDrawHistoryAction(
@@ -108,32 +105,28 @@ export async function updateDrawHistoryAction(
   entryId: string,
   acao: DrawAction,
 ): Promise<boolean> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return false;
+  if (!userId) return false;
 
-  try {
-    const { error } = await supabase
+  return withSupabaseClient(false, async (client) => {
+    const { error } = await client
       .from(TABLE_NAME)
       .update({ acao })
       .eq('id', entryId)
       .eq('user_id', userId);
 
     return !error;
-  } catch {
-    return false;
-  }
+  });
 }
 
 export async function clearDrawHistory(userId: string): Promise<boolean> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return false;
+  if (!userId) return false;
 
-  try {
-    const { error } = await supabase
+  return withSupabaseClient(false, async (client) => {
+    const { error } = await client
       .from(TABLE_NAME)
       .delete()
       .eq('user_id', userId);
 
     return !error;
-  } catch {
-    return false;
-  }
+  });
 }

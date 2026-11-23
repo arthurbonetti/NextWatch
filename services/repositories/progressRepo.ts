@@ -1,8 +1,7 @@
 import {
   classifySupabaseError,
-  hasSupabaseConfig,
-  supabase,
   type SupabaseOutcome,
+  withSupabaseClient,
 } from '@/services/supabase';
 import type { RemoteProgressEntry, SeriesProgressMap } from '@/utils/watchedProgress';
 
@@ -41,10 +40,10 @@ export async function fetchSeriesProgress(
   userId: string,
   titleId: string,
 ): Promise<{ found: boolean; map: SeriesProgressMap } | null> {
-  if (!userId || !titleId || !supabase || !hasSupabaseConfig()) return null;
+  if (!userId || !titleId) return null;
 
-  try {
-    const { data, error } = await supabase
+  return withSupabaseClient<{ found: boolean; map: SeriesProgressMap } | null>(null, async (client) => {
+    const { data, error } = await client
       .from(TABLE_NAME)
       .select('progress')
       .eq('user_id', userId)
@@ -59,16 +58,14 @@ export async function fetchSeriesProgress(
       found: true,
       map: sanitizeProgressObject((data as Partial<DbSeriesProgressRow>).progress),
     };
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function fetchAllWatchedProgress(userId: string): Promise<RemoteProgressEntry[] | null> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return null;
+  if (!userId) return null;
 
-  try {
-    const { data, error } = await supabase
+  return withSupabaseClient<RemoteProgressEntry[] | null>(null, async (client) => {
+    const { data, error } = await client
       .from(TABLE_NAME)
       .select('title_id,progress')
       .eq('user_id', userId)
@@ -86,9 +83,7 @@ export async function fetchAllWatchedProgress(userId: string): Promise<RemotePro
       }
     }
     return remoteRows;
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function upsertSeriesProgress(
@@ -96,40 +91,36 @@ export async function upsertSeriesProgress(
   titleId: string,
   progress: SeriesProgressMap,
 ): Promise<SupabaseOutcome> {
-  if (!userId || !titleId || !supabase || !hasSupabaseConfig()) return 'retry';
+  if (!userId || !titleId) return 'retry';
 
-  try {
+  return withSupabaseClient<SupabaseOutcome>('retry', async (client) => {
     const payload: DbSeriesProgressRow = {
       user_id: userId,
       title_id: titleId.slice(0, 128),
       progress,
       updated_at: new Date().toISOString(),
     };
-    const { error, status } = await supabase
+    const { error, status } = await client
       .from(TABLE_NAME)
       .upsert(payload);
 
     return classifySupabaseError(error ? { code: error.code, status, message: error.message } : null);
-  } catch {
-    return 'retry';
-  }
+  });
 }
 
 export async function deleteSeriesProgress(
   userId: string,
   titleId: string,
 ): Promise<SupabaseOutcome> {
-  if (!userId || !titleId || !supabase || !hasSupabaseConfig()) return 'retry';
+  if (!userId || !titleId) return 'retry';
 
-  try {
-    const { error, status } = await supabase
+  return withSupabaseClient<SupabaseOutcome>('retry', async (client) => {
+    const { error, status } = await client
       .from(TABLE_NAME)
       .delete()
       .eq('user_id', userId)
       .eq('title_id', titleId);
 
     return classifySupabaseError(error ? { code: error.code, status, message: error.message } : null);
-  } catch {
-    return 'retry';
-  }
+  });
 }

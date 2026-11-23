@@ -6,7 +6,7 @@ import {
   isAvatarPresetId,
   isAvatarType,
 } from '@/constants/avatars';
-import { hasSupabaseConfig, supabase } from '@/services/supabase';
+import { getConfiguredSupabaseClient, withSupabaseClient } from '@/services/supabase';
 import {
   MAX_NAME_LENGTH,
   MIN_NAME_LENGTH,
@@ -55,10 +55,11 @@ function getProfileCacheKey(userId: string): string {
 }
 
 export function getPublicAvatarUrl(avatarPath: string | null | undefined): string | null {
-  if (!supabase || !hasSupabaseConfig()) return null;
+  const client = getConfiguredSupabaseClient();
+  if (!client) return null;
   const cleanPath = sanitizeAvatarPath(avatarPath);
   if (!cleanPath) return null;
-  const { data } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(cleanPath);
+  const { data } = client.storage.from(AVATARS_BUCKET).getPublicUrl(cleanPath);
   return data?.publicUrl || null;
 }
 
@@ -133,10 +134,10 @@ function mapDbRowToProfile(row: Partial<DbUserProfileRow> | null | undefined): U
 }
 
 export async function fetchUserProfile(userId: string): Promise<UserProfileRecord | null> {
-  if (!userId || !supabase || !hasSupabaseConfig()) return null;
+  if (!userId) return null;
 
-  try {
-    const { data, error } = await supabase
+  return withSupabaseClient<UserProfileRecord | null>(null, async (client) => {
+    const { data, error } = await client
       .from(TABLE_NAME)
       .select(SELECT_COLUMNS)
       .eq('user_id', userId)
@@ -144,16 +145,15 @@ export async function fetchUserProfile(userId: string): Promise<UserProfileRecor
 
     if (error || !data) return null;
     return mapDbRowToProfile(data as Partial<DbUserProfileRow>);
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function upsertUserProfile(
   userId: string,
   input: UpsertUserProfileInput,
 ): Promise<UserProfileRecord> {
-  if (!userId || !supabase || !hasSupabaseConfig()) {
+  const client = getConfiguredSupabaseClient();
+  if (!userId || !client) {
     throw new Error('Serviço de perfil indisponível no momento.');
   }
 
@@ -168,7 +168,7 @@ export async function upsertUserProfile(
     throw new Error(`Informe um nome com pelo menos ${MIN_NAME_LENGTH} caracteres.`);
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from(TABLE_NAME)
     .upsert(
       {
@@ -200,7 +200,8 @@ export async function uploadCustomAvatar(
   userId: string,
   upload: PendingAvatarUpload,
 ): Promise<{ path: string; publicUrl: string }> {
-  if (!userId || !supabase || !hasSupabaseConfig()) {
+  const client = getConfiguredSupabaseClient();
+  if (!userId || !client) {
     throw new Error('Serviço de armazenamento indisponível no momento.');
   }
 
@@ -212,7 +213,7 @@ export async function uploadCustomAvatar(
   const storagePath = buildAvatarStoragePath(userId, validation.extension);
   const arrayBuffer = toExactArrayBuffer(upload.bytes);
 
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(AVATARS_BUCKET)
     .upload(storagePath, arrayBuffer, {
       contentType: validation.contentType,
@@ -239,13 +240,11 @@ export async function uploadCustomAvatar(
 
 export async function deleteCustomAvatar(avatarPath: string | null | undefined): Promise<void> {
   const cleanPath = sanitizeAvatarPath(avatarPath);
-  if (!cleanPath || !supabase || !hasSupabaseConfig()) return;
+  if (!cleanPath) return;
 
-  try {
-    await supabase.storage.from(AVATARS_BUCKET).remove([cleanPath]);
-  } catch {
-    // Limpeza best-effort de arquivos antigos no Storage
-  }
+  await withSupabaseClient<void>(undefined, async (client) => {
+    await client.storage.from(AVATARS_BUCKET).remove([cleanPath]);
+  });
 }
 
 export async function readCachedUserProfile(userId: string): Promise<UserProfileRecord | null> {
