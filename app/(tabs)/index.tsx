@@ -15,6 +15,7 @@ import { getArtworkUri, TitleArtwork } from '@/components/atoms/TitleArtwork';
 import { UserAvatar } from '@/components/atoms/UserAvatar';
 import { DrawFlowModal } from '@/components/organisms/DrawModal/DrawFlowModal';
 import { TitleDetailsModal } from '@/components/organisms/TitleDetailsModal';
+import { PersonalRatingModal } from '@/components/organisms/PersonalRatingModal';
 import {
   formatAverageRating,
   getTitleServices,
@@ -24,6 +25,8 @@ import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useTitleQuickDetails } from '@/hooks/useCatalog';
 import { useProfile } from '@/hooks/useProfile';
 import { useRouletteFlow } from '@/hooks/useRouletteFlow';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePersonalRating } from '@/hooks/usePersonalRating';
 import type { MediaTitle } from '@/types/media';
 import { formatCount, formatCurrency } from '@/utils/format';
 
@@ -53,6 +56,12 @@ export default function HomeScreen() {
     isTitleSaved,
     toggleSavedTitle,
   } = roulette;
+
+  const { user } = useAuth();
+  const roulettePersonalRating = usePersonalRating(
+    user?.id ?? null,
+    roulette.personalRatingWinner?.id ?? '',
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -402,6 +411,14 @@ export default function HomeScreen() {
         onToggleSave={() => {
           if (selectedTitle) toggleSavedTitle(selectedTitle);
         }}
+      />
+
+      <PersonalRatingModal
+        visible={Boolean(roulette.personalRatingWinner)}
+        titleName={roulette.personalRatingWinner?.title ?? ''}
+        initialRating={roulettePersonalRating.rating}
+        onSave={roulettePersonalRating.saveRating}
+        onClose={roulette.closePersonalRating}
       />
     </SafeAreaView>
   );

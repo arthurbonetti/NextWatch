@@ -29,6 +29,7 @@ import { TitleMetadataSection } from '@/components/organisms/TitleDetails/TitleM
 import { Theme, THEME, withAlpha } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useTitleDetailsController } from '@/hooks/useTitleDetailsController';
+import { PersonalRatingModal } from '@/components/organisms/PersonalRatingModal';
 
 export default function TitleDetailsScreen() {
   const { colors } = useTheme();
@@ -261,6 +262,14 @@ export default function TitleDetailsScreen() {
         title={title}
         voteCount={controller.voteCount}
         onClose={controller.handleCloseRatingInfo}
+      />
+
+      <PersonalRatingModal
+        visible={controller.personalRatingVisible}
+        titleName={title.title}
+        initialRating={controller.personalRating}
+        onSave={controller.handleSavePersonalRating}
+        onClose={controller.handleClosePersonalRating}
       />
     </SafeAreaView>
   );

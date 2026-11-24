@@ -56,6 +56,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
   const [lastDrawnId, setLastDrawnId] = useState<string | null>(null);
   const [spinSession, setSpinSession] = useState<SpinSession | null>(null);
   const [pendingAutoSpin, setPendingAutoSpin] = useState(false);
+  const [personalRatingWinner, setPersonalRatingWinner] = useState<MediaTitle | null>(null);
 
   const drawEntryPromiseRef = useRef<Promise<string | null> | null>(null);
   const drawHandledRef = useRef(false);
@@ -255,6 +256,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
       if (isSaved(spinSession.winner.id)) {
         removeFromMyList(spinSession.winner.id);
       }
+      setPersonalRatingWinner(spinSession.winner);
     }
     handleClose();
   }, [commitDrawAction, handleClose, isSaved, removeFromMyList, spinSession]);
@@ -265,6 +267,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
     if (isSaved(spinSession.winner.id)) {
       removeFromMyList(spinSession.winner.id);
     }
+    setPersonalRatingWinner(spinSession.winner);
   }, [commitDrawAction, isSaved, removeFromMyList, spinSession]);
 
   const handleToggleWinnerSaved = useCallback(() => {
@@ -320,5 +323,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
     handleWatchWinner,
     handleMarkWinnerWatched,
     handleToggleWinnerSaved,
+    personalRatingWinner,
+    closePersonalRating: () => setPersonalRatingWinner(null),
   };
 }

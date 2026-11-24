@@ -19,6 +19,7 @@ import {
 import { useMyList } from '@/hooks/useMyList';
 import { useSeriesProgress } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
+import { usePersonalRating } from '@/hooks/usePersonalRating';
 import type { MediaTitle } from '@/types/media';
 import { formatCount } from '@/utils/format';
 import {
@@ -63,10 +64,12 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
   }>({ titleId: '', seasonNumber: null });
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
   const [ratingInfoVisible, setRatingInfoVisible] = useState(false);
+  const [personalRatingVisible, setPersonalRatingVisible] = useState(false);
   const [streamingDrawerOpen, setStreamingDrawerOpen] = useState(false);
   const drawNonceRef = useRef(0);
 
   const seriesProgress = useSeriesProgress(user?.id ?? null, title?.id ?? '', token);
+  const personalRating = usePersonalRating(user?.id ?? null, title?.id ?? '');
 
   const {
     details: richDetails,
@@ -197,7 +200,8 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
       );
       seriesProgress.toggleSeason(seasonNumber, episodeCount, episodeNumbers);
       if (saved && richSeasons && isSeriesCompleted(nextMap, richSeasons)) {
-        removeFromMyList(titleId);
+        if (saved) removeFromMyList(titleId);
+        setPersonalRatingVisible(true);
       }
     },
     [removeFromMyList, richSeasons, saved, seriesProgress, titleId],
@@ -212,8 +216,9 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     }
     const nextCompleted = !movieWatched;
     seriesProgress.toggleEpisode(0, 1);
-    if (nextCompleted && saved) {
-      removeFromMyList(title.id);
+    if (nextCompleted) {
+      setPersonalRatingVisible(true);
+      if (saved) removeFromMyList(title.id);
     }
   }, [movieWatched, removeFromMyList, saved, seriesProgress, title]);
 
@@ -322,6 +327,19 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     setRatingInfoVisible(false);
   }, []);
 
+  const handleOpenPersonalRating = useCallback(() => {
+    triggerSelectionHaptic();
+    setPersonalRatingVisible(true);
+  }, []);
+
+  const handleClosePersonalRating = useCallback(() => {
+    setPersonalRatingVisible(false);
+  }, []);
+
+  const handleSavePersonalRating = useCallback((rating: number | null) => {
+    personalRating.saveRating(rating);
+  }, [personalRating]);
+
   return {
     user,
     authReady,
@@ -344,6 +362,7 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     synopsisText,
     synopsisExpanded,
     ratingInfoVisible,
+    personalRatingVisible,
     streamingDrawerOpen,
     movieWatched,
     allServices,
@@ -354,6 +373,8 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     episodesBySeason,
     loadingSeasonNumber,
     seasonEpisodesError,
+    personalRating: personalRating.rating,
+    personalRatingReady: personalRating.ready,
     handleToggleExpandSeason,
     handleRetrySeasonEpisodes,
     handleRetryRichDetails,
@@ -371,5 +392,8 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     handleToggleSynopsis,
     handleOpenRatingInfo,
     handleCloseRatingInfo,
+    handleOpenPersonalRating,
+    handleClosePersonalRating,
+    handleSavePersonalRating,
   };
 }
