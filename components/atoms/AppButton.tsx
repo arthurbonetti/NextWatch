@@ -2,6 +2,7 @@ import {
   Pressable,
   PressableProps,
   StyleProp,
+  TextStyle,
   ViewStyle,
 } from 'react-native';
 
@@ -13,11 +14,13 @@ import { AppText } from './AppText';
 type AppButtonProps = PressableProps & {
   titulo: string;
   estilo?: StyleProp<ViewStyle>;
+  estiloTexto?: StyleProp<TextStyle>;
 };
 
 export function AppButton({
   titulo,
   estilo,
+  estiloTexto,
   disabled,
   ...props
 }: AppButtonProps) {
@@ -36,7 +39,7 @@ export function AppButton({
       ]}
       {...props}
     >
-      <AppText tipo="texto" peso="forte" style={[styles.texto, disabled && styles.textoDesabilitado]}>
+      <AppText tipo="texto" peso="forte" style={[styles.texto, disabled && styles.textoDesabilitado, estiloTexto]}>
         {titulo}
       </AppText>
     </Pressable>

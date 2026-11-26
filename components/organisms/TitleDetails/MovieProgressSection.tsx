@@ -51,7 +51,7 @@ export function MovieProgressSection({
         <View style={styles.movieProgressRow}>
           <AppText tipo="legenda" style={styles.movieProgressHint}>
             {watched
-              ? 'Você já assistiu a este filme.'
+              ? 'Você já assistiu a este filme. Toque para desmarcar.'
               : 'Ainda não marcado como assistido.'}
           </AppText>
           <Pressable
@@ -77,7 +77,7 @@ export function MovieProgressSection({
               tipo="legenda"
               peso="forte"
               style={[styles.movieMarkText, watched && styles.movieMarkTextDone]}>
-              {watched ? 'Assistido' : 'Marcar'}
+              {watched ? 'Desmarcar' : 'Marcar'}
             </AppText>
           </Pressable>
         </View>

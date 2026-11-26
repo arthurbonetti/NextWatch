@@ -48,6 +48,7 @@ type TitleDetailCardProps = {
   onClose: () => void;
   onWatch: () => void;
   onToggleSave: () => void;
+  watched?: boolean;
   onMarkWatched?: () => void;
   onSaveChange?: (saved: boolean) => void;
   onDrawAnother?: () => void;
@@ -72,6 +73,7 @@ export function TitleDetailCard({
   onClose,
   onWatch,
   onToggleSave,
+  watched = false,
   onMarkWatched,
   onSaveChange,
   onDrawAnother,
@@ -85,10 +87,14 @@ export function TitleDetailCard({
   const [showRatingInfo, setShowRatingInfo] = useState(false);
   const [showAllProviders, setShowAllProviders] = useState(false);
   const [streamingDrawerOpen, setStreamingDrawerOpen] = useState(false);
-  const [markedWatched, setMarkedWatched] = useState(false);
+  const [markedWatched, setMarkedWatched] = useState(watched);
   const [scrollLayoutHeight, setScrollLayoutHeight] = useState(0);
   const [scrollContentHeight, setScrollContentHeight] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    setMarkedWatched(watched);
+  }, [title.id, watched]);
 
   if (prevTitleId !== title.id) {
     setPrevTitleId(title.id);
@@ -193,6 +199,10 @@ export function TitleDetailCard({
     );
   }, [drawerChevronRotation, reducedMotion, streamingDrawerOpen]);
 
+  useEffect(() => {
+    setMarkedWatched(watched);
+  }, [watched, title.id]);
+
   const posterAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: posterScale.get() }],
   }));
@@ -254,9 +264,10 @@ export function TitleDetailCard({
   };
 
   const handleMarkWatchedPress = () => {
-    if (!onMarkWatched || markedWatched) return;
+    if (!onMarkWatched) return;
+    const nextWatched = !markedWatched;
     triggerSuccessHaptic();
-    setMarkedWatched(true);
+    setMarkedWatched(nextWatched);
     onMarkWatched();
   };
 
@@ -646,9 +657,8 @@ export function TitleDetailCard({
                       pressed && !markedWatched && styles.pressed,
                     ]}
                     onPress={handleMarkWatchedPress}
-                    disabled={markedWatched}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: markedWatched }}>
+                    accessibilityState={{ checked: markedWatched }}>
                     <MaterialIcons
                       name={markedWatched ? 'check-circle' : 'visibility'}
                       size={17}
@@ -659,7 +669,7 @@ export function TitleDetailCard({
                       peso="forte"
                       numberOfLines={1}
                       style={[styles.secondaryActionText, markedWatched && styles.watchedConfirmedText]}>
-                      {markedWatched ? 'Assistido' : 'Marcar como assistido'}
+                      {markedWatched ? 'Desmarcar assistido' : 'Marcar como assistido'}
                     </AppText>
                   </Pressable>
                 )}

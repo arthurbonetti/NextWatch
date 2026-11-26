@@ -7,6 +7,7 @@ type DrawResultPhaseProps = {
   duration?: string;
   trailerUrl?: string | null;
   saved: boolean;
+  watched: boolean;
   activeSubscriptions: Subscription[];
   enabledServices: string[];
   canDrawAnother: boolean;
@@ -27,6 +28,7 @@ export function DrawResultPhase({
   duration,
   trailerUrl,
   saved,
+  watched,
   activeSubscriptions,
   enabledServices,
   canDrawAnother,
@@ -43,6 +45,7 @@ export function DrawResultPhase({
       duration={duration}
       trailerUrl={trailerUrl}
       saved={saved}
+      watched={watched}
       eyebrow="SORTEADO PARA VOCÊ"
       activeSubscriptions={activeSubscriptions}
       enabledServices={enabledServices}

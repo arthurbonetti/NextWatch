@@ -29,6 +29,7 @@ type DrawFlowModalProps = {
   winnerDuration: string;
   winnerTrailerUrl: string | null;
   isWinnerSaved: boolean;
+  isWinnerWatched: boolean;
   onClose: () => void;
   onDismissFromSheet: () => void;
   onSelectKind: (kind: DrawKindFilter) => void;
@@ -67,6 +68,7 @@ export function DrawFlowModal({
   winnerDuration,
   winnerTrailerUrl,
   isWinnerSaved,
+  isWinnerWatched,
   onClose,
   onDismissFromSheet,
   onSelectKind,
@@ -202,6 +204,7 @@ export function DrawFlowModal({
             duration={winnerDuration}
             trailerUrl={winnerTrailerUrl}
             saved={isWinnerSaved}
+            watched={isWinnerWatched}
             activeSubscriptions={activeSubscriptions}
             enabledServices={enabledServices}
             canDrawAnother={eligibleTitles.length > 1}

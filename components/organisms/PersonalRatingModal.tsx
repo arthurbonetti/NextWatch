@@ -23,7 +23,7 @@ export function PersonalRatingModal({
   onSave,
   onClose,
 }: PersonalRatingModalProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [selectedRating, setSelectedRating] = useState<number | null>(initialRating);
 
@@ -46,7 +46,7 @@ export function PersonalRatingModal({
       backdropAccessibilityLabel="Fechar avaliação">
       <View style={styles.card}>
         <View style={styles.iconBadge}>
-          <MaterialIcons name="star" size={25} color={colors.accentPrimary} />
+          <MaterialIcons name="star" size={25} color={colors.textOnAccent} />
         </View>
         <AppText tipo="subtitulo" peso="forte" style={styles.title}>Como você avaliaria?</AppText>
         <AppText tipo="legenda" style={styles.subtitle} numberOfLines={2}>{titleName}</AppText>
@@ -64,7 +64,7 @@ export function PersonalRatingModal({
             return (
               <Pressable
                 key={star}
-                onPress={() => setSelectedRating(star)}
+                onPress={() => setSelectedRating((current) => current === star ? null : star)}
                 accessibilityRole="button"
                 accessibilityLabel={`Avaliar com ${star} de 5`}
                 style={({ pressed }) => [styles.starButton, pressed && styles.pressed]}>
@@ -87,12 +87,17 @@ export function PersonalRatingModal({
         </Pressable>
 
         <View style={styles.actions}>
-          <AppButton titulo="Depois" onPress={onClose} estilo={styles.secondaryButton} />
           <AppButton
-            titulo={selectedRating === null ? 'Não avaliar' : 'Salvar nota'}
+            titulo="Avaliar"
             onPress={handleSave}
-            disabled={selectedRating === null}
-            estilo={styles.primaryButton}
+            estilo={styles.evaluateButton}
+            estiloTexto={styles.actionTextBlack}
+          />
+          <AppButton
+            titulo={selectedRating === null ? (initialRating !== null ? 'Remover nota' : 'Não avaliar') : 'Salvar nota'}
+            onPress={handleSave}
+            estilo={styles.saveButton}
+            estiloTexto={styles.actionTextYellow}
           />
         </View>
       </View>
@@ -135,9 +140,21 @@ const createStyles = (theme: Theme) => ({
   },
   starButton: { width: 44, height: 44, alignItems: 'center' as const, justifyContent: 'center' as const },
   zeroButton: { marginTop: theme.spacing.sm, paddingVertical: 8, paddingHorizontal: 12 },
-  zeroText: { color: theme.colors.accentLink },
+  zeroText: { color: theme.colors.accentPrimary },
   actions: { width: '100%' as const, flexDirection: 'row' as const, gap: theme.spacing.sm, marginTop: theme.spacing.sm },
-  primaryButton: { flex: 1, borderRadius: theme.radius.md },
-  secondaryButton: { flex: 1, borderRadius: theme.radius.md, backgroundColor: theme.colors.bgSurface },
+  evaluateButton: {
+    flex: 1,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.accentPrimary,
+    borderColor: theme.colors.accentPrimary,
+  },
+  saveButton: {
+    flex: 1,
+    borderRadius: theme.radius.md,
+    backgroundColor: '#12171F',
+    borderColor: '#12171F',
+  },
   pressed: { opacity: 0.75, transform: [{ scale: 0.96 }] },
+  actionTextYellow: { color: theme.colors.accentPrimary },
+  actionTextBlack: { color: theme.colors.textOnAccent },
 });

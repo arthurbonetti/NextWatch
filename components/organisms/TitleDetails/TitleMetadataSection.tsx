@@ -11,7 +11,9 @@ type TitleMetadataSectionProps = {
   title: MediaTitle;
   metacritic: number | null;
   formattedVotes: string | null;
+  personalRating: number | null;
   onPressRating: () => void;
+  onPressPersonalRating: () => void;
   onPressGenre: (genre: string) => void;
 };
 
@@ -20,7 +22,9 @@ export function TitleMetadataSection({
   title,
   metacritic,
   formattedVotes,
+  personalRating,
   onPressRating,
+  onPressPersonalRating,
   onPressGenre,
 }: TitleMetadataSectionProps) {
   const { colors } = useTheme();
@@ -76,6 +80,21 @@ export function TitleMetadataSection({
             </AppText>
           </Pressable>
         )}
+
+        <Pressable
+          onPress={onPressPersonalRating}
+          style={({ pressed }) => [styles.personalRatingBadge, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={personalRating !== null ? `Sua nota: ${personalRating} de 5. Alterar avaliação` : 'Avaliar este título'}>
+          <MaterialIcons
+            name={personalRating !== null ? 'star' : 'star-outline'}
+            size={16}
+            color={personalRating !== null ? colors.accentPrimary : colors.textPrimary}
+          />
+          <AppText peso="forte" style={styles.personalRatingText}>
+            {personalRating !== null ? `Minha nota: ${personalRating}/5` : 'Avaliar'}
+          </AppText>
+        </Pressable>
       </View>
 
       {title.genres.length > 0 && (
@@ -171,6 +190,21 @@ const createStyles = (theme: Theme) => ({
     color: theme.colors.textOnNavy,
     fontSize: 10,
     opacity: 0.9,
+  },
+  personalRatingBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  personalRatingText: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
   },
   genresWrap: {
     flexDirection: 'row' as const,
