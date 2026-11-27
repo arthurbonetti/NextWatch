@@ -16,12 +16,14 @@ import {
   SeriesProgressMap,
   summarizeWatchedProgress,
 } from '@/utils/watchedProgress';
+import { formatUserRatingOutOfFive, type TitleRatingSummary } from '@/utils/titleRating';
 
 export type WatchedTitleCardProps = {
   id: string;
   title?: MediaTitle;
   drawEntry?: DrawHistoryEntry;
   progressMap?: SeriesProgressMap;
+  userRatingSummary?: TitleRatingSummary | null;
   onOpen: (id: string) => void;
 };
 
@@ -31,6 +33,7 @@ export const WatchedTitleCard = memo(function WatchedTitleCard({
   title,
   drawEntry,
   progressMap,
+  userRatingSummary,
   onOpen,
 }: WatchedTitleCardProps) {
   const { colors } = useTheme();
@@ -61,6 +64,10 @@ export const WatchedTitleCard = memo(function WatchedTitleCard({
       ? `${totalEpisodes && totalEpisodes > 0 ? totalEpisodes : watchedEpisodesCount} ep.`
       : 'Assistido';
   const showRouletteTag = isFromRoulette && (!isSerial || watchedEpisodesCount === 0);
+  const hasCommunityRatings = Boolean(
+    userRatingSummary && userRatingSummary.count > 0 && userRatingSummary.average !== null,
+  );
+  const communityRatingText = formatUserRatingOutOfFive(userRatingSummary);
 
   return (
     <Pressable
@@ -112,6 +119,26 @@ export const WatchedTitleCard = memo(function WatchedTitleCard({
                 </AppText>
               </View>
             )}
+            <View
+              style={[
+                styles.communityBadge,
+                hasCommunityRatings ? styles.communityBadgeFilled : styles.communityBadgeEmpty,
+              ]}>
+              <MaterialIcons
+                name={hasCommunityRatings ? 'people' : 'people-outline'}
+                size={12}
+                color={hasCommunityRatings ? colors.badgeAccentText : colors.textMuted}
+              />
+              <AppText
+                tipo="legenda"
+                peso={hasCommunityRatings ? 'forte' : 'semiforte'}
+                tabular
+                style={
+                  hasCommunityRatings ? styles.communityBadgeTextFilled : styles.communityBadgeTextEmpty
+                }>
+                {communityRatingText}
+              </AppText>
+            </View>
           </View>
         ) : (
           <View style={styles.progressBlock}>
@@ -229,6 +256,31 @@ const createStyles = (theme: Theme) => ({
   },
   rouletteBadgeText: {
     color: theme.colors.badgeAccentText,
+    fontSize: 11.5,
+  },
+  communityBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  communityBadgeFilled: {
+    borderColor: theme.colors.badgeAccentBorder,
+    backgroundColor: theme.colors.badgeAccentBg,
+  },
+  communityBadgeEmpty: {
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurfaceAlt,
+  },
+  communityBadgeTextFilled: {
+    color: theme.colors.badgeAccentText,
+    fontSize: 11.5,
+  },
+  communityBadgeTextEmpty: {
+    color: theme.colors.textSecondary,
     fontSize: 11.5,
   },
   progressBlock: { marginTop: 9, gap: 5 },

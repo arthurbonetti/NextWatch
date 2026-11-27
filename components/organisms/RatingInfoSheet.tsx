@@ -8,19 +8,33 @@ import type { MediaTitle } from '@/types/media';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { formatCount } from '@/utils/format';
+import {
+  formatUserRatingCount,
+  formatUserRatingOutOfFive,
+  type TitleRatingSummary,
+} from '@/utils/titleRating';
 
 type RatingInfoSheetProps = {
   visible: boolean;
   title: MediaTitle;
   voteCount?: number | null;
+  userRatingSummary?: TitleRatingSummary | null;
   onClose: () => void;
 };
 
-export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingInfoSheetProps) {
+export function RatingInfoSheet({
+  visible,
+  title,
+  voteCount,
+  userRatingSummary,
+  onClose,
+}: RatingInfoSheetProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const metacriticScore = getMetacriticScore(title);
   const formattedVotes = typeof voteCount === 'number' && voteCount > 0 ? formatCount(voteCount) : null;
+  const hasUserRatings = Boolean(userRatingSummary && userRatingSummary.count > 0);
+  const userRatingText = formatUserRatingOutOfFive(userRatingSummary);
 
   return (
     <AnimatedModalShell
@@ -72,6 +86,15 @@ export function RatingInfoSheet({ visible, title, voteCount, onClose }: RatingIn
             </AppText>
           </View>
         )}
+        <View style={styles.infoRow}>
+          <View style={styles.dot} />
+          <AppText tipo="legenda" style={styles.infoText}>
+            Usuários NextWatch:{' '}
+            {hasUserRatings && userRatingSummary
+              ? `${userRatingText} (${formatUserRatingCount(userRatingSummary.count)}) em escala de 0 a 5 estrelas.`
+              : 'N/A — ainda não há avaliações de usuários para esta obra.'}
+          </AppText>
+        </View>
         <View style={styles.infoRow}>
           <View style={styles.dot} />
           <AppText tipo="legenda" style={styles.infoText}>

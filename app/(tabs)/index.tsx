@@ -27,6 +27,7 @@ import { useProfile } from '@/hooks/useProfile';
 import { useRouletteFlow } from '@/hooks/useRouletteFlow';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePersonalRating } from '@/hooks/usePersonalRating';
+import { useTitleRatingSummary } from '@/hooks/useTitleRatingSummary';
 import type { MediaTitle } from '@/types/media';
 import { formatCount, formatCurrency } from '@/utils/format';
 
@@ -58,9 +59,23 @@ export default function HomeScreen() {
   } = roulette;
 
   const { user } = useAuth();
-  const roulettePersonalRating = usePersonalRating(
+  const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [detailsRatingTitle, setDetailsRatingTitle] = useState<MediaTitle | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  const activeWinnerId = roulette.spinSession?.winner.id ?? '';
+  const winnerRatingSummary = useTitleRatingSummary(activeWinnerId);
+  const winnerPersonalRating = usePersonalRating(user?.id ?? null, activeWinnerId);
+
+  const selectedRatingSummary = useTitleRatingSummary(selectedTitle?.id ?? '');
+  const selectedPersonalRating = usePersonalRating(user?.id ?? null, selectedTitle?.id ?? '');
+
+  const activeRatingTarget = roulette.personalRatingWinner ?? detailsRatingTitle;
+  const activeRatingModalSummary = useTitleRatingSummary(activeRatingTarget?.id ?? '');
+  const activeModalPersonalRating = usePersonalRating(
     user?.id ?? null,
-    roulette.personalRatingWinner?.id ?? '',
+    activeRatingTarget?.id ?? '',
   );
 
   useFocusEffect(
@@ -68,10 +83,6 @@ export default function HomeScreen() {
       void refreshProgressIds();
     }, [refreshProgressIds]),
   );
-
-  const [selectedTitle, setSelectedTitle] = useState<MediaTitle | null>(null);
-  const [detailsVisible, setDetailsVisible] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const isScrolled = event.nativeEvent.contentOffset.y > 6;
@@ -86,6 +97,7 @@ export default function HomeScreen() {
   const { duration: selectedDuration, trailerUrl: selectedTrailerUrl } =
     useTitleQuickDetails(selectedTitle);
   const isSelectedSaved = selectedTitle ? isTitleSaved(selectedTitle.id) : false;
+  const isSelectedWatched = selectedTitle ? roulette.watchedTitleIds.has(selectedTitle.id) : false;
   const isInitialCatalogLoading =
     availableTitles.length === 0 &&
     (!storageReady ||
@@ -380,6 +392,9 @@ export default function HomeScreen() {
         winnerDuration={roulette.winnerDuration}
         winnerTrailerUrl={roulette.winnerTrailerUrl}
         isWinnerSaved={roulette.isWinnerSaved}
+        isWinnerWatched={roulette.isWinnerWatched}
+        winnerUserRatingSummary={winnerRatingSummary.summary}
+        winnerPersonalRating={winnerPersonalRating.rating}
         onClose={roulette.handleClose}
         onDismissFromSheet={roulette.dismissFromSheet}
         onSelectKind={roulette.setKind}
@@ -395,6 +410,7 @@ export default function HomeScreen() {
         onDrawAnother={roulette.handleDrawAnother}
         onWatchWinner={roulette.handleWatchWinner}
         onMarkWinnerWatched={roulette.handleMarkWinnerWatched}
+        onRateWinner={roulette.openWinnerRating}
         onToggleWinnerSaved={roulette.handleToggleWinnerSaved}
       />
 
@@ -405,20 +421,40 @@ export default function HomeScreen() {
         duration={selectedDuration}
         trailerUrl={selectedTrailerUrl}
         saved={isSelectedSaved}
+        watched={isSelectedWatched}
+        userRatingSummary={selectedRatingSummary.summary}
+        personalRating={selectedPersonalRating.rating}
+        canRate={isSelectedWatched}
         eyebrow="PARA ASSISTIR HOJE"
         onClose={() => setDetailsVisible(false)}
         onWatch={() => setDetailsVisible(false)}
         onToggleSave={() => {
           if (selectedTitle) toggleSavedTitle(selectedTitle);
         }}
+        onPressRate={() => {
+          if (selectedTitle && isSelectedWatched) {
+            setDetailsRatingTitle(selectedTitle);
+          }
+        }}
       />
 
       <PersonalRatingModal
-        visible={Boolean(roulette.personalRatingWinner)}
-        titleName={roulette.personalRatingWinner?.title ?? ''}
-        initialRating={roulettePersonalRating.rating}
-        onSave={roulettePersonalRating.saveRating}
-        onClose={roulette.closePersonalRating}
+        visible={Boolean(activeRatingTarget)}
+        titleName={activeRatingTarget?.title ?? ''}
+        initialRating={activeModalPersonalRating.rating}
+        communitySummary={activeRatingModalSummary.summary}
+        canRate={
+          Boolean(roulette.personalRatingWinner) ||
+          Boolean(detailsRatingTitle && roulette.watchedTitleIds.has(detailsRatingTitle.id))
+        }
+        onSave={activeModalPersonalRating.saveRating}
+        onClose={() => {
+          if (roulette.personalRatingWinner) {
+            roulette.closePersonalRating();
+          } else {
+            setDetailsRatingTitle(null);
+          }
+        }}
       />
     </SafeAreaView>
   );

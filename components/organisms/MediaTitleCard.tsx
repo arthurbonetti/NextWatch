@@ -12,10 +12,13 @@ import { formatAverageRating, getTitleServices } from '@/constants/catalog';
 import type { MediaTitle } from '@/types/media';
 import { Theme } from '@/constants/theme';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { formatUserRatingOutOfFive, type TitleRatingSummary } from '@/utils/titleRating';
 
 type MediaTitleCardProps = {
   title: MediaTitle;
   duration?: string;
+  userRatingSummary?: TitleRatingSummary | null;
+  showUserRating?: boolean;
   onOpen: () => void;
   actionIcon: MaterialIconName;
   actionLabel: string;
@@ -28,6 +31,8 @@ type MediaTitleCardProps = {
 export const MediaTitleCard = memo(function MediaTitleCard({
   title,
   duration,
+  userRatingSummary,
+  showUserRating = true,
   onOpen,
   actionIcon,
   actionLabel,
@@ -41,6 +46,10 @@ export const MediaTitleCard = memo(function MediaTitleCard({
   const resolvedActionIconColor = actionIconColor ?? colors.textSecondary;
   const displayDuration = duration || title.duration;
   const averageRating = formatAverageRating(title);
+  const hasCommunityRatings = Boolean(
+    userRatingSummary && userRatingSummary.count > 0 && userRatingSummary.average !== null,
+  );
+  const communityRatingText = formatUserRatingOutOfFive(userRatingSummary);
 
   return (
     <View style={styles.resultCard}>
@@ -81,6 +90,33 @@ export const MediaTitleCard = memo(function MediaTitleCard({
               <MaterialIcons name="star" size={12} color={colors.accentPrimary} />
               <AppText tipo="legenda" peso="forte" tabular style={styles.scoreMeta}>
                 {averageRating}
+              </AppText>
+            </View>
+          )}
+          {showUserRating && (
+            <View
+              style={[
+                styles.communityRatingBadge,
+                hasCommunityRatings
+                  ? styles.communityRatingBadgeFilled
+                  : styles.communityRatingBadgeEmpty,
+              ]}
+              accessibilityLabel={`Média dos usuários: ${communityRatingText}`}>
+              <MaterialIcons
+                name={hasCommunityRatings ? 'people' : 'people-outline'}
+                size={12}
+                color={hasCommunityRatings ? colors.badgeAccentText : colors.textMuted}
+              />
+              <AppText
+                tipo="legenda"
+                peso={hasCommunityRatings ? 'forte' : 'semiforte'}
+                tabular
+                style={
+                  hasCommunityRatings
+                    ? styles.communityRatingTextFilled
+                    : styles.communityRatingTextEmpty
+                }>
+                {communityRatingText}
               </AppText>
             </View>
           )}
@@ -133,7 +169,13 @@ const createStyles = (theme: Theme) => ({
   resultTitle: { color: theme.colors.textPrimary, fontSize: 14.5, lineHeight: 19, marginBottom: 3 },
   resultMeta: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17 },
   resultGenres: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 17, marginTop: 2 },
-  serviceLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8 },
+  serviceLine: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+  },
   ratingBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -144,6 +186,33 @@ const createStyles = (theme: Theme) => ({
     backgroundColor: theme.colors.heroBg,
   },
   scoreMeta: { color: theme.colors.textOnNavy, fontSize: 11, lineHeight: 14 },
+  communityRatingBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  communityRatingBadgeFilled: {
+    backgroundColor: theme.colors.badgeAccentBg,
+    borderColor: theme.colors.badgeAccentBorder,
+  },
+  communityRatingBadgeEmpty: {
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderColor: theme.colors.borderSubtle,
+  },
+  communityRatingTextFilled: {
+    color: theme.colors.badgeAccentText,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  communityRatingTextEmpty: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 14,
+  },
   actionButton: {
     width: 38,
     height: 38,

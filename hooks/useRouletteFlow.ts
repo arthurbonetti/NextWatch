@@ -263,12 +263,22 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
 
   const handleMarkWinnerWatched = useCallback(() => {
     if (!spinSession?.winner) return;
+    const alreadyWatched = watchedTitleIds.has(spinSession.winner.id);
+    if (alreadyWatched) {
+      if (drawEntryPromiseRef.current) {
+        commitDrawAction(
+          spinSession.winner,
+          isSaved(spinSession.winner.id) ? 'salvou' : 'ignorou',
+        );
+      }
+      return;
+    }
     commitDrawAction(spinSession.winner, 'assistiu');
     if (isSaved(spinSession.winner.id)) {
       removeFromMyList(spinSession.winner.id);
     }
     setPersonalRatingWinner(spinSession.winner);
-  }, [commitDrawAction, isSaved, removeFromMyList, spinSession]);
+  }, [commitDrawAction, isSaved, removeFromMyList, spinSession, watchedTitleIds]);
 
   const handleToggleWinnerSaved = useCallback(() => {
     if (!spinSession?.winner) return;
@@ -281,6 +291,12 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
 
   const winnerDuration = resolvedWinnerDuration ?? '';
   const isWinnerSaved = activeWinner ? isSaved(activeWinner.id) : false;
+  const isWinnerWatched = activeWinner ? watchedTitleIds.has(activeWinner.id) : false;
+
+  const openWinnerRating = useCallback(() => {
+    if (!spinSession?.winner || !isWinnerWatched) return;
+    setPersonalRatingWinner(spinSession.winner);
+  }, [isWinnerWatched, spinSession]);
 
   return {
     activeSubscriptions,
@@ -301,12 +317,14 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
     incompleteConfirmVisible,
     availableGenres,
     drawCandidates,
+    watchedTitleIds,
     watchedCount: watchedTitleIds.size,
     filters,
     enabledServices,
     winnerDuration,
     winnerTrailerUrl,
     isWinnerSaved,
+    isWinnerWatched,
     setKind,
     toggleGenre,
     clearGenres,
@@ -323,6 +341,7 @@ export function useRouletteFlow(params: RouletteDeepLinkParams) {
     handleWatchWinner,
     handleMarkWinnerWatched,
     handleToggleWinnerSaved,
+    openWinnerRating,
     personalRatingWinner,
     closePersonalRating: () => setPersonalRatingWinner(null),
   };

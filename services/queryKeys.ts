@@ -18,4 +18,7 @@ export const queryKeys = {
   titleDuration: (titleId: string) => ['titleDuration', titleId] as const,
   titleTrailerUrl: (titleId: string) => ['titleTrailerUrl', titleId] as const,
   titleTotalEpisodes: (titleId: string) => ['titleTotalEpisodes', titleId] as const,
+  personalRating: (userId: string | null, titleId: string) => ['personalRating', userId, titleId] as const,
+  titleRatingSummary: (titleId: string) => ['titleRatingSummary', titleId] as const,
+  titleRatingStatsBatch: (idsKey: string) => ['titleRatingStats', idsKey] as const,
 };

@@ -34,6 +34,11 @@ import type { Subscription } from '@/types/subscription';
 import { triggerSelectionHaptic, triggerSuccessHaptic } from '@/utils/haptics';
 import { openStreamingService } from '@/utils/linking';
 import { buildDrawReason } from '@/utils/roulette';
+import {
+  formatUserRatingCount,
+  formatUserRatingOutOfFive,
+  type TitleRatingSummary,
+} from '@/utils/titleRating';
 
 type TitleDetailCardProps = {
   title: MediaTitle;
@@ -49,6 +54,10 @@ type TitleDetailCardProps = {
   onWatch: () => void;
   onToggleSave: () => void;
   watched?: boolean;
+  userRatingSummary?: TitleRatingSummary | null;
+  personalRating?: number | null;
+  canRate?: boolean;
+  onPressRate?: () => void;
   onMarkWatched?: () => void;
   onSaveChange?: (saved: boolean) => void;
   onDrawAnother?: () => void;
@@ -74,6 +83,10 @@ export function TitleDetailCard({
   onWatch,
   onToggleSave,
   watched = false,
+  userRatingSummary,
+  personalRating = null,
+  canRate = false,
+  onPressRate,
   onMarkWatched,
   onSaveChange,
   onDrawAnother,
@@ -83,6 +96,7 @@ export function TitleDetailCard({
   const reducedMotion = useReducedMotion();
 
   const [prevTitleId, setPrevTitleId] = useState(title.id);
+  const [prevWatchedProp, setPrevWatchedProp] = useState(watched);
   const [expanded, setExpanded] = useState(false);
   const [showRatingInfo, setShowRatingInfo] = useState(false);
   const [showAllProviders, setShowAllProviders] = useState(false);
@@ -92,17 +106,17 @@ export function TitleDetailCard({
   const [scrollContentHeight, setScrollContentHeight] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    setMarkedWatched(watched);
-  }, [title.id, watched]);
-
   if (prevTitleId !== title.id) {
     setPrevTitleId(title.id);
+    setPrevWatchedProp(watched);
     setExpanded(false);
     setShowRatingInfo(false);
     setShowAllProviders(false);
     setStreamingDrawerOpen(false);
-    setMarkedWatched(false);
+    setMarkedWatched(watched);
+  } else if (prevWatchedProp !== watched) {
+    setPrevWatchedProp(watched);
+    setMarkedWatched(watched);
   }
 
   const displayDuration = duration || title.duration;
@@ -136,6 +150,12 @@ export function TitleDetailCard({
   const averageRating = formatAverageRating(title);
   const ratingSourceName = title.ratingSource ?? 'IMDb';
   const reasonText = buildDrawReason(title);
+  const hasCommunityRatings = Boolean(
+    userRatingSummary && userRatingSummary.count > 0 && userRatingSummary.average !== null,
+  );
+  const communityAverageLabel = formatUserRatingOutOfFive(userRatingSummary);
+  const communityCount = userRatingSummary?.count ?? 0;
+  const hasPersonalRating = typeof personalRating === 'number' && Number.isFinite(personalRating);
 
   const confettiProgress = useSharedValue(1);
   const posterScale = useSharedValue(reducedMotion ? 1 : 0.94);
@@ -198,10 +218,6 @@ export function TitleDetailCard({
           }),
     );
   }, [drawerChevronRotation, reducedMotion, streamingDrawerOpen]);
-
-  useEffect(() => {
-    setMarkedWatched(watched);
-  }, [watched, title.id]);
 
   const posterAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: posterScale.get() }],
@@ -430,6 +446,68 @@ export function TitleDetailCard({
               </Pressable>
             )}
 
+            <Pressable
+              style={({ pressed }) => [
+                styles.communityBadge,
+                hasCommunityRatings ? styles.communityBadgeFilled : styles.communityBadgeEmpty,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => {
+                triggerSelectionHaptic();
+                setShowRatingInfo((prev) => !prev);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                hasCommunityRatings
+                  ? `Média dos usuários: ${communityAverageLabel}`
+                  : 'Média dos usuários: N/A'
+              }>
+              <MaterialIcons
+                name={hasCommunityRatings ? 'people' : 'people-outline'}
+                size={15}
+                color={hasCommunityRatings ? colors.badgeAccentText : colors.textMuted}
+              />
+              <AppText
+                peso="forte"
+                tabular
+                style={
+                  hasCommunityRatings
+                    ? styles.communityValueFilled
+                    : styles.communityValueEmpty
+                }>
+                {communityAverageLabel}
+              </AppText>
+            </Pressable>
+
+            {canRate && onPressRate && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.rateChipButton,
+                  hasPersonalRating && styles.rateChipButtonEdit,
+                  pressed && styles.pressed,
+                ]}
+                onPress={() => {
+                  triggerSelectionHaptic();
+                  onPressRate();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  hasPersonalRating ? `Alterar sua nota (${personalRating} de 5)` : 'Avaliar título'
+                }>
+                <MaterialIcons
+                  name={hasPersonalRating ? 'edit' : 'star'}
+                  size={15}
+                  color={hasPersonalRating ? colors.badgeAccentText : colors.textOnAccent}
+                />
+                <AppText
+                  tipo="legenda"
+                  peso="forte"
+                  style={hasPersonalRating ? styles.rateChipTextEdit : styles.rateChipText}>
+                  {hasPersonalRating ? `${personalRating}/5` : 'Avaliar'}
+                </AppText>
+              </Pressable>
+            )}
+
             {trailerUrl && (
               <Pressable
                 style={({ pressed }) => [styles.trailerButton, pressed && styles.pressed]}
@@ -493,6 +571,9 @@ export function TitleDetailCard({
               )}
               <AppText tipo="legenda" style={styles.ratingTooltipText}>
                 {`• ★ ${averageRating}: média exibida nas listas e filtros.`}
+              </AppText>
+              <AppText tipo="legenda" style={styles.ratingTooltipText}>
+                {`• Usuários NextWatch: ${hasCommunityRatings ? `${communityAverageLabel} (${formatUserRatingCount(communityCount)})` : 'N/A (ainda sem avaliações)'}.`}
               </AppText>
             </View>
           </CollapsibleSection>
@@ -853,6 +934,55 @@ const createStyles = (theme: Theme) => ({
     color: theme.colors.textOnNavy,
     fontSize: theme.fontSizes.xs,
     lineHeight: theme.lineHeights.xs,
+  },
+  communityBadge: {
+    minHeight: theme.touchTarget.min - theme.spacing.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.base,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+  },
+  communityBadgeFilled: {
+    backgroundColor: theme.colors.badgeAccentBg,
+    borderColor: theme.colors.badgeAccentBorder,
+  },
+  communityBadgeEmpty: {
+    backgroundColor: theme.colors.bgSurfaceAlt,
+    borderColor: theme.colors.borderSubtle,
+  },
+  communityValueFilled: {
+    color: theme.colors.badgeAccentText,
+    fontSize: theme.fontSizes.bodySm,
+  },
+  communityValueEmpty: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSizes.bodySm,
+  },
+  rateChipButton: {
+    minHeight: theme.touchTarget.min - theme.spacing.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.accentPrimary,
+    borderWidth: 1,
+    borderColor: theme.colors.accentPrimary,
+  },
+  rateChipButtonEdit: {
+    backgroundColor: theme.colors.badgeAccentBg,
+    borderColor: theme.colors.badgeAccentBorder,
+  },
+  rateChipText: {
+    color: theme.colors.textOnAccent,
+    fontSize: theme.fontSizes.bodySm,
+  },
+  rateChipTextEdit: {
+    color: theme.colors.badgeAccentText,
+    fontSize: theme.fontSizes.bodySm,
   },
   trailerButton: {
     minHeight: theme.touchTarget.min,

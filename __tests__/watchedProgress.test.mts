@@ -6,6 +6,7 @@ import {
   applySeasonToggle,
   buildWatchedTitleIdsOrdered,
   computeMyListsCounts,
+  hasWatchedAnyPart,
   isMovieCompleted,
   isSeriesCompleted,
   mergeWatchedProgress,
@@ -94,4 +95,15 @@ test('buildWatchedTitleIdsOrdered and computeMyListsCounts keep Profile count al
 
   const counts = computeMyListsCounts(['q1', 'q2'], watchedIds);
   assert.deepEqual(counts, { queueCount: 2, watchedCount: 3, totalCount: 5 });
+});
+
+test('hasWatchedAnyPart unlocks user rating for any watched percentage (> 0%)', () => {
+  assert.equal(hasWatchedAnyPart({ isSerial: false, progressMap: {} }), false);
+  assert.equal(hasWatchedAnyPart({ isSerial: false, progressMap: { '0': [1] } }), true);
+  assert.equal(hasWatchedAnyPart({ isSerial: false, progressMap: {}, hasRouletteWatched: true }), true);
+
+  assert.equal(hasWatchedAnyPart({ isSerial: true, progressMap: {} }), false);
+  assert.equal(hasWatchedAnyPart({ isSerial: true, progressMap: { '1': [1] } }), true);
+  assert.equal(hasWatchedAnyPart({ isSerial: true, progressMap: { '0': [1] } }), false);
+  assert.equal(hasWatchedAnyPart({ isSerial: true, progressMap: {}, hasRouletteWatched: true }), true);
 });

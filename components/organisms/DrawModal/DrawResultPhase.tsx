@@ -1,6 +1,7 @@
 import { TitleDetailCard } from '@/components/organisms/TitleDetailCard';
 import type { MediaTitle } from '@/types/media';
 import type { Subscription } from '@/types/subscription';
+import type { TitleRatingSummary } from '@/utils/titleRating';
 
 type DrawResultPhaseProps = {
   title: MediaTitle;
@@ -8,6 +9,9 @@ type DrawResultPhaseProps = {
   trailerUrl?: string | null;
   saved: boolean;
   watched: boolean;
+  userRatingSummary?: TitleRatingSummary | null;
+  personalRating?: number | null;
+  canRate?: boolean;
   activeSubscriptions: Subscription[];
   enabledServices: string[];
   canDrawAnother: boolean;
@@ -15,6 +19,7 @@ type DrawResultPhaseProps = {
   onWatch: () => void;
   onToggleSave: () => void;
   onMarkWatched: () => void;
+  onPressRate?: () => void;
   onSaveChange?: (saved: boolean) => void;
   onDrawAnother: () => void;
 };
@@ -29,6 +34,9 @@ export function DrawResultPhase({
   trailerUrl,
   saved,
   watched,
+  userRatingSummary,
+  personalRating = null,
+  canRate = false,
   activeSubscriptions,
   enabledServices,
   canDrawAnother,
@@ -36,6 +44,7 @@ export function DrawResultPhase({
   onWatch,
   onToggleSave,
   onMarkWatched,
+  onPressRate,
   onSaveChange,
   onDrawAnother,
 }: DrawResultPhaseProps) {
@@ -46,6 +55,9 @@ export function DrawResultPhase({
       trailerUrl={trailerUrl}
       saved={saved}
       watched={watched}
+      userRatingSummary={userRatingSummary}
+      personalRating={personalRating}
+      canRate={canRate}
       eyebrow="SORTEADO PARA VOCÊ"
       activeSubscriptions={activeSubscriptions}
       enabledServices={enabledServices}
@@ -55,6 +67,7 @@ export function DrawResultPhase({
       onWatch={onWatch}
       onToggleSave={onToggleSave}
       onMarkWatched={onMarkWatched}
+      onPressRate={onPressRate}
       onSaveChange={onSaveChange}
       onDrawAnother={canDrawAnother ? onDrawAnother : undefined}
     />

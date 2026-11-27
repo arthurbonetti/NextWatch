@@ -23,6 +23,7 @@ import { useTitlesByIds, useTitlesDurations } from '@/hooks/useCatalog';
 import { DrawHistoryEntry, useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
 import { useWatchedProgressIds } from '@/hooks/useSeriesProgress';
+import { useTitleRatingSummaries } from '@/hooks/useTitleRatingSummary';
 import { triggerSelectionHaptic } from '@/utils/haptics';
 import { buildWatchedTitleIdsOrdered } from '@/utils/watchedProgress';
 
@@ -70,6 +71,12 @@ export default function MyListScreen() {
     () => buildWatchedTitleIdsOrdered(history, progressTitleIds),
     [history, progressTitleIds],
   );
+
+  const listTitleIds = useMemo(
+    () => [...savedTitles.map((item) => item.id), ...watchedIds],
+    [savedTitles, watchedIds],
+  );
+  const { getSummary } = useTitleRatingSummaries(listTitleIds);
 
   const { resolveTitle: resolveWatchedTitle } = useTitlesByIds(watchedIds, {
     enabled: activeTab === 'assistidos',
@@ -181,6 +188,7 @@ export default function MyListScreen() {
                     <MediaTitleCard
                       title={title}
                       duration={getDuration(title)}
+                      userRatingSummary={getSummary(title.id)}
                       onOpen={() => openTitleById(title.id)}
                       actionIcon="bookmark"
                       actionLabel={`Remover ${title.title} da fila`}
@@ -219,6 +227,7 @@ export default function MyListScreen() {
                       title={resolved}
                       drawEntry={drawWatchedById.get(id)}
                       progressMap={progressByTitleId[id]}
+                      userRatingSummary={getSummary(id)}
                       onOpen={openTitleById}
                     />
                   </FadeInBlock>

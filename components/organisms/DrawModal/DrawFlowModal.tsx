@@ -11,6 +11,7 @@ import type { MediaTitle } from '@/types/media';
 import type { Subscription } from '@/types/subscription';
 import { DrawFiltersState, DrawKindFilter } from '@/hooks/usePersistedDrawFilters';
 import type { DrawPhase, SpinSession } from '@/hooks/useRouletteFlow';
+import type { TitleRatingSummary } from '@/utils/titleRating';
 
 export type { DrawPhase } from '@/hooks/useRouletteFlow';
 
@@ -30,6 +31,8 @@ type DrawFlowModalProps = {
   winnerTrailerUrl: string | null;
   isWinnerSaved: boolean;
   isWinnerWatched: boolean;
+  winnerUserRatingSummary?: TitleRatingSummary | null;
+  winnerPersonalRating?: number | null;
   onClose: () => void;
   onDismissFromSheet: () => void;
   onSelectKind: (kind: DrawKindFilter) => void;
@@ -45,6 +48,7 @@ type DrawFlowModalProps = {
   onDrawAnother: () => void;
   onWatchWinner: () => void;
   onMarkWinnerWatched: () => void;
+  onRateWinner?: () => void;
   onToggleWinnerSaved: () => void;
 };
 
@@ -69,6 +73,8 @@ export function DrawFlowModal({
   winnerTrailerUrl,
   isWinnerSaved,
   isWinnerWatched,
+  winnerUserRatingSummary,
+  winnerPersonalRating = null,
   onClose,
   onDismissFromSheet,
   onSelectKind,
@@ -84,6 +90,7 @@ export function DrawFlowModal({
   onDrawAnother,
   onWatchWinner,
   onMarkWinnerWatched,
+  onRateWinner,
   onToggleWinnerSaved,
 }: DrawFlowModalProps) {
   const reducedMotion = useReducedMotion();
@@ -205,6 +212,9 @@ export function DrawFlowModal({
             trailerUrl={winnerTrailerUrl}
             saved={isWinnerSaved}
             watched={isWinnerWatched}
+            userRatingSummary={winnerUserRatingSummary}
+            personalRating={winnerPersonalRating}
+            canRate={isWinnerWatched}
             activeSubscriptions={activeSubscriptions}
             enabledServices={enabledServices}
             canDrawAnother={eligibleTitles.length > 1}
@@ -212,6 +222,7 @@ export function DrawFlowModal({
             onWatch={onWatchWinner}
             onToggleSave={onToggleWinnerSaved}
             onMarkWatched={onMarkWinnerWatched}
+            onPressRate={onRateWinner}
             onDrawAnother={onDrawAnother}
           />
         </Animated.View>

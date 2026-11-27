@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   NativeScrollEvent,
@@ -26,6 +26,7 @@ import { FONT_FAMILIES } from '@/constants/typography';
 import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
 import { useExploreCatalog } from '@/hooks/useExploreCatalog';
 import { useMyList } from '@/hooks/useMyList';
+import { useTitleRatingSummaries } from '@/hooks/useTitleRatingSummary';
 import type { MediaTitle } from '@/types/media';
 import { formatCount } from '@/utils/format';
 
@@ -42,6 +43,9 @@ export default function ExploreScreen() {
   );
 
   const explore = useExploreCatalog();
+  const { getDuration } = explore;
+  const resultIds = useMemo(() => explore.results.map((item) => item.id), [explore.results]);
+  const { getSummary } = useTitleRatingSummaries(resultIds);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -63,7 +67,8 @@ export default function ExploreScreen() {
         <FadeInBlock delay={Math.min(index, 6) * 30}>
           <MediaTitleCard
             title={item}
-            duration={explore.getDuration(item)}
+            duration={getDuration(item)}
+            userRatingSummary={getSummary(item.id)}
             onOpen={() => openTitle(item)}
             actionIcon={saved ? 'bookmark' : 'bookmark-add'}
             actionLabel={saved ? 'Remover da minha lista' : 'Salvar na minha lista'}
@@ -78,7 +83,8 @@ export default function ExploreScreen() {
     [
       colors.savedActiveIcon,
       colors.textSecondary,
-      explore.getDuration,
+      getDuration,
+      getSummary,
       isSaved,
       openTitle,
       styles.savedButtonActive,

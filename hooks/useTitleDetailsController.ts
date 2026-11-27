@@ -16,10 +16,12 @@ import {
   useTitleById,
   useTitleDetails,
 } from '@/hooks/useCatalog';
+import { useDrawHistory } from '@/hooks/useDrawHistory';
 import { useMyList } from '@/hooks/useMyList';
+import { usePersonalRating } from '@/hooks/usePersonalRating';
 import { useSeriesProgress } from '@/hooks/useSeriesProgress';
 import { useSubscriptions } from '@/hooks/useSubscriptions';
-import { usePersonalRating } from '@/hooks/usePersonalRating';
+import { useTitleRatingSummary } from '@/hooks/useTitleRatingSummary';
 import type { MediaTitle } from '@/types/media';
 import { formatCount } from '@/utils/format';
 import {
@@ -28,7 +30,12 @@ import {
   triggerSuccessHaptic,
 } from '@/utils/haptics';
 import { openStreamingService } from '@/utils/linking';
-import { applyEpisodeToggle, applySeasonToggle, isSeriesCompleted } from '@/utils/watchedProgress';
+import {
+  applyEpisodeToggle,
+  applySeasonToggle,
+  hasWatchedAnyPart,
+  isSeriesCompleted,
+} from '@/utils/watchedProgress';
 
 /**
  * Encapsula a resolução de título, detalhes ricos, episódios, progresso, lista salva,
@@ -38,6 +45,7 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
   const { user, token, authReady, isPasswordRecovery } = useAuth();
   const { status, findTitle } = useCatalog();
   const { isSaved, toggleSavedTitle, removeFromMyList, findSavedTitle, storageReady } = useMyList();
+  const { history } = useDrawHistory();
   const { subscriptions } = useSubscriptions();
 
   const normalizedId = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
@@ -70,6 +78,7 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
 
   const seriesProgress = useSeriesProgress(user?.id ?? null, title?.id ?? '', token);
   const personalRating = usePersonalRating(user?.id ?? null, title?.id ?? '');
+  const userRatingSummaryQuery = useTitleRatingSummary(title?.id ?? '');
 
   const {
     details: richDetails,
@@ -152,6 +161,29 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     : '';
   // shortcut: reuses season 0 / ep 1 in user_series_progress for movies; split into its own column only if partial movie timestamps are ever added
   const movieWatched = Boolean(title && !isSerialTitle && seriesProgress.isEpisodeWatched(0, 1));
+  const hasRouletteWatched = useMemo(
+    () =>
+      Boolean(
+        titleId &&
+          history.some((entry) => entry.tmdbId === titleId && entry.acao === 'assistiu'),
+      ),
+    [history, titleId],
+  );
+  const canRate = useMemo(
+    () =>
+      Boolean(
+        title &&
+          hasWatchedAnyPart({
+            isSerial: isSerialTitle,
+            progressMap: seriesProgress.progressMap,
+            hasRouletteWatched,
+          }),
+      ),
+    [hasRouletteWatched, isSerialTitle, seriesProgress.progressMap, title],
+  );
+  const watchRequirementHint = isSerialTitle
+    ? 'Assista a pelo menos 1 episódio para avaliar.'
+    : 'Marque o filme como assistido para avaliar.';
 
   const handleToggleExpandSeason = useCallback(
     (seasonNumber: number) => {
@@ -180,10 +212,15 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
   const handleToggleEpisode = useCallback(
     (seasonNumber: number, episodeNumber: number) => {
       if (!titleId) return;
+      const wasCompleted = Boolean(
+        richSeasons && isSeriesCompleted(seriesProgress.progressMap, richSeasons),
+      );
       const nextMap = applyEpisodeToggle(seriesProgress.progressMap, seasonNumber, episodeNumber);
+      const nowCompleted = Boolean(richSeasons && isSeriesCompleted(nextMap, richSeasons));
       seriesProgress.toggleEpisode(seasonNumber, episodeNumber);
-      if (saved && richSeasons && isSeriesCompleted(nextMap, richSeasons)) {
-        removeFromMyList(titleId);
+      if (!wasCompleted && nowCompleted) {
+        if (saved) removeFromMyList(titleId);
+        setPersonalRatingVisible(true);
       }
     },
     [removeFromMyList, richSeasons, saved, seriesProgress, titleId],
@@ -192,14 +229,18 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
   const handleToggleSeason = useCallback(
     (seasonNumber: number, episodeCount: number, episodeNumbers?: number[]) => {
       if (!titleId) return;
+      const wasCompleted = Boolean(
+        richSeasons && isSeriesCompleted(seriesProgress.progressMap, richSeasons),
+      );
       const nextMap = applySeasonToggle(
         seriesProgress.progressMap,
         seasonNumber,
         episodeCount,
         episodeNumbers,
       );
+      const nowCompleted = Boolean(richSeasons && isSeriesCompleted(nextMap, richSeasons));
       seriesProgress.toggleSeason(seasonNumber, episodeCount, episodeNumbers);
-      if (saved && richSeasons && isSeriesCompleted(nextMap, richSeasons)) {
+      if (!wasCompleted && nowCompleted) {
         if (saved) removeFromMyList(titleId);
         setPersonalRatingVisible(true);
       }
@@ -328,9 +369,10 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
   }, []);
 
   const handleOpenPersonalRating = useCallback(() => {
+    if (!canRate) return;
     triggerSelectionHaptic();
     setPersonalRatingVisible(true);
-  }, []);
+  }, [canRate]);
 
   const handleClosePersonalRating = useCallback(() => {
     setPersonalRatingVisible(false);
@@ -375,6 +417,9 @@ export function useTitleDetailsController(rawId: string | string[] | undefined) 
     seasonEpisodesError,
     personalRating: personalRating.rating,
     personalRatingReady: personalRating.ready,
+    userRatingSummary: userRatingSummaryQuery.summary,
+    canRate,
+    watchRequirementHint,
     handleToggleExpandSeason,
     handleRetrySeasonEpisodes,
     handleRetryRichDetails,

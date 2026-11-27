@@ -123,7 +123,12 @@ export default function TitleDetailsScreen() {
             title={title}
             metacritic={controller.metacritic}
             formattedVotes={controller.formattedVotes}
+            userRatingSummary={controller.userRatingSummary}
+            personalRating={controller.personalRating}
+            canRate={controller.canRate}
+            watchRequirementHint={controller.watchRequirementHint}
             onPressRating={controller.handleOpenRatingInfo}
+            onPressPersonalRating={controller.handleOpenPersonalRating}
             onPressGenre={controller.handlePressGenre}
           />
 
@@ -261,6 +266,7 @@ export default function TitleDetailsScreen() {
         visible={controller.ratingInfoVisible}
         title={title}
         voteCount={controller.voteCount}
+        userRatingSummary={controller.userRatingSummary}
         onClose={controller.handleCloseRatingInfo}
       />
 
@@ -268,6 +274,9 @@ export default function TitleDetailsScreen() {
         visible={controller.personalRatingVisible}
         titleName={title.title}
         initialRating={controller.personalRating}
+        communitySummary={controller.userRatingSummary}
+        canRate={controller.canRate}
+        watchRequirementHint={controller.watchRequirementHint}
         onSave={controller.handleSavePersonalRating}
         onClose={controller.handleClosePersonalRating}
       />

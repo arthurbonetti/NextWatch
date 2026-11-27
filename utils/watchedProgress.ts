@@ -164,6 +164,20 @@ export function countWatchedSeriesEpisodes(progressMap: SeriesProgressMap | unde
   return total;
 }
 
+/** Retorna verdadeiro quando o usuário assistiu qualquer porcentagem (> 0%) da obra. */
+export function hasWatchedAnyPart(input: {
+  isSerial: boolean;
+  progressMap?: SeriesProgressMap;
+  hasRouletteWatched?: boolean;
+}): boolean {
+  if (input.hasRouletteWatched) return true;
+  if (!input.progressMap) return false;
+  if (!input.isSerial) {
+    return isMovieCompleted(input.progressMap);
+  }
+  return countWatchedSeriesEpisodes(input.progressMap) > 0;
+}
+
 export function summarizeWatchedProgress(input: {
   isSerial: boolean;
   progressMap?: SeriesProgressMap;
